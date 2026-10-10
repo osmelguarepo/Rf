@@ -1,51 +1,27 @@
-import { expect, test, type Page } from '@playwright/test';
-
-interface Snapshot {
-  phase: 'running' | 'paused' | 'stageClear' | 'gameOver';
-  stage: number;
-  distance: number;
-  score: number;
-  fuel: number;
-  speed: number;
-  carX: number;
-  gear: 'low' | 'high';
-  traffic: number;
-}
-
-/** The game exposes a read-only snapshot in dev mode (see GameScene.create). */
-async function snapshot(page: Page): Promise<Snapshot> {
-  return page.evaluate(() => (window as unknown as { __roadFighter: { snapshot: () => Snapshot } }).__roadFighter.snapshot());
-}
-
-async function startGame(page: Page): Promise<void> {
-  await page.goto('/');
-  await expect(page.locator('canvas')).toBeVisible();
-  // Title scene has no hook yet. The hook appears once the game scene is created.
-  await page.keyboard.press('Enter');
-  await expect
-    .poll(() => page.evaluate(() => Boolean((window as unknown as { __roadFighter?: unknown }).__roadFighter)))
-    .toBe(true);
-  await expect.poll(async () => (await snapshot(page)).phase).toBe('running');
-}
+import { expect, test } from '@playwright/test';
+import { ASSET_WARNING, snapshot, startGame, waitForTitle, watchNetwork } from './game';
 
 test.describe('Road Fighter MVP smoke', () => {
   let errors: string[];
+  let network: ReturnType<typeof watchNetwork>;
 
   test.beforeEach(({ page }) => {
     errors = [];
+    network = watchNetwork(page);
     page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
     page.on('console', (msg) => {
-      if (msg.type() === 'error') errors.push(`console: ${msg.text()}`);
+      if (msg.type() === 'error' || ASSET_WARNING.test(msg.text())) errors.push(`console.${msg.type()}: ${msg.text()}`);
     });
   });
 
   test.afterEach(() => {
-    expect(errors, 'no runtime errors').toEqual([]);
+    expect(errors, 'no runtime errors or asset warnings').toEqual([]);
+    expect(network.failures, 'no failed requests or HTTP errors').toEqual([]);
   });
 
   test('title screen renders without scrolling', async ({ page }, testInfo) => {
     await page.goto('/');
-    await expect(page.locator('canvas')).toBeVisible();
+    await waitForTitle(page);
 
     const scrolls = await page.evaluate(() => ({
       x: document.documentElement.scrollWidth > window.innerWidth,

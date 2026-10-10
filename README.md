@@ -1,6 +1,6 @@
 # ROAD FIGHTER (MVP)
 
-A driving survival game inspired by Konami's *Road Fighter* (NES, 1985). This MVP covers gameplay and mechanics only: rectangle cars, no art, no sound.
+A driving survival game inspired by Konami's *Road Fighter* (NES, 1985). This MVP covers gameplay and mechanics, with pixel-art sprites (GrafxKid's CC0 sheet) and the Press Start 2P font. No sound. Every shipped asset and its licence is listed in `ASSETS.md`.
 
 Working title. "Road Fighter" is a Konami trademark, so rename `GAME_TITLE` in `src/config.ts` before any store release.
 
@@ -52,7 +52,7 @@ Design choices where the original sources disagree, and the review outcomes, are
 
 ```
 src/
-  main.ts           Phaser config (360×640, FIT, audio disabled)
+  main.ts           Phaser config (360×640, FIT, pixelArt, audio disabled)
   config.ts         Every tunable number
   input.ts          Keyboard and gamepad → GameInput
   session.ts        High score for this page load
@@ -67,9 +67,15 @@ src/
     rng.ts          Seeded RNG (reproducible runs)
     collision.ts    Rectangle overlap
   scenes/
+    BootScene.ts    Loads the sprite atlas and the font, then starts Title
     TitleScene.ts   Controls and start
     GameScene.ts    Game loop, HUD, overlays
-  render/draw.ts    Rectangle drawing
+  render/
+    draw.ts         Road, traffic, player and HUD drawing (sprites, or rectangles if the atlas is missing)
+    sprites.ts      Atlas frames and SpriteLayer (pooled images drawn in call order)
+    pixelArt.ts     Sprites the sheet lacks (truck, oil puddle), drawn as pixel grids
+    text.ts         Press Start 2P text styles
+public/assets/      Sprite atlas, frame map and font (see ASSETS.md)
 tests/              Unit tests for src/game, purity and the no-audio check
 e2e/                Playwright smoke tests
 docs/PLAN.md        Research, framework decision, spec, review outcomes
@@ -78,5 +84,5 @@ docs/PLAN.md        Research, framework decision, spec, review outcomes
 ## Next steps (not in this MVP)
 
 - Steam: wrap `dist/` in Electron (Phaser has an official guide). For Steamworks, evaluate `steamworks-ffi-node` (steamworks.js has had no release since August 2024). See `docs/PLAN.md` §2.
-- Konami Man cameo, the other NES courses, and real sprites.
+- Konami Man cameo and the other NES courses.
 - Mobile touch controls.

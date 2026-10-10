@@ -110,3 +110,47 @@ export const INVULNERABLE_BLINK_HZ = 10;
 
 /** Fixed simulation step in seconds (60 Hz). */
 export const SIM_STEP = 1 / 60;
+
+/**
+ * Sprites: frame names and whole-number draw scales. Visual only: the hitboxes above do not change.
+ *
+ * Frames come from public/assets/sprites.json, except `truck` and `oil_puddle`, which the sheet does not have and
+ * src/render/pixelArt.ts draws in code. Car frames carry a 1 px shadow on the right and bottom (`shadow`), which is
+ * left out when a sprite is centred on its hitbox.
+ */
+export const SPRITE = {
+  /** Texture key of public/assets/sprites.png, and cache key of its frame map. */
+  atlas: 'sprites',
+  /** Road, verge and grass tiles are 8 px, drawn at 4× (32 px). A tile pixel is then the 4 px barrier width. */
+  tileSize: 8,
+  tileScale: 4,
+  road: {
+    asphalt: 'road_asphalt_tile',
+    edgeLeft: 'road_edge_left_tile',
+    edgeRight: 'road_edge_right_tile',
+    vergeLeft: 'road_verge_left_tile',
+    vergeRight: 'road_verge_right_tile',
+    /** Grass rows cycle through these, so the roadside visibly scrolls. */
+    grass: ['grass_tile', 'grass_tufts_tile', 'grass_tile', 'grass_tile', 'grass_flowers_tile', 'grass_tile', 'grass_tufts_tile'],
+  },
+  /** A 16 px tile with grass round it, drawn at 2× to fit the 40 px of grass beside the verge. */
+  bush: { frame: 'grass_bush', scale: 2 },
+  /** Body 8×12 at 3× is 24×36, centred on the 26×44 hitbox. */
+  player: { frame: 'car_red', scale: 3, shadow: 1 },
+  /** Turned 45° towards the slide while skidding. */
+  playerSkidLeft: { frame: 'car_red_ccw45', scale: 3, shadow: 1 },
+  playerSkidRight: { frame: 'car_red_cw45', scale: 3, shadow: 1 },
+  traffic: {
+    /** Body 6×10 at 4× is exactly the 24×40 hitbox. */
+    yellow: { frame: 'car_small_yellow', scale: 4, shadow: 1 },
+    /** car_red is the player, so red traffic uses the salmon car. Body 24×36. */
+    red: { frame: 'car_salmon', scale: 3, shadow: 1 },
+    blue: { frame: 'car_blue', scale: 3, shadow: 1 },
+    /** Drawn in code. Body 10×20 at 3× is exactly the 30×60 hitbox. */
+    truck: { frame: 'truck', scale: 3, shadow: 1 },
+    /** The white car, tinted with the rainbow hue cycle. */
+    fuelCar: { frame: 'car_police', scale: 3, shadow: 1 },
+    /** Drawn in code. 10×6 at 4× is exactly the 40×24 hitbox. */
+    oil: { frame: 'oil_puddle', scale: 4, shadow: 0 },
+  },
+} as const;

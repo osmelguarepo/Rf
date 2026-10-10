@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Road Fighter-style driving MVP (gameplay and mechanics only, rectangle cars, no audio).",
+  "description": "Road Fighter-style driving MVP (gameplay and mechanics, pixel-art sprites, no audio).",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

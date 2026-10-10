@@ -44,3 +44,14 @@ Behind an HTTPS proxy, run the fetch with `NODE_USE_ENV_PROXY=1` (Node 22.21 or 
 ## Art drawn in code
 
 The sheet has no truck. Any sprite it does not provide is drawn in code as a pixel grid in the project's own palette (`docs/ART_PLAN.md` §2). That art is the project's own work. If it is ever exported as a file under `public/`, add a row above with the licence `Own work`.
+
+What is drawn in code, and why (colours are picked from the sheet so it matches):
+
+| Art | Where | Why |
+|---|---|---|
+| Truck: green cab, white container, 10×20 plus a 1 px shadow, drawn at 3× (the 30×60 hitbox) | `TRUCK` in `src/render/pixelArt.ts` | The sheet has no truck |
+| Oil puddle: 10×6, drawn at 4× (the 40×24 hitbox) | `OIL_PUDDLE` in `src/render/pixelArt.ts` | The sheet's `oil_spill` is 6×6, too small and the wrong shape for the hitbox |
+| Lane dashes between the three lanes | `drawBackdrop` in `src/render/draw.ts` | The sheet only has a two-lane centre line |
+| Goal and fuel gauges, panels and the START button | `src/render/draw.ts`, `src/scenes/` | The sheet's `hud_fuel_gauge` has its fill baked in |
+
+The rainbow fuel car is the sheet's `car_police`, tinted with a hue cycle. That is a tint, not new art.

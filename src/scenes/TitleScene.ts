@@ -1,7 +1,11 @@
 import Phaser from 'phaser';
-import { GAME_TITLE, PLAYER, VIEW } from '../config';
+import { GAME_TITLE, PLAYER, SPRITE, VIEW } from '../config';
+import { createCar } from '../game/car';
+import { laneX } from '../game/traffic';
 import { getInput } from '../input';
-import { COLOURS, drawBackdrop } from '../render/draw';
+import { drawBackdrop, drawBox, drawPlayer, PALETTE } from '../render/draw';
+import { createWorldTarget } from '../render/sprites';
+import { INK, pixelText, shadowedText } from '../render/text';
 import { session } from '../session';
 
 const CONTROLS = [
@@ -16,11 +20,10 @@ const CONTROLS = [
   'A high gear, Start pause / confirm',
 ];
 
-const TEXT_STYLE = {
-  fontFamily: 'monospace',
-  fontSize: '13px',
-  color: '#ffffff',
-};
+const PANEL = { x: 20, y: 220, w: VIEW.width - 40, h: 250 } as const;
+const BUTTON = { y: 500, w: 180, h: 46 } as const;
+/** The two footer lines, each on a dark band so the lane dashes behind do not cut through the text. */
+const FOOTER = { promptY: 548, bestY: 610, band: 24 } as const;
 
 export class TitleScene extends Phaser.Scene {
   private prompt?: Phaser.GameObjects.Text;
@@ -32,44 +35,38 @@ export class TitleScene extends Phaser.Scene {
 
   create(): void {
     this.starting = false;
-    const bg = this.add.graphics();
-    drawBackdrop(bg, 0);
 
-    // Decorative player car, drawn as a rectangle like in the game.
-    const car = this.add.graphics();
-    car.fillStyle(COLOURS.playerBody, 1).fillRect(VIEW.width / 2 - 13, 150, PLAYER.width, PLAYER.height);
-    car.fillStyle(COLOURS.playerWindow, 1).fillRect(VIEW.width / 2 - 9, 156, PLAYER.width - 8, 10);
+    // The road, still, with the player's car in the middle lane, as in the game.
+    const road = createWorldTarget(this, SPRITE.atlas);
+    drawBackdrop(road, 0);
+    drawPlayer(road, { ...createCar(laneX(1, PLAYER.width)), y: 150 }, 0);
 
     this.add
-      .text(VIEW.width / 2, 90, GAME_TITLE, {
-        fontFamily: 'monospace',
-        fontSize: '30px',
-        fontStyle: 'bold',
-        color: '#ffd23f',
-        stroke: '#000000',
-        strokeThickness: 4,
-      })
+      .text(VIEW.width / 2, 90, GAME_TITLE, shadowedText(24, INK.yellow, { align: 'center', wordWrap: { width: VIEW.width - 20 } }))
       .setOrigin(0.5);
 
     const panel = this.add.graphics();
-    panel.fillStyle(0x000000, 0.7).fillRect(20, 220, VIEW.width - 40, 250);
-    panel.lineStyle(2, 0xffd23f, 1).strokeRect(20, 220, VIEW.width - 40, 250);
+    drawBox(panel, PANEL.x, PANEL.y, PANEL.w, PANEL.h, PALETTE.yellow, 0.8);
 
-    this.add.text(36, 236, 'CONTROLS', { ...TEXT_STYLE, color: '#ffd23f', fontStyle: 'bold' });
-    this.add.text(36, 262, CONTROLS.join('\n'), { ...TEXT_STYLE, lineSpacing: 4 });
+    this.add.text(PANEL.x + 16, PANEL.y + 16, 'CONTROLS', pixelText(16, INK.yellow));
+    this.add.text(PANEL.x + 16, PANEL.y + 48, CONTROLS.join('\n'), pixelText(8, INK.white, { lineSpacing: 8 }));
 
-    const button = this.add.rectangle(VIEW.width / 2, 500, 180, 46, COLOURS.playerBody).setInteractive({ useHandCursor: true });
-    this.add
-      .text(VIEW.width / 2, 500, 'START', { ...TEXT_STYLE, fontSize: '20px', fontStyle: 'bold' })
-      .setOrigin(0.5);
+    const button = this.add
+      .rectangle(VIEW.width / 2, BUTTON.y, BUTTON.w, BUTTON.h, PALETTE.red)
+      .setStrokeStyle(2, PALETTE.lightRed)
+      .setInteractive({ useHandCursor: true });
+    this.add.text(VIEW.width / 2, BUTTON.y, 'START', shadowedText(16, INK.white)).setOrigin(0.5);
     button.on('pointerdown', () => this.startGame());
 
+    const footer = this.add.graphics().fillStyle(0x000000, 0.7);
+    for (const y of [FOOTER.promptY, FOOTER.bestY]) footer.fillRect(0, y - FOOTER.band / 2, VIEW.width, FOOTER.band);
+
     this.prompt = this.add
-      .text(VIEW.width / 2, 548, 'PRESS ENTER / SPACE / GAMEPAD START', { ...TEXT_STYLE, fontSize: '11px' })
+      .text(VIEW.width / 2, FOOTER.promptY, 'PRESS ENTER / SPACE / GAMEPAD START', pixelText(8, INK.white))
       .setOrigin(0.5);
 
     this.add
-      .text(VIEW.width / 2, 610, `BEST THIS SESSION: ${session.highScore}`, { ...TEXT_STYLE, color: '#bbbbbb' })
+      .text(VIEW.width / 2, FOOTER.bestY, `BEST THIS SESSION: ${session.highScore}`, pixelText(8, INK.grey))
       .setOrigin(0.5);
   }
 
