@@ -174,8 +174,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleEvents(events: readonly GameEvent[]): void {
-    if (events.includes('gameOver')) this.setMessage('GAME OVER');
-    else if (events.includes('spin')) this.setMessage('SPIN OUT!');
+    // Game over has its own panel, so it gets no HUD message.
+    if (events.includes('gameOver')) return;
+    if (events.includes('spin')) this.setMessage('SPIN OUT!');
     else if (events.includes('crash')) this.setMessage('CRASH!');
     else if (events.includes('skid')) this.setMessage('OIL! STEER INTO THE SLIDE');
     else if (events.includes('pickup')) this.setMessage('FUEL!');
