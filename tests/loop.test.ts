@@ -46,7 +46,7 @@ describe('latchEdges', () => {
   });
 
   it('combines simultaneous presses of different actions', () => {
-    const out = latchEdges({ ...NO_EDGES, highGearPressed: true }, { ...NO_EDGES, pausePressed: true });
-    expect(out).toEqual({ ...NO_EDGES, highGearPressed: true, pausePressed: true });
+    const out = latchEdges({ ...NO_EDGES, confirmPressed: true }, { ...NO_EDGES, pausePressed: true });
+    expect(out).toEqual({ pausePressed: true, confirmPressed: true });
   });
 });

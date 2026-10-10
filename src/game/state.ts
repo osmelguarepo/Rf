@@ -1,10 +1,11 @@
 import { KMH_TO_PX, PLAYER, SCORE, SIM_STEP } from '../config';
 import {
+  applyBump,
   applyCrash,
   createCar,
+  gearFor,
   isSkidding,
   startSkid,
-  stepGear,
   stepLateral,
   stepSpeed,
   tickInvulnerable,
@@ -14,21 +15,15 @@ import { applyCrashFuel, collectFuelCar, createFuel, drainFuel, isEmpty, type Fu
 import { overlaps } from './collision';
 import { createRng, type Rng } from './rng';
 import { stageClearBonus, stageGoal } from './stage';
-import {
-  createSpawner,
-  laneX,
-  stepSpawner,
-  stepTraffic,
-  type Spawner,
-  type TrafficCar,
-} from './traffic';
+import { advanceSpawner, createSpawner, laneX, stepTraffic, type Spawner, type TrafficCar } from './traffic';
 import type { GameInput } from './types';
 
 export type Phase = 'running' | 'paused' | 'stageClear' | 'gameOver';
 
-/** Things that happened during the last step, for HUD messages, flashes and sound-free feedback. */
+/** Things that happened during the last step, for HUD messages, flashes and future achievements. */
 export type GameEvent =
   | 'skid'
+  | 'bump'
   | 'crash'
   | 'spin'
   | 'pickup'
@@ -78,7 +73,10 @@ export function createGame(seed: number, highScore = 0): GameState {
   };
 }
 
-/** Starts the next stage: keeps score, fuel and car, clears the road, reseeds traffic for the new difficulty. */
+/**
+ * Starts the next stage: keeps score, speed and invulnerability, refills the tank, clears the road
+ * and reseeds traffic for the new difficulty.
+ */
 function nextStage(state: GameState): GameState {
   const stage = state.stage + 1;
   return {
@@ -87,6 +85,7 @@ function nextStage(state: GameState): GameState {
     stage,
     distance: 0,
     goal: stageGoal(stage),
+    fuel: createFuel(),
     traffic: [],
     spawner: createSpawner(stage, state.rng),
     time: 0,
@@ -96,8 +95,6 @@ function nextStage(state: GameState): GameState {
 
 /** Advances the game by one fixed step. The caller passes SIM_STEP as dt (see src/config.ts). */
 export function step(state: GameState, input: GameInput, dt: number = SIM_STEP): GameState {
-  const events: GameEvent[] = [];
-
   if (state.phase === 'gameOver') {
     return { ...state, events: [] };
   }
@@ -116,25 +113,26 @@ export function step(state: GameState, input: GameInput, dt: number = SIM_STEP):
     return { ...state, phase: 'paused', events: ['pause'] };
   }
 
-  return runStep(state, input, dt, events);
+  return runStep(state, input, dt);
 }
 
-function runStep(state: GameState, input: GameInput, dt: number, events: GameEvent[]): GameState {
+function runStep(state: GameState, input: GameInput, dt: number): GameState {
   const rng = state.rng;
+  const events: GameEvent[] = [];
 
-  // 1. Car: gear, speed, lateral motion (steering, skid, road edges).
-  const gear = stepGear(state.car.gear, input);
+  // 1. Car: gear is held, speed follows the throttle, lateral motion covers steering, skid and the roadside.
+  const gear = gearFor(input);
   const speed = stepSpeed(state.car.speed, gear, input, dt);
   let car: CarState = { ...state.car, gear, speed };
 
   const lateral = stepLateral(car, input, dt);
   car = { ...car, x: lateral.x, slideVx: lateral.slideVx };
 
-  let fuel = state.fuel;
-  let gameOver = false;
+  // Fuel drains for as long as the run is active, moving or not.
+  let fuel = drainFuel(state.fuel, dt);
 
-  // Spin-out: the car reached the roadside while sliding. Counts as a crash.
-  if (lateral.spunOut && car.invulnerable <= 0) {
+  // Roadside contact is a crash: fuel loss, speed drop, invulnerability.
+  if (lateral.hitRoadside && car.invulnerable <= 0) {
     car = applyCrash(car);
     fuel = applyCrashFuel(fuel, rng);
     events.push('spin', 'crash');
@@ -143,7 +141,8 @@ function runStep(state: GameState, input: GameInput, dt: number, events: GameEve
   car = tickInvulnerable(car, dt);
 
   // 2. Road distance and traffic motion.
-  const distance = state.distance + car.speed * KMH_TO_PX * dt;
+  const scrollPx = car.speed * KMH_TO_PX * dt;
+  const distance = state.distance + scrollPx;
   const moved = stepTraffic(state.traffic, car.speed, car.x, rng, dt);
   let score = state.score;
   if (moved.passedCount > 0) {
@@ -151,11 +150,12 @@ function runStep(state: GameState, input: GameInput, dt: number, events: GameEve
     events.push('pass');
   }
 
-  // 3. Spawn new traffic.
-  const spawned = stepSpawner(state.spawner, moved.cars, state.stage, rng, dt);
+  // 3. Spawn new traffic, by distance covered.
+  const spawned = advanceSpawner(state.spawner, moved.cars, state.stage, rng, scrollPx);
   const traffic = spawned.cars;
 
   // 4. Collisions with the player car.
+  let gameOver = false;
   const playerRect = { x: car.x, y: car.y, w: car.w, h: car.h };
   for (const t of traffic) {
     if (t.consumed || !overlaps(playerRect, t)) continue;
@@ -186,16 +186,17 @@ function runStep(state: GameState, input: GameInput, dt: number, events: GameEve
       break;
     }
 
-    // Yellow, red and blue cars: a crash. Each car can only crash the player once.
+    // Yellow, red and blue cars: a bump. Each car bumps the player at most once. No fuel is lost.
     if (t.struck) continue;
     t.struck = true;
-    car = applyCrash(car);
-    fuel = applyCrashFuel(fuel, rng);
-    events.push('crash');
+    const playerCentre = car.x + car.w / 2;
+    const trafficCentre = t.x + t.w / 2;
+    const away: -1 | 1 = playerCentre === trafficCentre ? (rng.next() < 0.5 ? -1 : 1) : playerCentre < trafficCentre ? -1 : 1;
+    car = applyBump(car, away);
+    events.push('bump');
   }
 
-  // 5. Fuel drain and empty tank.
-  fuel = drainFuel(fuel, car.speed, dt);
+  // 5. Empty tank is game over.
   if (isEmpty(fuel)) gameOver = true;
 
   const survivors = traffic.filter((t) => !t.consumed);

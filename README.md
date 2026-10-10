@@ -14,38 +14,39 @@ npm run dev        # http://localhost:5173
 ## Test and build
 
 ```bash
-npm test           # unit tests (vitest): rules, traffic, skids, fuel, loop, no-audio check
+npm test           # unit tests (vitest): rules, traffic, skids, fuel, loop, purity, no-audio check
 npm run typecheck  # tsc --noEmit (strict)
-npm run build      # production build into dist/ (relative paths, opens from file:// too)
+npm run build      # production build into dist/ (relative paths, for any sub-path and for Electron loadFile)
 npm run e2e        # Playwright smoke tests in headless Chromium, desktop and phone viewports
 ```
 
-`npm run e2e` uses the pre-installed Chromium at `/opt/pw-browsers/chromium-1194` when it exists, and Playwright's own browser otherwise.
+`npm run e2e` uses the browser that `@playwright/test@1.56.1` expects. In the sandbox this is the pre-installed Chromium 141 under `PLAYWRIGHT_BROWSERS_PATH`. Elsewhere, run `npx playwright install chromium` first.
 
 ## Controls
 
 | Action | Keyboard | Gamepad (standard mapping) |
 |---|---|---|
-| Accelerate | Up / W | D-pad up, left stick up |
+| Throttle | Up / W, Z (B) | D-pad up, B, left stick up |
+| High gear (held, also throttle) | X (A) | A |
 | Brake | Down / S | D-pad down, left stick down |
 | Steer | Left / Right, A / D | D-pad left / right, left stick |
-| High gear (up to 400 km/h) | X | A |
-| Low gear (up to 198 km/h) | Z | B |
-| Start / confirm | Enter / Space | Start or A |
+| Start / confirm | Enter / Space | Start, or A |
 | Pause | Esc / P | Start |
 
-Losing window focus pauses the game automatically.
+Gears are held: high gear (up to 400 km/h) only while X or A is held. Low gear tops out at 198 km/h.
+Losing window focus or hiding the tab pauses the game.
 
 ## Rules
 
-- **Fuel**: 100 units, drains 1 per second while moving. Empty means game over. Rainbow fuel cars refill 20 units and pay a chain bonus (300, 600, 1 200 … up to 10 000). A crash resets the chain.
-- **Crashes**: hitting a car costs 5–6 fuel, drops speed to 30 %, and gives 1.5 s of invulnerability. A car can only hit you once per overlap.
-- **Oil**: driving onto an oil patch starts a skid. Steering into the slide recovers it. Left alone, the car slides into the roadside and spins out (a crash).
+- **Fuel**: 100 units, drains 1 per second while the run is active, moving or not. A fuel car adds 10 and pays 1000 points. Each stage starts with a full tank.
+- **Bumps**: hitting a car costs no fuel. It starts a skid away from the car, and each car can bump you only once.
+- **Oil**: driving onto an oil patch starts a skid. Steer into the slide to recover it. Left alone, the car reaches the roadside and crashes.
+- **Roadside**: touching the roadside is a crash. It costs 5–6 fuel and slows the car to 30 %.
 - **Trucks**: contact destroys the car. Game over.
-- **Scoring**: +50 per passed car, fuel-car chain bonus, +30 per whole fuel unit left when a stage clears.
-- **Stages**: stage 1 is 12 000 px long. Each stage adds 4 000 px, more traffic and 5 % faster traffic.
+- **Scoring**: +50 per passed car, +1000 per fuel car, +30 per whole fuel unit when a stage clears.
+- **Stages**: the goal is 24 000 px, then 28 000, 32 000, 36 000, and it loops. Each stage has denser traffic.
 
-Design choices where the original sources disagree are listed in `docs/PLAN.md` (section 10).
+Design choices where the original sources disagree, and the review outcomes, are listed in `docs/PLAN.md` (sections 10 and 11).
 
 ## Layout
 
@@ -69,13 +70,13 @@ src/
     TitleScene.ts   Controls and start
     GameScene.ts    Game loop, HUD, overlays
   render/draw.ts    Rectangle drawing
-tests/              Unit tests for src/game and the no-audio check
+tests/              Unit tests for src/game, purity and the no-audio check
 e2e/                Playwright smoke tests
 docs/PLAN.md        Research, framework decision, spec, review outcomes
 ```
 
 ## Next steps (not in this MVP)
 
-- Steam: wrap `dist/` in Electron (Phaser has an official guide) and add Steamworks via `steamworks.js`.
+- Steam: wrap `dist/` in Electron (Phaser has an official guide). For Steamworks, evaluate `steamworks-ffi-node` (steamworks.js has had no release since August 2024). See `docs/PLAN.md` §2.
 - Konami Man cameo, the other NES courses, and real sprites.
 - Mobile touch controls.

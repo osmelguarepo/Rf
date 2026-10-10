@@ -2,6 +2,7 @@ import { KMH_TO_PX, LANE_WIDTH, PLAYER, ROAD, STAGE, STEER, TRAFFIC, VIEW } from
 import type { Rng } from './rng';
 
 export type TrafficKind = 'yellow' | 'red' | 'blue' | 'truck' | 'fuelCar' | 'oil';
+type CarKind = 'yellow' | 'red' | 'blue' | 'truck';
 
 export interface TrafficCar {
   id: number;
@@ -24,20 +25,21 @@ export interface TrafficCar {
   passed: boolean;
   /** Oil: skid already triggered. Fuel car: already collected. */
   consumed: boolean;
-  /** Traffic car: has already crashed into the player, so it cannot crash again. It stays on the road. */
+  /** Traffic car: already bumped or struck the player, so it cannot do so again. It stays on the road. */
   struck: boolean;
 }
 
-export type SpawnTimers = Record<TrafficKind, number>;
-
+/**
+ * Spawning is driven by road distance, not time, so the density of traffic does not depend on speed.
+ * Each gap counts down in px of road scrolled and spawns when it reaches 0.
+ */
 export interface Spawner {
-  timers: SpawnTimers;
+  carGap: number;
+  oilGap: number;
+  fuelGap: number;
   nextId: number;
 }
 
-export const SPAWN_KINDS: readonly TrafficKind[] = ['yellow', 'red', 'blue', 'truck', 'fuelCar', 'oil'];
-
-/** Left edge of a lane for a car of width w, centred in that lane. */
 export function laneX(lane: number, w: number): number {
   return ROAD.left + lane * LANE_WIDTH + (LANE_WIDTH - w) / 2;
 }
@@ -54,29 +56,26 @@ function sizeOf(kind: TrafficKind): { w: number; h: number } {
   return { w: size.width, h: size.height };
 }
 
-/** Stage multiplier for traffic speed (1.05^(stage-1)). */
-export function stageSpeedScale(stage: number): number {
-  return STAGE.trafficSpeedScale ** (stage - 1);
+/** Road distance until the next spawn of a kind. Car gaps shrink with stage but never below minSpawnGap. */
+export function nextGap(kind: 'car' | 'oil' | 'fuel', stage: number, rng: Rng): number {
+  const base = TRAFFIC.spawnGap[kind];
+  const jitter = TRAFFIC.spawnJitter[kind];
+  const gap = (base + rng.range(-jitter, jitter)) * STAGE.spawnGapScale ** (stage - 1);
+  return kind === 'car' ? Math.max(gap, STAGE.minSpawnGap) : gap;
 }
 
-/** Stage multiplier for spawn intervals (0.9^(stage-1)). Smaller = busier road. */
-export function stageIntervalScale(stage: number): number {
-  return STAGE.spawnIntervalScale ** (stage - 1);
-}
-
-function ownSpeed(kind: TrafficKind, rng: Rng, stage: number): number {
-  const scale = stageSpeedScale(stage);
+function ownSpeed(kind: TrafficKind, rng: Rng): number {
   switch (kind) {
     case 'yellow':
-      return rng.range(TRAFFIC.yellowSpeed[0], TRAFFIC.yellowSpeed[1]) * scale;
+      return rng.range(TRAFFIC.yellowSpeed[0], TRAFFIC.yellowSpeed[1]);
     case 'red':
-      return rng.range(TRAFFIC.redSpeed[0], TRAFFIC.redSpeed[1]) * scale;
+      return rng.range(TRAFFIC.redSpeed[0], TRAFFIC.redSpeed[1]);
     case 'blue':
-      return rng.range(TRAFFIC.blueSpeed[0], TRAFFIC.blueSpeed[1]) * scale;
+      return rng.range(TRAFFIC.blueSpeed[0], TRAFFIC.blueSpeed[1]);
     case 'truck':
-      return TRAFFIC.truckSpeed * scale;
+      return TRAFFIC.truckSpeed;
     case 'fuelCar':
-      return TRAFFIC.fuelCarSpeed * scale;
+      return TRAFFIC.fuelCarSpeed;
     case 'oil':
       return 0;
   }
@@ -88,27 +87,30 @@ function lanesToChange(kind: TrafficKind, rng: Rng): number {
   return 0;
 }
 
-export function createSpawner(stage: number, rng: Rng): Spawner {
-  const timers = {} as SpawnTimers;
-  for (const kind of SPAWN_KINDS) {
-    timers[kind] = nextInterval(kind, stage, rng);
+/** Picks a car type by the configured weights. */
+function pickCarKind(rng: Rng): CarKind {
+  const weights = TRAFFIC.carTypeWeights;
+  const entries = Object.entries(weights) as [CarKind, number][];
+  const total = entries.reduce((sum, [, w]) => sum + w, 0);
+  let roll = rng.next() * total;
+  for (const [kind, weight] of entries) {
+    roll -= weight;
+    if (roll < 0) return kind;
   }
-  return { timers, nextId: 1 };
+  return entries[entries.length - 1][0];
 }
 
-function nextInterval(kind: TrafficKind, stage: number, rng: Rng): number {
-  const base = TRAFFIC.spawnInterval[kind];
-  return base * stageIntervalScale(stage) * rng.range(0.7, 1.3);
+export function createSpawner(stage: number, rng: Rng): Spawner {
+  return {
+    carGap: nextGap('car', stage, rng) / 2,
+    oilGap: nextGap('oil', stage, rng),
+    fuelGap: nextGap('fuel', stage, rng),
+    nextId: 1,
+  };
 }
 
 /** Creates one car just above the screen in a free lane. Returns null if every lane is busy near the top. */
-function trySpawn(
-  kind: TrafficKind,
-  cars: readonly TrafficCar[],
-  id: number,
-  stage: number,
-  rng: Rng,
-): TrafficCar | null {
+function trySpawn(kind: TrafficKind, cars: readonly TrafficCar[], id: number, rng: Rng): TrafficCar | null {
   const { w, h } = sizeOf(kind);
   // A lane is busy if a car is still in the spawn zone at the top of the screen.
   const freeLanes = Array.from({ length: ROAD.laneCount }, (_, i) => i).filter(
@@ -124,7 +126,7 @@ function trySpawn(
     y: -h - 4,
     w,
     h,
-    kmh: ownSpeed(kind, rng, stage),
+    kmh: ownSpeed(kind, rng),
     targetX: null,
     lanesLeft: lanesToChange(kind, rng),
     laneTimer: rng.range(1, 2.5),
@@ -134,34 +136,57 @@ function trySpawn(
   };
 }
 
-/** Advances spawn timers and adds any cars that are due. */
-export function stepSpawner(
+/**
+ * Counts spawn gaps down by the road scrolled this step, and adds any cars that are due.
+ * A gap that cannot spawn (all lanes busy) stays at 0 and is retried on the next step.
+ */
+export function advanceSpawner(
   spawner: Spawner,
   cars: readonly TrafficCar[],
   stage: number,
   rng: Rng,
-  dt: number,
+  scrollPx: number,
 ): { spawner: Spawner; cars: TrafficCar[] } {
-  const timers = { ...spawner.timers };
-  let nextId = spawner.nextId;
+  let { carGap, oilGap, fuelGap, nextId } = spawner;
   let out = [...cars];
 
-  for (const kind of SPAWN_KINDS) {
-    timers[kind] -= dt;
-    if (timers[kind] > 0) continue;
-
-    const car = trySpawn(kind, out, nextId, stage, rng);
+  carGap -= scrollPx;
+  if (carGap <= 0) {
+    const car = trySpawn(pickCarKind(rng), out, nextId, rng);
     if (car) {
       out = [...out, car];
       nextId += 1;
-      timers[kind] = nextInterval(kind, stage, rng);
+      carGap += nextGap('car', stage, rng);
     } else {
-      // No free lane right now; retry on the next step.
-      timers[kind] = 0.1;
+      carGap = 0;
     }
   }
 
-  return { spawner: { timers, nextId }, cars: out };
+  oilGap -= scrollPx;
+  if (oilGap <= 0) {
+    const oil = trySpawn('oil', out, nextId, rng);
+    if (oil) {
+      out = [...out, oil];
+      nextId += 1;
+      oilGap += nextGap('oil', stage, rng);
+    } else {
+      oilGap = 0;
+    }
+  }
+
+  fuelGap -= scrollPx;
+  if (fuelGap <= 0) {
+    const fuel = trySpawn('fuelCar', out, nextId, rng);
+    if (fuel) {
+      out = [...out, fuel];
+      nextId += 1;
+      fuelGap += nextGap('fuel', stage, rng);
+    } else {
+      fuelGap = 0;
+    }
+  }
+
+  return { spawner: { carGap, oilGap, fuelGap, nextId }, cars: out };
 }
 
 export interface TrafficStepResult {
@@ -172,8 +197,8 @@ export interface TrafficStepResult {
 
 /**
  * Moves all traffic for one step.
- * Relative motion: a car with a lower speed than the player drifts down the screen, so it is passed.
- * Lane changes: red changes lanes once at random. Blue changes lanes 2–3 times and heads for the player's lane when close.
+ * Relative motion: a car slower than the player drifts down the screen, so it is passed.
+ * Lane changes: red changes lane once at random. Blue changes lane 2–3 times and heads for the player's lane when close.
  */
 export function stepTraffic(
   cars: readonly TrafficCar[],
@@ -188,7 +213,7 @@ export function stepTraffic(
 
   const next: TrafficCar[] = [];
   for (const car of cars) {
-    let c = { ...car };
+    const c = { ...car };
     c.y += (playerKmh - c.kmh) * KMH_TO_PX * dt;
 
     // Lane change timing and target.

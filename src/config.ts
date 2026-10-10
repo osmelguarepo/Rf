@@ -1,8 +1,8 @@
-/** Every tunable number for the MVP lives here. Values follow docs/PLAN.md §4. */
+/** Every tunable number for the MVP lives here. Values follow docs/PLAN.md §4 and §11. */
 
 export const GAME_TITLE = 'ROAD FIGHTER';
 
-/** Logical canvas size. Phaser scales it to fit the window. */
+/** Logical playfield size. Phaser scales it to fit the window. */
 export const VIEW = { width: 360, height: 640 } as const;
 
 /** Road geometry. Three lanes; the roadside strips outside [left, right] are scenery. */
@@ -13,16 +13,22 @@ export const ROAD = {
 } as const;
 export const LANE_WIDTH = (ROAD.right - ROAD.left) / ROAD.laneCount;
 
-/** Speeds are in km/h. World scroll and relative motion use px/s = kmh * KMH_TO_PX. */
-export const KMH_TO_PX = 0.5;
+/** Speeds are in km/h. World scroll and relative motion use px/s = kmh × KMH_TO_PX (1:1, see §11). */
+export const KMH_TO_PX = 1;
 
 export const SPEED = {
   lowGearTop: 198,
   highGearTop: 400,
   lowGearAccel: 70,
+  /** High gear is slow to start: below highGearSlowBelow it accelerates at highGearSlowAccel. */
+  highGearSlowBelow: 160,
+  highGearSlowAccel: 15,
   highGearAccel: 45,
   brake: 120,
+  /** Coasting with no throttle. */
   drag: 25,
+  /** Speed above the current gear's top falls at this rate. */
+  overspeedFall: 25,
 } as const;
 
 export const PLAYER = {
@@ -33,9 +39,13 @@ export const PLAYER = {
 } as const;
 
 export const STEER = {
-  /** Lateral speed in px/s = base - perKmh * speed. */
-  baseRate: 220,
-  perKmh: 0.4,
+  /**
+   * Lateral speed (px/s) = (steerBase − steerPerKmh × speed) × min(1, speed / steerFullAtKmh).
+   * The car cannot steer while stopped.
+   */
+  steerBase: 170,
+  steerPerKmh: 0.1,
+  steerFullAtKmh: 30,
   /** Skid: initial lateral slide speed (px/s). Steering does not move the car while sliding. */
   skidSpeed: 90,
   /** Steering into the slide reduces its speed by this much per second (px/s²). Reaching 0 ends the skid. */
@@ -45,22 +55,22 @@ export const STEER = {
 } as const;
 
 export const CRASH = {
-  /** Speed multiplier left after a crash. */
+  /** Speed multiplier left after a roadside crash. */
   speedFactor: 0.3,
   fuelMin: 5,
   fuelMax: 6,
-  /** Seconds of invulnerability after a crash. */
+  /** Seconds of invulnerability after a crash or bump. */
   invulnerableSec: 1.5,
 } as const;
 
 export const FUEL = {
   max: 100,
-  /** Units per second while the car is moving. 100 units ≈ 100 seconds of driving. */
+  /** Units per second while the run is active, moving or not. 100 units ≈ 100 seconds. */
   drainPerSec: 1,
-  pickup: 20,
-  /** Chain bonus: 300 * 2^index, capped. */
-  chainBase: 300,
-  chainCap: 10000,
+  /** Fuel car pickup: a small boost. */
+  pickup: 10,
+  /** Fuel car pickup points (NES value, flat). */
+  fuelCarPoints: 1000,
 } as const;
 
 export const SCORE = {
@@ -69,12 +79,13 @@ export const SCORE = {
 } as const;
 
 export const STAGE = {
-  firstGoal: 12000,
+  /** Road distance (px) for stage 1. Each stage adds goalStep, and the goal loops after goalCycle stages. */
+  firstGoal: 24000,
   goalStep: 4000,
-  /** Each stage multiplies spawn intervals by this (fewer, but still random). */
-  spawnIntervalScale: 0.9,
-  /** Each stage multiplies traffic speeds by this. */
-  trafficSpeedScale: 1.05,
+  goalCycle: 4,
+  /** Each stage multiplies spawn gaps by this. Car gaps never go below minSpawnGap. */
+  spawnGapScale: 0.9,
+  minSpawnGap: 200,
 } as const;
 
 export const TRAFFIC = {
@@ -86,16 +97,13 @@ export const TRAFFIC = {
   blueSpeed: [100, 130] as const,
   truckSpeed: 60,
   fuelCarSpeed: 90,
+  /** Lane changes: red changes lane once, blue 2–3 times. */
   laneChangeCount: { red: 1, blue: [2, 3] as const },
-  /** Seconds between spawns, per type, at stage 1. */
-  spawnInterval: {
-    yellow: 1.2,
-    red: 3,
-    blue: 4,
-    truck: 6,
-    fuelCar: 9,
-    oil: 5,
-  },
+  /** Car type mix at spawn. Weights need not sum to 1. */
+  carTypeWeights: { yellow: 0.6, red: 0.2, blue: 0.1, truck: 0.1 },
+  /** Distance (px of road) between spawns, at stage 1. Oil and fuel cars use a jitter range. */
+  spawnGap: { car: 350, oil: 4000, fuel: 8000 },
+  spawnJitter: { car: 0, oil: 1000, fuel: 2000 },
 } as const;
 
 export const INVULNERABLE_BLINK_HZ = 10;

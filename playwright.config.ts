@@ -1,10 +1,7 @@
-import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 
-// Use the pre-installed Chromium when present (sandbox), otherwise Playwright's own browser.
-const PREINSTALLED_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const executablePath = existsSync(PREINSTALLED_CHROMIUM) ? PREINSTALLED_CHROMIUM : undefined;
-
+// Playwright 1.56.1 bundles Chromium 141, which matches the browser preinstalled in the sandbox.
+// Browsers are found through PLAYWRIGHT_BROWSERS_PATH when it is set, and downloaded otherwise.
 const PORT = 5173;
 
 export default defineConfig({
@@ -16,7 +13,6 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: 'retain-on-failure',
-    launchOptions: executablePath ? { executablePath } : {},
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 } } },

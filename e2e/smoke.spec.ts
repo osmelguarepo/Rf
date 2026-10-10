@@ -87,13 +87,45 @@ test.describe('Road Fighter MVP smoke', () => {
     expect((await snapshot(page)).carX).toBeLessThan(startX);
   });
 
-  test('X selects high gear, Z selects low gear', async ({ page }) => {
+  test('holding X selects high gear, releasing returns to low gear', async ({ page }) => {
     await startGame(page);
 
-    await page.keyboard.press('KeyX');
+    await page.keyboard.down('KeyX');
     await expect.poll(async () => (await snapshot(page)).gear).toBe('high');
-    await page.keyboard.press('KeyZ');
+    await page.keyboard.up('KeyX');
     await expect.poll(async () => (await snapshot(page)).gear).toBe('low');
+  });
+
+  test('a stubbed gamepad can start the game and drive', async ({ page }) => {
+    await page.addInitScript(() => {
+      const buttons = Array.from({ length: 17 }, () => ({ pressed: false, value: 0, touched: false }));
+      const pad = { id: 'fake pad', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons, timestamp: 0 };
+      (window as unknown as { __pad: typeof pad }).__pad = pad;
+      navigator.getGamepads = () => [pad as unknown as Gamepad];
+    });
+    await page.goto('/');
+    await expect(page.locator('canvas')).toBeVisible();
+
+    // Hold Start until the game scene exists, so the press cannot be missed between frames.
+    await page.evaluate(() => {
+      (window as unknown as { __pad: { buttons: { pressed: boolean }[] } }).__pad.buttons[9].pressed = true;
+    });
+    await expect
+      .poll(() => page.evaluate(() => Boolean((window as unknown as { __roadFighter?: unknown }).__roadFighter)))
+      .toBe(true);
+    await page.evaluate(() => {
+      (window as unknown as { __pad: { buttons: { pressed: boolean }[] } }).__pad.buttons[9].pressed = false;
+    });
+    await expect.poll(async () => (await snapshot(page)).phase).toBe('running');
+
+    // Hold B (throttle) on the pad and check the car moves.
+    await page.evaluate(() => {
+      (window as unknown as { __pad: { buttons: { pressed: boolean }[] } }).__pad.buttons[1].pressed = true;
+    });
+    await expect.poll(async () => (await snapshot(page)).speed).toBeGreaterThan(40);
+    await page.evaluate(() => {
+      (window as unknown as { __pad: { buttons: { pressed: boolean }[] } }).__pad.buttons[1].pressed = false;
+    });
   });
 
   test('no Web Audio context is created at runtime', async ({ page }) => {

@@ -5,15 +5,15 @@ import { COLOURS, drawBackdrop } from '../render/draw';
 import { session } from '../session';
 
 const CONTROLS = [
-  'UP / W          Accelerate',
+  'UP / W / Z (B)  Accelerate',
   'DOWN / S        Brake',
   'LEFT / RIGHT    Steer (or A / D)',
-  'X (A)           High gear  (400 km/h)',
-  'Z (B)           Low gear   (198 km/h)',
+  'X (A), held     High gear: 400 km/h,',
+  '                slow to start',
   'ESC / P         Pause',
   '',
-  'Gamepad: stick or D-pad, A / B gears,',
-  'Start pauses and confirms',
+  'Gamepad: stick / D-pad, B throttle,',
+  'A high gear, Start pause / confirm',
 ];
 
 const TEXT_STYLE = {

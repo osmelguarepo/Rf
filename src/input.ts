@@ -4,12 +4,12 @@ import type { GameInput } from './game/types';
  * Keyboard and gamepad → GameInput snapshot. Uses plain DOM events and the Gamepad API,
  * so it does not depend on Phaser and works unchanged in an Electron wrapper.
  *
- * Held actions (up/down/left/right) are read as state. Edge actions (gears, confirm, pause)
- * are true only on the frame they were pressed; read() clears them.
+ * Held actions (throttle, brake, steer, high gear) are read as state.
+ * Edge actions (confirm, pause) are true only on the frame they were pressed; read() clears them.
  */
 
 type Action = 'up' | 'down' | 'left' | 'right' | 'high' | 'low' | 'confirm' | 'pause';
-const EDGE_ACTIONS: ReadonlySet<Action> = new Set(['high', 'low', 'confirm', 'pause']);
+const EDGE_ACTIONS: ReadonlySet<Action> = new Set(['confirm', 'pause']);
 
 const KEY_ACTIONS: Readonly<Record<string, Action>> = {
   ArrowUp: 'up',
@@ -20,23 +20,25 @@ const KEY_ACTIONS: Readonly<Record<string, Action>> = {
   KeyA: 'left',
   ArrowRight: 'right',
   KeyD: 'right',
-  KeyX: 'high',
-  KeyZ: 'low',
+  KeyX: 'high', // A: high gear, and also throttle
+  KeyZ: 'low', // B: throttle (low gear)
   Enter: 'confirm',
   Space: 'confirm',
   Escape: 'pause',
   KeyP: 'pause',
 };
 
-/** Standard Gamepad mapping. */
+/** Standard Gamepad mapping. One button can drive several actions. */
 const PAD_BUTTONS: ReadonlyArray<readonly [number, Action]> = [
   [12, 'up'],
   [13, 'down'],
   [14, 'left'],
   [15, 'right'],
-  [0, 'high'], // A: high gear, and also confirms menus
-  [1, 'low'], // B: low gear
-  [9, 'pause'], // Start: pause, and also confirms menus
+  [0, 'high'], // A: high gear and throttle
+  [0, 'confirm'], // A also confirms menus
+  [1, 'low'], // B: throttle (low gear)
+  [9, 'pause'], // Start: pause
+  [9, 'confirm'], // Start also confirms menus
 ];
 const PAD_STICK_THRESHOLD = 0.5;
 
@@ -81,11 +83,11 @@ export class InputController {
     const left = has('left');
     const right = has('right');
     const input: GameInput = {
-      accel: has('up'),
+      // Up, B or A all accelerate. A also selects high gear while held.
+      accel: has('up') || has('low') || has('high'),
       brake: has('down'),
       steer: left === right ? 0 : right ? 1 : -1,
-      highGearPressed: edge('high'),
-      lowGearPressed: edge('low'),
+      highGear: has('high'),
       pausePressed: edge('pause'),
       confirmPressed: edge('confirm'),
     };

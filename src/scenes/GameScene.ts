@@ -72,12 +72,19 @@ export class GameScene extends Phaser.Scene {
     this.messageTimer = 0;
     this.render();
 
-    // Losing window focus pauses the run, so a player who alt-tabs does not crash while away.
-    const onBlur = (): void => {
+    // Losing focus, or hiding the tab, pauses the run so a player who alt-tabs does not crash while away.
+    const pauseWhileAway = (): void => {
       if (this.state.phase === 'running') this.queued = latchEdges(this.queued, { ...NO_EDGES, pausePressed: true });
     };
-    window.addEventListener('blur', onBlur);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener('blur', onBlur));
+    const onVisibility = (): void => {
+      if (document.hidden) pauseWhileAway();
+    };
+    window.addEventListener('blur', pauseWhileAway);
+    document.addEventListener('visibilitychange', onVisibility);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('blur', pauseWhileAway);
+      document.removeEventListener('visibilitychange', onVisibility);
+    });
 
     // Dev-only read hook so the Playwright smoke test can check real game state, not just pixels.
     if (import.meta.env.DEV) {

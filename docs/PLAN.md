@@ -1,201 +1,269 @@
-# Road Fighter-style MVP — Implementation Plan
+# Road Fighter-style MVP — Plan (final, after review)
 
-Working title: **ROAD FIGHTER** (kept in one constant, `GAME_TITLE`, so it can be renamed before any store release. "Road Fighter" is a Konami trademark.)
+Working title: **ROAD FIGHTER** (one constant, `GAME_TITLE` in `src/config.ts`). "Road Fighter" is a Konami trademark. Rename before any store release.
+
+This document describes what is implemented. Section 11 records how each review finding was handled.
 
 ## 1. Research summary
 
-Sources (2 of 3 original StrategyWiki/Cutting Room Floor pages were blocked; figures below come from search summaries and Wikipedia):
+Sources: StrategyWiki and the Cutting Room Floor were partly blocked (403, DNS). Figures come from search summaries, Wikipedia, and the Arcade-History and Konami wiki entries.
 
-- Konami, arcade Nov/Dec 1984. NES/Famicom Japan 11 Jul 1985. The NES port is a simplified survival version: no rival ranking, fewer courses. Europe got it in 1992, never North America.
-- Player car: red Corvette C4 (drawn as a rectangle in this MVP).
-- Speed buttons: B and A are two gears. Sources disagree on which button does what, and on the top speeds (about 196–224 km/h low, about 400 km/h high).
-- Fuel: about 100 seconds of driving per tank. Refilled by touching multicoloured "fuel cars". The bonus climbs with each consecutive catch, from 300 up to 10,000 points (StrategyWiki).
-- Crashes: a car crash or an oil-induced spin that ends in the roadside costs about 5–6 fuel units.
-- Oil slicks: cause a skid. The correction is to steer in the direction of the skid. Too late and the car spins out.
-- Traffic (NES): yellow cars drive straight in large numbers. Red cars change lane once. Blue cars change lane more and try to hit you. Trucks destroy the car on contact.
-- Scoring: passing a car is 50 points (one source). Unused fuel is converted to points at the end of each stage (30 per unit, one source).
-- Konami Man appears as a roadside cameo on a clean run. Deferred, out of MVP scope.
-- Goal per stage: reach the end without running out of time, hitting cars, or running out of fuel.
-
-Conflicting details are resolved by the design choices in §4 and listed as **Open decisions** in §10.
+- Konami, arcade Nov/Dec 1984. NES/Famicom Japan 11 Jul 1985, Europe 1992, never North America. The NES version is a survival game with no rival ranking and fewer courses.
+- Player car: red Corvette C4 (a rectangle in this MVP).
+- Buttons: B accelerates (held), A raises speed to about 400 km/h (held). Sources disagree on exact top speeds (about 196–224 km/h low gear).
+- Fuel: about 100 seconds of driving per tank. Rainbow fuel cars refill a small amount and pay points. The NES value is 1000 points (flat).
+- Hitting another car sends the car into a spin, as an oil patch does. The car does not explode. A correction is to steer into the slide. A late correction spins the car into the roadside, which costs about 5–6 fuel units.
+- Traffic: yellow cars drive straight in large numbers. Red cars change lane once to get in the way. Blue cars change lane more. Trucks destroy the car on contact (one source).
+- Scoring: 50 points per passed car. Unused fuel converts to points at stage end (30 per unit, one source).
+- There is no timer in the NES game. A stage ends when you reach the goal. Running out of fuel ends the run.
+- Konami Man appears as a roadside cameo on clean runs. Out of MVP scope.
 
 ## 2. Framework decision
 
-**Recommendation: Phaser 4 (4.2.1, MIT) + TypeScript + Vite, shipped to the web directly and to Steam via an Electron wrapper.**
+**Phaser 4.2.1 + TypeScript + Vite**, shipped to the web directly and to Steam later through an Electron wrapper.
 
 | Criterion | Phaser 4 + TS + Vite | Godot 4.7 | Unity |
 |---|---|---|---|
-| Web build | Native: static `dist/` folder, no export step | Web export uses Compatibility renderer only, about 24 MB empty export, Safari issues | WebGL build, large downloads |
-| Steam | Electron wrapper (Phaser has an official March 2025 guide; Desktop Heroes shipped on Steam Oct 2025 with Phaser + Electron) | Native desktop export; GodotSteam GDExtension | Native; Steamworks plugin |
-| Verifiable in this sandbox (no GUI editor, Chromium available) | Yes: `tsc`, `vitest`, `vite build`, Playwright screenshots | Editor-only workflow, hard to verify headless | Editor-only, hard to verify headless |
-| Fit for a rectangle-based 2D arcade game | Excellent | Excellent | Overkill |
+| Web build | Static `dist/`, no export step | Web export is Compatibility renderer only, about 24 MB empty export, Safari issues | WebGL build, large downloads |
+| Steam | Electron wrapper. Phaser has an official guide (Mar 2025). Desktop Heroes shipped on Steam with Phaser + Electron (Oct 2025) | Native desktop export, GodotSteam GDExtension | Native, Steamworks plugin |
+| Verifiable here | Yes: `tsc`, `vitest`, `vite build`, Playwright headless | Godot has `--headless`, `--export-release` and GUT or gdUnit4 for CI. The sandbox has no binary and no export templates (about 1 GB) | Editor-centric, hard to verify headless |
+| Fit for a rectangle arcade game | Excellent | Excellent | Overkill |
 
-Consequence: keep the game logic free of Phaser imports, so the same code runs in the browser build and in the later Electron wrapper.
+Revisit only if launch needs the Steam overlay, Steam Input, achievements, a small install size, Steam Deck Verified status, or consoles.
+
+**Electron costs (phase 2, not in MVP):** the runtime is about 283 MB unpacked against a 1.4 MB game. steamworks.js 0.4.0 has had no release since August 2024, so evaluate `steamworks-ffi-node` 0.11.3 as well. The Steam overlay needs `electronEnableSteamOverlay()`. Phase 2 also needs an `app://` protocol, Steamworks calls in the main process over IPC, and `Menu.setApplicationMenu(null)`.
+
+The rules layer (`src/game`) has no engine imports, so it runs unchanged in Node, tests and Electron.
 
 ## 3. MVP scope
 
 **In scope**
-1. Two scenes only:
-   - **Title scene**: game title, controls panel (keyboard and gamepad), START prompt (Enter / Space / gamepad Start, or click).
-   - **Game scene**: the road and gameplay, with HUD and overlays (pause, game over, stage clear).
-2. Player car (red rectangle) with steering, accelerate, brake, two gears (B = low, A = high), speed-dependent steering.
-3. Fuel gauge: drains while moving, refilled by fuel cars, empty = game over.
-4. Traffic (rectangles): yellow (straight), red (one lane change), blue (multiple lane changes, steers toward the player), truck (instant destruction).
-5. Crashes: contact with a car = crash (fuel loss, speed drop, short invulnerability). Oil patch = skid. Uncorrected skid into the barrier = spin-out crash.
-6. Scoring: passing cars, fuel-car chain bonus, end-of-stage fuel conversion, high score kept in memory for the session.
-7. Stage progress bar. Stage clear, then the next stage with more traffic and higher speed.
-8. Pause (Esc / P).
-9. Keyboard and gamepad input (Steam players expect gamepads).
-10. No audio of any kind. No sound files, no Web Audio, no Phaser sound manager.
+1. Two scenes: **Title** (controls and START) and **Game** (road, traffic, HUD, overlays).
+2. Player car (red rectangle): held throttle, held high gear, braking, steering, speed-dependent steering, skids.
+3. Fuel: constant drain while running, refills from fuel cars, empty means game over.
+4. Traffic (rectangles): yellow, red, blue, trucks, fuel cars, oil.
+5. Contacts: car bump (skid, no penalty), roadside crash (fuel loss, speed loss), truck (game over), oil (skid).
+6. Scoring: passed cars, fuel-car pickups, stage-clear fuel bonus, session high score.
+7. Stages with goals that loop, and difficulty that rises per stage.
+8. Pause (Esc / P / Start), automatic pause when the window loses focus or the tab is hidden.
+9. Keyboard and gamepad. Gamepad is read through the DOM Gamepad API.
+10. No audio. Phaser's audio is disabled in config (`audio: { noAudio: true }`).
 
-**Out of scope (MVP)**: sprites, art, Konami Man cameo, multiple visually distinct courses, real save data, Steam SDK integration (achievements, cloud), Electron packaging (documented as phase 2), mobile touch controls, online features.
+**Out of scope (MVP):** sprites and art, Konami Man, the other NES courses, save data, Steam SDK, Electron packaging, touch controls, fullscreen-filling layout (see §11, deferred items), render interpolation.
 
 ## 4. Gameplay specification
 
-All numeric values live in `src/config.ts` as tunable constants. The values below are the starting point.
+All numbers live in `src/config.ts`.
 
-**Coordinates and display.** Logical canvas 360 × 640 px, `Phaser.Scale.FIT`, centred. Road spans x ∈ [60, 300] (240 px, three lanes of 80 px, centres 100 / 180 / 260). Roadside strips outside the road are drawn as green rectangles.
+**Playfield.** Logical 360 × 640 px, Phaser `FIT`, centred. Road spans x ∈ [60, 300] in three 80 px lanes. Roadside strips are green rectangles with scrolling trees.
 
-**Speed model.** Speed is in km/h (shown on HUD). Scroll and relative movement use `px/s = kmh × 0.5`.
+**Speed.** Speeds are km/h (HUD). Scroll and relative motion use px/s = km/h × 1 (see §11).
 
-| Parameter | Value |
+| | Value |
 |---|---|
-| Low gear (B) top speed | 198 km/h |
-| High gear (A) top speed | 400 km/h |
-| Accel (low gear) | 70 km/h/s |
-| Accel (high gear) | 45 km/h/s (slower from standstill, faster near top) |
-| Brake (Down) | 120 km/h/s |
-| Coast drag (no input) | 25 km/h/s |
-| Gear selection | Sticky. Press A for high, B for low. Default low at start. |
+| Low gear top speed | 198 km/h |
+| High gear top speed | 400 km/h |
+| Low gear acceleration | 70 km/h/s |
+| High gear acceleration | 15 km/h/s below 160 km/h, then 45 km/h/s |
+| Brake (Down / S) | 120 km/h/s |
+| Coasting (no throttle) | −25 km/h/s |
+| Above the gear top speed | falls at 25 km/h/s |
 
-**Steering.** Lateral rate `steerRate = 220 − 0.4 × speed` px/s (about 141 px/s at 198 km/h, 60 px/s at 400 km/h). Car is clamped to the road.
+**Gears are held, not toggled.** High gear is active only while X (A) is held. Releasing X returns to low gear. The throttle is Up/W, Z (B) or X (A), so holding X also accelerates.
 
-**Skid and spin (oil)** (revised after review, see §11).
-- Driving onto an oil patch that has not been used yet starts a skid. Lateral slide speed `slideVx = ±90 px/s`, direction chosen by RNG. No new skid while already skidding.
-- While skidding, steering does **not** move the car sideways. The slide carries it at constant speed.
-- Steering into the slide reduces `|slideVx|` by 360 px/s² until it reaches 0 (recovered, about 15 steps from 90 px/s).
+**Steering.** Lateral speed (px/s) = (170 − 0.1 × km/h) × min(1, km/h / 30). The car cannot steer while stopped. Full steering rate is about 150 px/s at 198 km/h and 130 px/s at 400 km/h.
+
+**Skid (oil).**
+- Driving onto an oil patch that has not been used yet starts a skid. Lateral slide speed is 90 px/s, with direction from the RNG. No new skid starts while already skidding.
+- While skidding, steering does not move the car. The slide carries it at constant speed.
+- Steering into the slide reduces the slide speed by 360 px/s² per second, so it reaches zero in about 15 steps. The skid is then over.
 - Steering against the slide, or not steering, leaves the slide unchanged.
-- Reaching the roadside while sliding (car edge ≤ 60 or ≥ 300) = **spin-out crash**. An uncorrected centre-lane slide spins out in about 1.2 s.
+- Reaching the roadside while sliding is a roadside crash.
 
-**Crash (car contact or spin-out).** Fuel −5 or −6 (integer, RNG). Speed set to 30 %. Chain bonus reset. Skid cleared. Invulnerable 1.5 s (car blinks). Each traffic car can crash the player **at most once** (`struck` flag). The car stays on the road.
+**Car bump (traffic car contact).** No fuel loss and no speed loss. The player starts a skid pushed away from the other car, and gets 1.5 s of invulnerability. Each traffic car can bump the player at most once (`struck` flag). A bumped car stays on the road. Bumps during invulnerability are ignored.
 
-**Truck contact.** Instant destruction = **game over** (single life). Ignored during invulnerability, the same as car contact. See open decision O1.
+**Roadside crash.** Contact with the roadside (steering into the edge, or sliding into it) is a crash. Fuel −5 or −6 (RNG), speed × 0.3, 1.5 s of invulnerability. The car is held at the edge for rendering.
+
+**Truck contact.** Game over (decision O1). Ignored during invulnerability.
 
 **Priority within one step.** Game over (empty tank or truck) beats stage clear. Stage clear is checked after game over.
 
-**Fuel cars.** Removed on pickup. Give the chain bonus only, never pass points. Missing one does not reset the chain.
-
-**Spawning.** When every lane is blocked near the top of the screen, the spawner retries after 0.1 s instead of skipping the spawn.
-
-**Fuel.** Tank 100 units. Drain 1.0 unit/s while the car is moving (about 100 s of driving). Empty = game over.
-- Fuel car pickup: +20 fuel (capped at 100).
-- Chain bonus: 300, 600, 1 200, 2 400, 4 800, 9 600, then 10 000 for each further catch. Chain resets on crash.
+**Fuel.**
+- Tank 100. Drains 1 unit per second while the run is active, moving or not.
+- Fuel car: +10 units (capped at 100), 1000 points, flat (no chain). The car is removed on pickup.
+- Each stage starts with a full tank.
+- Empty tank is game over.
 
 **Scoring.**
-- Passing a traffic car (its top edge passes below the player's bottom edge, counted once): +50.
-- Fuel car pickup: chain bonus as above.
-- Stage clear: +30 per remaining fuel unit.
+- Passing a traffic car (its top edge passes below the player's bottom edge), once per car: +50. Fuel cars and oil never give pass points.
+- Fuel-car pickup: +1000.
+- Stage clear: +30 per whole fuel unit left.
 
 **Stages.**
-- Stage 1 goal: 12 000 px of road distance (about 120 s at low gear). Each next stage: +4 000 px goal, traffic spawn interval −10 %, base traffic speed +5 %, same visuals.
-- Stage clear overlay: shows stage bonus, Enter continues.
+- Goal distance: 24 000, 28 000, 32 000, 36 000 px, then the goal loops back to 24 000 px.
+- Spawn gaps (distance between spawns) shrink by 0.9 per stage. Car gaps never go below 200 px. Traffic speed does not scale by stage.
+- Stage clear shows the bonus. Enter starts the next stage with a full tank and an empty road.
 
-**Traffic spawning.** Deterministic RNG (seeded mulberry32, seed configurable so tests are repeatable). Spawn timers per type, no two cars overlapping in the same lane within the spawn zone.
+**Traffic spawning (by road distance, not time).** Spawning is driven by the road scrolled, so density does not depend on speed.
+- Car gap: 350 px on average (±0 jitter). Types: yellow 60 %, red 20 %, blue 10 %, truck 10 %.
+- Oil patch gap: 4000 ± 1000 px.
+- Fuel car gap: 8000 ± 2000 px.
+- Cars spawn 60 px above the top edge. A lane that is busy near the top is skipped. If every lane is busy, the spawn is retried on the next step.
 
 | Type | Colour | Size (px) | Behaviour |
 |---|---|---|---|
 | Yellow | `#f4d03f` | 24 × 40 | Straight, 80–120 km/h |
-| Red | `#c0392b` | 24 × 40 | Straight, one lane change at random y |
-| Blue | `#2e86de` | 24 × 40 | 2–3 lane changes, steers toward player when close |
-| Truck | `#7f8c8d` | 30 × 60 | Straight, 60 km/h, lethal on contact |
-| Fuel car | cycling rainbow tint | 24 × 40 | Straight, 90 km/h, pickup |
-| Oil patch | `#1a1a1a` | 40 × 24 | Static on road, triggers skid |
+| Red | `#c0392b` | 24 × 40 | Straight, one lane change at random time, 90–110 km/h |
+| Blue | `#2e86de` | 24 × 40 | 2–3 lane changes, heads for the player's lane when close, 100–130 km/h |
+| Truck | `#7f8c8d` | 30 × 60 | Straight, 60 km/h, game over on contact |
+| Fuel car | cycling hue | 24 × 40 | Straight, 90 km/h, pickup |
+| Oil patch | `#1a1a1a` | 40 × 24 | Static on road, triggers skid once |
 
-**Player car.** Rectangle 26 × 44 px, red `#e74c3c`, rear window highlight as a smaller rectangle. Blinks during invulnerability.
+**Player car.** Rectangle 26 × 44 px in `#e74c3c` with a window rectangle. It blinks during invulnerability.
+
+**Pause.** Esc, P or Start pauses. Losing window focus or hiding the tab pauses. Pausing freezes the state (no fuel drain).
 
 ## 5. Controls
 
-| Action | Keyboard | Gamepad |
+| Action | Keyboard | Gamepad (standard mapping) |
 |---|---|---|
-| Accelerate | Up / W | D-pad Up / left stick Up |
-| Brake | Down / S | D-pad Down / left stick Down |
-| Steer | Left / Right, A / D | D-pad Left/Right / left stick |
-| High gear (A) | X | A button |
-| Low gear (B) | Z | B button |
-| Start / confirm | Enter / Space | Start / A |
-| Pause | Esc / P | Start in game |
+| Throttle (low gear) | Up / W, or Z (B) | D-pad up, B, or left stick up |
+| High gear (held, also throttle) | X (A) | A |
+| Brake | Down / S | D-pad down, or left stick down |
+| Steer | Left / Right, or A / D | D-pad left / right, or left stick |
+| Start / confirm | Enter / Space | Start, or A |
+| Pause | Esc / P | Start |
 
-Input is abstracted in `src/input.ts` into an `Input` snapshot per frame, so game logic never reads raw keys.
+Stick threshold is 0.5. Input is read once per frame in `src/input.ts`, so game logic never reads raw keys or pads.
 
 ## 6. Architecture
 
 ```
-index.html
+index.html                  Meta viewport, empty favicon, module entry
 src/
-  main.ts                  Phaser.Game config (360x640, FIT), registers scenes
-  config.ts                Tunable constants and GAME_TITLE
-  input.ts                 Keyboard and gamepad → Input snapshot
-  game/                    PURE TypeScript, no Phaser import (unit-testable)
-    rng.ts                 mulberry32 seeded RNG
-    car.ts                 Speed, gear, steering, skid, spin, invulnerability
-    fuel.ts                Tank, drain, refill, crash cost, chain bonus
-    traffic.ts             Traffic entities, spawner, lane changes, pass detection
-    collision.ts           AABB overlap helper
-    stage.ts               Stage index, goal distance, stage-clear bonus, difficulty
-    state.ts               GameState + step(input, dt) orchestrating the above
+  main.ts                   Phaser.Game config: 360×640, FIT, audio disabled
+  config.ts                 Every tunable number and GAME_TITLE
+  input.ts                  Keyboard and gamepad (DOM APIs) → GameInput
+  session.ts                High score for the page load
+  game/                     PURE rules: no Phaser, DOM, Date.now or Math.random
+    types.ts                GameInput (held and edge fields), Gear
+    edges.ts                One-shot presses latched until a step consumes them
+    loop.ts                 Fixed-step accumulator, 0.1 s clamp, 5-step cap
+    rng.ts                  Seeded RNG (mulberry32)
+    collision.ts            Rectangle overlap
+    car.ts                  Speed, gears, steering, skid, roadside, bump
+    traffic.ts              Distance-based spawner, relative motion, lane changes, passing
+    fuel.ts                 Tank, drain, pickup, crash cost
+    stage.ts                Stage goal (looping) and stage-clear bonus
+    state.ts                GameState and step(); phases; events
   scenes/
-    TitleScene.ts          Controls panel + START
-    GameScene.ts           Renders GameState with Graphics rectangles and HUD text
-tests/                     vitest unit tests for src/game/*
-e2e/smoke.spec.ts          Playwright: title → start → game renders, no console errors
-docs/PLAN.md               This file
-README.md                  How to run, test, build; controls; design notes
+    TitleScene.ts           Controls, START button, gamepad start
+    GameScene.ts            Fixed-step loop, HUD, overlays, focus-loss pause
+  render/draw.ts            Rectangle drawing helpers
+tests/                      Vitest: rules, loop, edges, traffic, skid, purity, no-audio
+e2e/smoke.spec.ts           Playwright (desktop and phone): start, drive, gears, pause, gamepad, no audio
+docs/PLAN.md                This file
 ```
 
-**Build and tooling.** `vite` for dev and build (`base: './'` so `dist/` works from `file://` in the later Electron wrapper). TypeScript strict mode. `vitest` for unit tests. Playwright uses the pre-installed Chromium via `executablePath: '/opt/pw-browsers/chromium'` (no browser download).
+**Determinism.** `step(state, input, dt)` is a fixed 1/60 s step. Edge presses are latched until a step consumes them. The same seed and the same inputs give the same game (tested).
 
-**Determinism.** `GameState.step` is a pure function of `(state, input, dt)`. Fixed-step update (1/60 s accumulator) so logic does not depend on frame rate.
+**Pinned versions.** `phaser@4.2.1`, `typescript@5.9.3`, `vite@8.3.4`, `vitest@5.0.3`, `@playwright/test@1.56.1` (Chromium 141, matches the sandbox browser), `@types/node@22.20.5`. Node `>=22.12`. `vite.config.ts` uses `base: './'`, which works under sub-paths and with Electron `loadFile`. Plain browsers block module scripts on `file://` (CORS), so the single-file `file://` case is not supported for the web build.
 
 ## 7. Screens
 
-**Title scene**: background road strip, title text, a red rectangle car as decoration, controls table (text), a blinking "PRESS ENTER / START" line, high score for the session.
+**Title.** Background road, title, a decorative red car, a CONTROLS panel (keyboard and gamepad), a START button, the blinking prompt, and the session best score.
 
-**Game scene**: road and traffic rectangles. HUD on the right-hand side strip or top: SCORE, HI, STAGE, SPEED (km/h), GEAR (L / H), FUEL gauge (rectangle bar, red under 20 %), stage progress bar.
+**Game.** Road, traffic and player car. HUD: top band with SCORE, HI and STAGE. Left strip: speed, gear (L/H), goal bar. Right strip: fuel gauge. Centre: short messages (CRASH!, SPIN OUT!, OIL!, FUEL!, PASS +50).
 
-**Overlays**: PAUSED (Esc / P to resume), GAME OVER (score, Enter = play again, Esc = back to title), STAGE CLEAR (bonus, Enter = next stage).
+**Overlays.** PAUSED (Esc / P / Start resumes). GAME OVER (score, best, Enter retries, Esc or Start goes to title). STAGE CLEAR (score, next stage, Enter continues).
 
 ## 8. Acceptance criteria
 
-1. `npm install && npm run dev` opens the title screen; Enter or click starts the game.
-2. Holding Up increases speed up to the gear's top speed; A raises the top speed to 400; B lowers it back to 198.
-3. Steering moves the car within the road; steering rate decreases with speed.
-4. Fuel drains while moving; fuel cars refill it, with chain bonus 300 → 10 000.
-5. Car contact: fuel drops 5–6, speed drops, short invulnerability. No double-hit within the invulnerability window.
-6. Oil: skid starts; steering the same way recovers it; not correcting spins the car into the barrier (fuel −5/6).
-7. Truck contact or fuel = 0 → game over overlay with score.
-8. Passing cars grants +50 once per car.
-9. Reaching the stage goal shows STAGE CLEAR with fuel bonus; next stage has more traffic.
-10. Pause works (Esc / P), game state frozen.
-11. Gamepad (Standard mapping) can drive and start.
-12. No audio: `grep` for `Audio`, `sound`, `.mp3`, `.wav`, `.ogg` in `src/` returns nothing.
-13. `npm test` (vitest) passes; `npm run typecheck` passes; `npm run build` passes; `npm run e2e` passes (headless Chromium).
-14. Layout fits a 16:9 desktop and a 9:16 phone viewport without page scroll.
+1. `npm install && npm run dev` opens the title screen. Enter, Space, A, Start or the START button begins the game.
+2. Holding Up, Z or X accelerates. Low gear stops at 198 km/h. Holding X selects high gear, up to 400 km/h, and releasing X returns to low gear. Above the gear top speed the car falls at 25 km/h/s.
+3. Steering is zero while stopped and about 150 px/s at 198 km/h. The car is clamped only for rendering. Touching the roadside is a crash.
+4. Fuel drains at 1 unit per second while running, moving or stopped. A fuel car adds 10 (capped at 100) and scores 1000.
+5. A car bump costs no fuel and no speed. It starts a skid away from the car. The same car bumps at most once.
+6. Oil starts a skid. Steering into the slide recovers it in about 15 steps. An uncorrected skid reaches the roadside within 2 s from the centre lane, which is a crash (fuel −5 or −6, speed × 0.3).
+7. A truck contact, or fuel at 0, shows GAME OVER with the score.
+8. A passed traffic car scores 50, once. Oil and fuel cars score no pass points.
+9. Reaching the goal shows STAGE CLEAR with 30 per whole fuel unit. The next stage starts with a full tank, an empty road, a goal of 28 000 px, and shorter spawn gaps.
+10. Esc or P pauses and freezes the state. Losing window focus or hiding the tab pauses.
+11. A gamepad (standard mapping) can start, throttle and steer (tested with a stubbed `navigator.getGamepads`).
+12. No audio: no Web Audio context is created at runtime, and `src/` and `index.html` contain no audio APIs or audio files (tested).
+13. `npm test`, `npm run typecheck`, `npm run build` and `npm run e2e` all pass.
+14. Layout: no page scroll at 1280×720 and 390×844.
 
-## 9. Work order
+## 9. Work order (status)
 
-1. Scaffold: package.json, tsconfig, vite, index.html, .gitignore.
-2. `src/game/*` pure logic + unit tests (TDD: write tests against the spec first).
-3. `src/input.ts`, `src/config.ts`.
-4. `TitleScene`, `GameScene`, `main.ts`.
-5. Playwright smoke test, README.
-6. Verify: typecheck, tests, build, e2e, screenshots reviewed.
-7. Leave changes uncommitted in the working tree (no commit or PR unless asked).
+1. Scaffold, pinned versions, configs. Done.
+2. Pure rules and unit tests. Done.
+3. Input, scenes, entry point. Done.
+4. Smoke tests, README. Done.
+5. Review by three Opus max-effort reviewers. Done (§11).
+6. Apply accepted review items (this revision). Done.
+7. Commit and push to `feat/road-fighter-mvp`. No PR unless asked.
 
-## 10. Open decisions (defaults chosen)
+## 10. Open decisions
 
-- **O1 Truck**: sources say contact destroys the car. Default: **instant game over** (no lives system in the sources). Alternative: treat as a heavy crash.
-- **O2 Car contact**: sources are ambiguous whether a car collision ends the run. Default: **crash, not game over** (fuel loss + speed drop).
-- **O3 Gears**: sources disagree which button is low or high. Default: **B = low (198 km/h), A = high (400 km/h)**.
-- **O4 Pass points**: 50 (NES source). Fuel-car chain as StrategyWiki (300 → 10 000). Fuel conversion 30/unit (one source, low confidence).
-- **O5 Framework**: Phaser 4 over Godot 4 (see §2). Revisit only if Steam-native features become a requirement before release.
-- **O6 Title**: working title "ROAD FIGHTER" in code. Rename before store submission.
+- **O1 Truck contact = game over.** The source says contact "instantly destroys" the car. The reviewer argued for a crash instead, since the game has no lives. The literal source reading is kept. Change if you prefer a crash.
+- **O2 Car contact = bump (resolved).** No fuel or speed penalty, a skid away from the car, each car once.
+- **O3 Gears = held (resolved).** A (X) is held for high gear. B (Z) and Up are throttle.
+- **O4 Fuel car = 1000 flat, no chain (resolved).** Chain bonus from the arcade game dropped.
+- **O5 Framework = Phaser 4 over Godot 4 (see §2).** Electron costs noted. Revisit for Steam overlay, Steam Input, achievements or Deck Verified.
+- **O6 Title = "ROAD FIGHTER" in code.** Rename before store submission.
+
+## 11. Review outcomes
+
+Three Opus 5.5 max-effort reviewers checked the plan in parallel: gameplay fidelity, architecture and delivery, and testability and scope. Each finding is marked **Adopted**, **Partly adopted**, **Deferred** (planned, not in this MVP) or **Rejected** (with the reason).
+
+### 11.1 Gameplay fidelity
+
+| # | Finding | Outcome |
+|---|---|---|
+| 1 | Car contact should be a bump, not a fuel crash. Start a skid away from the car, no fuel loss. | **Adopted** (§4 bump). The search results describe hitting a car as a spin, not a crash. |
+| 2 | Truck should be an immediate crash. Game over only at fuel 0. | **Rejected** for now. The source says the truck destroys the car. Kept as O1. |
+| 3 | Replace the skid with a 30 px/s wobble, cumulative 0.10 s correction within 0.70 s. | **Rejected**. The current model follows the sources: a slide, correctable by steering into it, and a late correction spins out. The reviewer's blocker (steering pushing the car into the barrier) is fixed: steering does not move the car during a skid. |
+| 4 | Gears should be held throttles: B accelerates, A high gear. Up unbound. | **Adopted, partly.** Gears are held. B and A both accelerate, and Up is kept as an extra throttle so keyboard players are not stuck. |
+| 5 | px/s = km/h × 1; steering formula with a standstill cutoff; 25 km/h/s fall above the gear top. | **Adopted**. Not yet playtested. The tuning is a starting point. |
+| 6 | Spawn per distance, car gap 350 px with a type mix, oil and fuel gaps, floor on car gaps. Skip spawns when the player is slower than the car. Red cars move toward the player's lane. | **Partly adopted**. Distance spawning, the mix and the gaps are adopted. The skip-when-slower rule is unclear and not implemented. Red cars toward the player's lane is **Deferred**. |
+| 7 | Refill to 100 each stage. Drain whenever play runs. Fuel car +10. Goals 24 000–36 000 looping. Gaps shrink per stage, no speed scaling. | **Adopted**. The yellow→blue shift per stage is **Deferred**. |
+| 8 | Fuel car = 1000 flat. Drop the chain. | **Adopted**. The NES source gives 1000 for the fuel car. |
+| 9 | Roadside contact is a crash, no clamp. | **Partly adopted**. Roadside contact is a crash. The car is still held at the edge for rendering, which is a display choice. |
+| 10 | Respawn after a 1.0 s wreck, clear traffic ahead, and 1.5 s blink. | **Rejected** for the MVP. The per-car bump limit and invulnerability cover the repeat-hit problem. |
+
+The reviewer's "no Start button" point was based on the plan text. The START button is in the code (`TitleScene`).
+
+### 11.2 Architecture and delivery
+
+| # | Finding | Outcome |
+|---|---|---|
+| 1 | Audio: set `noAudio`, a runtime check, and a source check. | **Adopted**. `audio: { noAudio: true }`, a runtime `AudioContext` counter in e2e, and a source check in `tests/no-audio.test.ts` (scans `src/` and `index.html`). |
+| 2 | Pin Playwright 1.56.1 (Chromium 141), remove the hard-coded browser path, Vitest include. Add SwiftShader flags and assert WebGL. Test the production build. Stub the gamepad. | **Partly adopted**. Pinned, path removed, Vitest include set, gamepad stub test added. **Rejected**: SwiftShader flags and the WebGL assertion (a 2D canvas game works on the Canvas renderer, so the assertion adds nothing). **Deferred**: running e2e against the production build (e2e uses the dev server). |
+| 3 | Clamp the loop, sample input per frame, latch edges, pause on blur and hidden. Interpolate rendering. Store RNG state as uint32. | **Partly adopted**. Clamp, latch and pause are in place, and pause on hidden tabs is added. **Deferred**: render interpolation (small judder on 120/144 Hz screens), and uint32 RNG state (replays are not a requirement yet). |
+| 4 | Phaser pitfalls: gamepad plugin, `scene.pause()`, key repeat, scene restart, listener cleanup, `skipLibCheck`, TypeScript 7 errors. | **Adopted, mostly N/A**. Input uses the DOM APIs, not Phaser plugins, so most pitfalls do not apply. Key repeat is filtered. Listeners are removed on shutdown. `skipLibCheck` is set. **Rejected**: TypeScript 7 (5.9.3 is kept as the stable line). |
+| 5 | Move the input snapshot into `src/game`. Phase machine and events in `state.ts`. A `src/platform/` layer for Electron. A purity test. | **Adopted**: input type in `src/game/types.ts`, phases and events in `state.ts`, and `tests/purity.test.ts`. **Rejected** for now: `src/platform/`. Nothing uses it yet, so it goes in with the Electron phase. |
+| 6 | Use `Scale.EXPAND` so the playfield fills desktop and Steam Deck screens. Put the HUD in side panels. | **Deferred**. This is a presentation change only, since the rules are in fixed 360×640 units. FIT portrait is kept for now. Desktop shows side bars. A follow-up will switch to EXPAND with side-panel HUD. |
+| 7 | Keep Phaser. Correct the Godot row. Add Electron costs to O5. | **Adopted** (§2). |
+| 8 | `file://` wording; exact pins; `engines`. | **Adopted**. Exact pins and `engines: >=22.12` are in `package.json`. The `file://` limit is in §6. TypeScript stays at 5.9.3. |
+
+### 11.3 Testability and scope (earlier review)
+
+| Finding | Outcome |
+|---|---|
+| Audio: a real `noAudio` fix and a runtime test. | **Adopted** (see 11.2 #1). |
+| Vitest must not pick up e2e specs. | **Adopted**. `test.include` covers `tests/**`. |
+| Skid recovery and spin must be deterministic and testable. | **Adopted**, in a different form. Constant slide, correction by steering into it, roadside crash. Tested. |
+| Move the loop and edge latch into pure modules, with tests. | **Adopted** (`loop.ts`, `edges.ts`, tests). |
+| Auto-pause on blur, hidden tab and gamepad disconnect. | **Partly adopted**. Blur and hidden tab are in. Gamepad disconnect is **Deferred**. |
+| Each car crashes the player at most once. | **Adopted** (`struck` flag, tested). |
+| Fill the missing numbers (spawn, stage, lane change, start state). | **Adopted**. Numbers are in §4 and `config.ts`. |
+| Playwright tests must check real game state, not just that a page loaded. | **Adopted**. A dev-only snapshot hook; tests check phase, distance, fuel, speed, gear, traffic. |
+
+### 11.4 Known gaps carried into the next iteration
+
+- Playtesting. Speed, steering, spawn density and fuel economy are estimates. Stage 1 at low gear needs about 121 s at 198 px/s against 100 s of fuel plus pickups, so it is tight. High gear is much easier. Tune after a playtest.
+- EXPAND layout and side-panel HUD (11.2 #6).
+- Render interpolation and fixed-refresh judder (11.2 #3).
+- Production-build e2e (11.2 #2).
+- Red-car lane change toward the player and the per-stage shift to blue (11.1 #6, #7).
