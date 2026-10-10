@@ -1,0 +1,19 @@
+import Phaser from 'phaser';
+import { VIEW } from './config';
+import { GameScene } from './scenes/GameScene';
+import { TitleScene } from './scenes/TitleScene';
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: 'game',
+  width: VIEW.width,
+  height: VIEW.height,
+  backgroundColor: '#000000',
+  // The MVP has no audio. noAudio stops Phaser from setting up its Web Audio system at all.
+  audio: { noAudio: true },
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
+  scene: [TitleScene, GameScene],
+});
