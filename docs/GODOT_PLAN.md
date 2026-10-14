@@ -255,7 +255,7 @@ Fuente: `DECISIONES_MULTIJUGADOR.md`. Todos los valores van en `config.gd`.
   - +50 por adelantar, una vez por plaza.
   - +1000 por auto arcoíris.
   - Distancia: **+10 por cada 100 px de mundo**, calculado como `speed × K × dt`.
-  - Mientras un auto toca el borde inferior, no suma puntos por adelantar ni por distancia. **(Pendiente de confirmar por el dueño.)**
+  - Mientras un auto toca el borde inferior, no suma puntos por adelantar ni por distancia. **Confirmado por el dueño (14 oct).**
 - **Tráfico.**
   - Supervivencia sin etapas.
   - Cada **1200 ticks** (20 s), los huecos de autos y manchas × 0,9, con un mínimo de **40 px** (se alcanza hacia los 180 s).
@@ -283,10 +283,10 @@ Fuente: `DECISIONES_MULTIJUGADOR.md`. Todos los valores van en `config.gd`.
 - **Pausa.** Cualquier humano con Start.
 - **Colores.** Los de los jugadores y los del tráfico nunca se solapan.
 
-**Pendiente del dueño, antes de B1:**
-- puntos mientras se toca el borde inferior;
-- 1 humano con 0 bots;
-- qué pasa si el único humano ya eliminó a todos los bots.
+**Confirmado por el dueño (14 oct):**
+- mientras se toca el borde inferior no se suman puntos por adelantar ni por distancia;
+- el multijugador exige **al menos 2 autos**: con 1 humano, el selector obliga a añadir al menos 1 bot;
+- con un solo humano, si todos los bots quedan eliminados, **la ronda termina al instante y gana el humano**.
 
 ## 8. Criterios de aceptación
 
@@ -361,7 +361,7 @@ Exportación web, online, Konami Man, controles táctiles, mandos de más de 6, 
   - **reglas:** 1–4, 6–11;
   - **arquitectura:** 1–8;
   - **pruebas:** 1–12, con matices.
-- **Pendiente del dueño.** Reglas 5 (puntos en el borde inferior) y 7 (1 humano con 0 bots; fin inmediato cuando no quedan bots).
+- **Resuelto por el dueño (14 oct).** Reglas 5 y 7: el borde inferior no suma puntos, mínimo 2 autos, y la ronda termina con victoria del humano si no quedan bots vivos.
 - **Matices.**
   - La etiqueta `phaser-reference` es solo local: el proxy rechaza el push de etiquetas. La referencia remota es el commit `0a0841f`.
   - Checksum: SHA-256 de `var_to_bytes`, que propuso el revisor de arquitectura, en lugar de MD5.
