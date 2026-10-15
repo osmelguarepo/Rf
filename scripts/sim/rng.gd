@@ -1,6 +1,7 @@
 extends RefCounted
 ## Seeded RNG: mulberry32, bit for bit the same as src/game/rng.ts in the Phaser version (commit 0a0841f).
-## tests/test_rng.gd checks it against the TypeScript outputs in tests/golden/phaser_golden.json.
+## tests/test_golden.gd checks it against the TypeScript outputs in tests/golden/phaser_golden.json (10 seeds, and
+## 1 000 000 outputs); tests/test_rng.gd checks the helpers and clone().
 ##
 ## The state is one u32 kept in an int. All arithmetic stays in [0, 2^32), so no right shift sees a negative number.
 

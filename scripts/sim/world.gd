@@ -50,11 +50,15 @@ const EVENT_NAMES := ["skid", "bump", "crash", "spin", "pickup", "pass", "stage_
 
 ## The scalar fields, in to_array() order. tests/test_world_state.gd checks that to_array() covers every field.
 const SCALARS := [
-	"mode", "tick", "phase", "stage", "goal", "gap_scale", "stage_ticks", "camera_y", "anchor", "high_score", "events"
+	"game_seed", "mode", "tick", "phase", "stage", "goal", "gap_scale", "stage_ticks", "camera_y", "anchor",
+	"high_score", "events"
 ]
 
 var cfg: Config
 var rng: Rng
+## The seed this world started from. The RNG state moves on; this does not. Phase B seeds each bot's own RNG from
+## it, and a new game after a game over can use game_seed + 1.
+var game_seed: int = 0
 var mode: int = MODE_STAGES
 ## Steps taken, in any phase.
 var tick: int = 0
@@ -77,11 +81,13 @@ var traffic: Array[Traffic] = []
 var spawner: Traffic.Spawner
 
 
-## A new game: stage 1, full tanks, empty road. Seats start in cfg.start_lane at y_world 0, side by side.
-## Draws three RNG values (the spawner), as Phaser's createGame().
+## A new game: stage 1, full tanks, empty road. Every seat starts at the same place, in cfg.start_lane at
+## y_world 0 (cars pass through each other; phase B chooses versus start lanes). Draws three RNG values (the
+## spawner), as Phaser's createGame().
 func _init(p_cfg: Config, p_seed: int, p_seats: int = 1, p_high_score: int = 0) -> void:
 	cfg = p_cfg
 	rng = Rng.new(p_seed)
+	game_seed = p_seed & 0xFFFFFFFF
 	high_score = p_high_score
 	anchor = cfg.anchor_single
 	goal = cfg.stage_goal(stage)
