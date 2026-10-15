@@ -1,7 +1,8 @@
-node_modules/
-dist/
-coverage/
-test-results/
-playwright-report/
+# Godot's import cache and editor state
+.godot/
+# Exports (tools/test.sh never writes here; A3 and B3 do)
+build/
+# Raw screenshots before they are copied into docs/screenshots/
+shots/
 *.log
 .DS_Store

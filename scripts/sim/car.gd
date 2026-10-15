@@ -1,0 +1,154 @@
+extends RefCounted
+## A player's car, and the static rules that move it (src/game/car.ts in the Phaser version).
+##
+## x is the left edge of the hitbox in screen px. y_world is the front (top) edge in world px: the distance driven
+## this stage in single-player mode. The car's screen top is World.screen_y(y_world).
+
+const Self := preload("res://scripts/sim/car.gd")
+const Config := preload("res://scripts/sim/config.gd")
+
+const GEAR_LOW := 0
+const GEAR_HIGH := 1
+
+## Seat index: the car's byte in World.step(inputs) and its bit (1 << slot) in the traffic masks.
+var slot: int = 0
+var x: float = 0.0
+var y_world: float = 0.0
+var w: float = 0.0
+var h: float = 0.0
+## km/h.
+var speed: float = 0.0
+var gear: int = GEAR_LOW
+## Lateral slide speed in px/s while skidding; 0 when not skidding.
+var slide_vx: float = 0.0
+## Ticks of invulnerability left after a roadside crash or a bump.
+var invulnerable: int = 0
+var fuel: float = Config.FUEL_MAX
+var score: int = 0
+## 1 while the car takes part in the round. Single-player mode never clears it.
+var alive: int = 1
+## World.EV_* bits of the last step that concern this car.
+var events: int = 0
+
+
+func is_skidding() -> bool:
+	return slide_vx != 0.0
+
+
+## Top speed of a gear, km/h.
+static func gear_top(p_gear: int) -> float:
+	return Config.HIGH_GEAR_TOP if p_gear == GEAR_HIGH else Config.LOW_GEAR_TOP
+
+
+## Advances speed (km/h) by one step. Brake beats everything. Above the gear's top the car falls back at
+## OVERSPEED_FALL. Otherwise the throttle accelerates (high gear is slow below 160 km/h); with no throttle it coasts.
+static func step_speed(p_speed: float, p_gear: int, accel: bool, brake: bool) -> float:
+	var top := gear_top(p_gear)
+	if brake:
+		return maxf(0.0, p_speed - Config.BRAKE * Config.DT)
+	if p_speed > top:
+		return maxf(top, p_speed - Config.OVERSPEED_FALL * Config.DT)
+	if accel:
+		var rate := Config.LOW_GEAR_ACCEL
+		if p_gear == GEAR_HIGH:
+			rate = Config.HIGH_GEAR_SLOW_ACCEL if p_speed < Config.HIGH_GEAR_SLOW_BELOW else Config.HIGH_GEAR_ACCEL
+		return minf(top, p_speed + rate * Config.DT)
+	return maxf(0.0, p_speed - Config.DRAG * Config.DT)
+
+
+## Lateral steering rate in px/s: zero while stopped, full from 30 km/h, slower at high speed.
+static func steer_rate(cfg: Config, p_speed: float) -> float:
+	if p_speed <= 0.0:
+		return 0.0
+	var full := minf(1.0, p_speed / Config.STEER_FULL_AT_KMH)
+	return (cfg.steer_base - cfg.steer_per_kmh * p_speed) * full
+
+
+## Moves the car sideways for one step and returns true if it reached the roadside (src/game/car.ts stepLateral).
+##
+## Normal driving: steering moves the car at steer_rate(speed).
+## Skidding: steering does not move the car; the slide carries it at constant speed. Steering into the slide
+## reduces the slide by correction_accel per second until it reaches 0. Steering against it, or not steering,
+## leaves it unchanged. Either way the car is held at the edge, and a slide that reaches the edge stops.
+static func step_lateral(cfg: Config, car: Self, steer: int) -> bool:
+	var min_x := cfg.road_left
+	var max_x := cfg.road_right - car.w
+	if car.slide_vx != 0.0:
+		var slid := car.x + car.slide_vx * Config.DT
+		var slid_out := slid < min_x or slid > max_x
+		var slide := car.slide_vx
+		var into_slide := steer != 0 and signf(float(steer)) == signf(slide)
+		if into_slide and not slid_out:
+			var reduction := cfg.correction_accel * Config.DT
+			slide = 0.0 if absf(slide) <= reduction else slide - signf(slide) * reduction
+		if slid_out:
+			slide = 0.0
+		car.x = minf(maxf(slid, min_x), max_x)
+		car.slide_vx = slide
+		return slid_out
+	var raw := car.x + float(steer) * steer_rate(cfg, car.speed) * Config.DT
+	car.x = minf(maxf(raw, min_x), max_x)
+	car.slide_vx = 0.0
+	return raw < min_x or raw > max_x
+
+
+## Starts a skid: direction -1 slides left, 1 slides right.
+static func start_skid(cfg: Config, car: Self, direction: int) -> void:
+	car.slide_vx = float(direction) * cfg.skid_speed
+
+
+## Roadside crash: speed x 0.3, the skid ends, invulnerability starts. Fuel is handled by the caller.
+static func apply_crash(car: Self) -> void:
+	car.speed = car.speed * Config.CRASH_SPEED_FACTOR
+	car.slide_vx = 0.0
+	car.invulnerable = Config.INVULNERABLE_TICKS
+
+
+## Car-on-car bump: no speed or fuel lost. A skid away from the other car, and invulnerability.
+static func apply_bump(cfg: Config, car: Self, direction: int) -> void:
+	start_skid(cfg, car, direction)
+	car.invulnerable = Config.INVULNERABLE_TICKS
+
+
+static func tick_invulnerable(car: Self) -> void:
+	car.invulnerable = maxi(0, car.invulnerable - 1)
+
+
+func clone() -> Self:
+	var c := Self.new()
+	c.slot = slot
+	c.x = x
+	c.y_world = y_world
+	c.w = w
+	c.h = h
+	c.speed = speed
+	c.gear = gear
+	c.slide_vx = slide_vx
+	c.invulnerable = invulnerable
+	c.fuel = fuel
+	c.score = score
+	c.alive = alive
+	c.events = events
+	return c
+
+
+func to_array() -> Array:
+	return [slot, x, y_world, w, h, speed, gear, slide_vx, invulnerable, fuel, score, alive, events]
+
+
+static func from_array(a: Array) -> Self:
+	var c := Self.new()
+	c.slot = a[0]
+	c.x = a[1]
+	c.y_world = a[2]
+	c.w = a[3]
+	c.h = a[4]
+	c.speed = a[5]
+	c.gear = a[6]
+	c.slide_vx = a[7]
+	c.invulnerable = a[8]
+	c.fuel = a[9]
+	c.score = a[10]
+	c.alive = a[11]
+	c.events = a[12]
+	return c

@@ -1,0 +1,34 @@
+; Engine configuration file.
+; Keys and values follow docs/GODOT_PLAN.md §2; tests/test_project.gd checks them.
+
+config_version=5
+
+[application]
+
+config/name="Fuel Rivals"
+config/icon="res://icon.svg"
+
+[audio]
+
+driver/driver="Dummy"
+
+[debug]
+
+gdscript/warnings/integer_division=2
+gdscript/warnings/untyped_declaration=2
+
+[display]
+
+window/size/viewport_width=640
+window/size/viewport_height=360
+window/size/window_width_override=1920
+window/size/window_height_override=1080
+window/stretch/mode="viewport"
+window/stretch/scale_mode="integer"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+2d/snap/snap_2d_transforms_to_pixel=true
