@@ -3,8 +3,10 @@ extends "res://tests/test_case.gd"
 ## (docs/GODOT_PLAN.md §6): every frame used exists, every frame lies inside the atlas, and scales are whole numbers.
 ##
 ## The two checks on the view's code read scripts/view/ and scenes/ (A2's files) as text: frame names are string
-## literals such as "car_red", and scales are constants or Vector2 values whose name contains "scale". They pass with
-## nothing to check until that code exists.
+## literals such as "car_red", and scales are values given to a name that contains "scale": a number, a constant,
+## Vector2(a, b), Vector2.ONE * a or a * Vector2.ONE, where a and b are numbers or constants defined in those files.
+## Since the view exists, each check must find at least one frame name and one scale, so neither can pass by finding
+## nothing (A2, docs/HANDOFF.md).
 
 const ASSETS_DIR := "res://assets"
 const ASSETS_MD := "res://ASSETS.md"
@@ -20,6 +22,8 @@ const METADATA_EXTENSIONS := ["import", "uid"]
 const CODE_DRAWN := ["truck", "oil_puddle"]
 ## Folders that hold the game's drawing code and scenes.
 const VIEW_SOURCES := ["res://scripts/view", "res://scenes"]
+## The folder whose existence means the view has been written.
+const VIEW_DIR := "res://scripts/view"
 
 
 func test_assets_listed() -> void:
@@ -106,44 +110,137 @@ func test_frames_used_by_the_view_exist() -> void:
 		prefixes[name.get_slice("_", 0)] = true
 	var literal := RegEx.create_from_string("[\"']([a-z][a-z0-9]*(?:_[a-z0-9]+)*)[\"']")
 	var unknown: Array = []
-	for root: String in VIEW_SOURCES:
-		for file: String in _walk(root, true):
-			if not (file.get_extension() in ["gd", "tscn", "tres"]):
+	var checked := 0
+	for file: String in _view_files():
+		for found: RegExMatch in literal.search_all(FileAccess.get_file_as_string("res://" + file)):
+			var name := found.get_string(1)
+			var looks_like_frame := name.contains("_") and prefixes.has(name.get_slice("_", 0))
+			if not looks_like_frame and not known.has(name):
 				continue
-			for found: RegExMatch in literal.search_all(FileAccess.get_file_as_string("res://" + file)):
-				var name := found.get_string(1)
-				var looks_like_frame := name.contains("_") and prefixes.has(name.get_slice("_", 0))
-				if looks_like_frame and not known.has(name):
-					unknown.append("%s (%s)" % [name, file])
+			checked += 1
+			if not known.has(name):
+				unknown.append("%s (%s)" % [name, file])
 	assert_eq(unknown, [], "frame names that are not in sprites.json and not drawn in code")
+	if DirAccess.dir_exists_absolute(VIEW_DIR):
+		assert_gt(checked, 0, "frame names found in the view's code")
 
 
 ## Render intention 3: scales in the view's code and scenes are whole numbers, so pixels stay square.
 func test_view_scales_are_whole_numbers() -> void:
-	var number := "(-?[0-9]+(?:\\.[0-9]+)?)"
-	var scalar := RegEx.create_from_string("(?i)\\b\\w*scale\\w*\\s*(?::\\s*\\w+)?\\s*:?=\\s*" + number + "\\s*($|#)")
-	var vector := RegEx.create_from_string(
-		"(?i)\\b\\w*scale\\w*\\s*(?::\\s*\\w+)?\\s*:?=\\s*Vector2i?\\(\\s*" + number + "\\s*,\\s*" + number + "\\s*\\)"
+	var lines := PackedStringArray()
+	for file: String in _view_files():
+		for line in FileAccess.get_file_as_string("res://" + file).split("\n"):
+			lines.append("%s: %s" % [file, line.strip_edges()])
+	var result := scale_check(lines, view_constants(lines))
+	assert_eq(result["bad"], [], "scales that are not whole numbers >= 1 (%d checked)" % result["checked"])
+	if DirAccess.dir_exists_absolute(VIEW_DIR):
+		assert_gt(result["checked"], 0, "scales found in the view's code")
+
+
+## The scale check itself, on lines written for it.
+func test_scale_check_reads_numbers_constants_and_vectors() -> void:
+	var lines := PackedStringArray([
+		"a.gd: const SPRITE_SCALE := 2",
+		"a.gd: const HALF := 0.5",
+		"a.gd: const TILE := 16",
+		"a.gd: sprite.scale = Vector2(3, 3)",
+		"a.gd: sprite.scale = Vector2(SPRITE_SCALE, Config.SPRITE_SCALE)",
+		"a.gd: node.scale = Vector2.ONE * TILE",
+		"a.gd: node.scale = 4 * Vector2i.ONE",
+		"a.gd: func draw_at(pos: Vector2i, scale: int = 2) -> void:",
+		"a.gd: var tile_scale: float = 2.0",
+		"a.gd: if scale == 3:",
+		"a.gd: static func frame_at(pos: Vector2i, scale: int) -> void:",
+	])
+	var good := scale_check(lines, view_constants(lines))
+	assert_eq(good["bad"], [])
+	assert_eq(good["checked"], 7, "one constant, four vectors, a default argument and a var; not == or a bare parameter")
+	var wrong := PackedStringArray([
+		"b.gd: const HALF := 0.5",
+		"b.gd: const HALF_SCALE := 0.5",
+		"b.gd: sprite.scale = Vector2(1.5, 2)",
+		"b.gd: sprite.scale = Vector2(s, s)",
+		"b.gd: node.scale = Vector2.ONE * HALF",
+		"b.gd: node.scale = Vector2.ONE * 0",
+		"b.gd: var zoom_scale := compute()",
+		"b.gd: node.scale = Vector2(2, 2) * factor",
+	])
+	var result := scale_check(wrong, view_constants(wrong))
+	assert_eq((result["bad"] as Array).size(), 7, "every line but the plain constant HALF: %s" % [result["bad"]])
+
+
+## Checks each line that gives a value to a name containing "scale". Returns {checked: int, bad: Array}: a value is
+## bad unless every number in it, after looking constants up, is a whole number >= 1; a value that cannot be read
+## (a variable, a call, any other expression) is bad too.
+static func scale_check(lines: PackedStringArray, constants: Dictionary) -> Dictionary:
+	var arg := "(-?[0-9]+(?:\\.[0-9]+)?|[A-Za-z_][A-Za-z0-9_.]*)"
+	var end := "\\s*($|[,)#])"
+	var assignment := RegEx.create_from_string(
+		"(?i)\\b\\w*scale\\w*\\s*(?::\\s*[\\w\\[\\]]+)?\\s*(?::=|=)(?!=)\\s*(.*)$"
 	)
-	var bad: Array = []
+	var forms: Array[RegEx] = [
+		RegEx.create_from_string("^" + arg + end),
+		RegEx.create_from_string("^Vector2i?\\(\\s*" + arg + "\\s*,\\s*" + arg + "\\s*\\)" + end),
+		RegEx.create_from_string("^Vector2i?\\.ONE\\s*\\*\\s*" + arg + end),
+		RegEx.create_from_string("^" + arg + "\\s*\\*\\s*Vector2i?\\.ONE" + end),
+	]
 	var checked := 0
+	var bad: Array = []
+	for line in lines:
+		var code := line.substr(line.find(": ") + 2) if line.find(": ") >= 0 else line
+		var found := assignment.search(code.get_slice("#", 0))
+		if found == null:
+			continue
+		checked += 1
+		var value := found.get_string(1).strip_edges()
+		var parts: Array = []
+		for form in forms:
+			var m := form.search(value)
+			if m != null:
+				for group in range(1, m.get_group_count()):
+					if not m.get_string(group).is_empty() and not m.get_string(group) in [",", ")", "#"]:
+						parts.append(m.get_string(group))
+				break
+		if parts.is_empty():
+			bad.append("%s (cannot be read)" % line)
+			continue
+		for part: String in parts:
+			var number := _number_of(part, constants)
+			if is_nan(number) or number < 1.0 or number != floorf(number):
+				bad.append(line)
+				break
+	return {"checked": checked, "bad": bad}
+
+
+## NAME -> value of every `const NAME := number` (or `const NAME: T = number`) in the lines.
+static func view_constants(lines: PackedStringArray) -> Dictionary:
+	var definition := RegEx.create_from_string(
+		"\\bconst\\s+(\\w+)\\s*(?::\\s*\\w+)?\\s*:?=\\s*(-?[0-9]+(?:\\.[0-9]+)?)\\s*($|#)"
+	)
+	var out := {}
+	for line in lines:
+		var found := definition.search(line)
+		if found != null:
+			out[found.get_string(1)] = float(found.get_string(2))
+	return out
+
+
+## A number, or a constant (qualified names use their last part), as a float; NAN if neither.
+static func _number_of(text: String, constants: Dictionary) -> float:
+	if text.is_valid_float():
+		return float(text)
+	var name := text.get_slice(".", text.get_slice_count(".") - 1)
+	return float(constants[name]) if constants.has(name) else NAN
+
+
+## The view's .gd, .tscn and .tres files, repository-relative.
+static func _view_files() -> Array:
+	var out: Array = []
 	for root: String in VIEW_SOURCES:
 		for file: String in _walk(root, true):
-			if not (file.get_extension() in ["gd", "tscn", "tres"]):
-				continue
-			for line: String in FileAccess.get_file_as_string("res://" + file).split("\n"):
-				var values: Array = []
-				var one := scalar.search(line)
-				if one != null:
-					values.append(one.get_string(1))
-				var two := vector.search(line)
-				if two != null:
-					values.append_array([two.get_string(1), two.get_string(2)])
-				for text: String in values:
-					checked += 1
-					if not (text.is_valid_float() and float(text) >= 1.0 and float(text) == floorf(float(text))):
-						bad.append("%s: %s" % [file, line.strip_edges()])
-	assert_eq(bad, [], "scales that are not whole numbers >= 1 (%d checked)" % checked)
+			if file.get_extension() in ["gd", "tscn", "tres"]:
+				out.append(file)
+	return out
 
 
 func test_font_ships_with_its_licence() -> void:

@@ -1,0 +1,14 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/app/title.gd" id="1_title"]
+[ext_resource type="Script" path="res://scripts/view/road.gd" id="2_road"]
+[ext_resource type="Script" path="res://scripts/view/title_view.gd" id="3_view"]
+
+[node name="Title" type="Node2D"]
+script = ExtResource("1_title")
+
+[node name="Road" type="Node2D" parent="."]
+script = ExtResource("2_road")
+
+[node name="TitleView" type="Node2D" parent="."]
+script = ExtResource("3_view")

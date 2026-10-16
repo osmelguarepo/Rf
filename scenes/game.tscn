@@ -1,0 +1,18 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/app/game.gd" id="1_game"]
+[ext_resource type="Script" path="res://scripts/view/road.gd" id="2_road"]
+[ext_resource type="Script" path="res://scripts/view/cars.gd" id="3_cars"]
+[ext_resource type="Script" path="res://scripts/view/hud.gd" id="4_hud"]
+
+[node name="Game" type="Node2D"]
+script = ExtResource("1_game")
+
+[node name="Road" type="Node2D" parent="."]
+script = ExtResource("2_road")
+
+[node name="Cars" type="Node2D" parent="."]
+script = ExtResource("3_cars")
+
+[node name="Hud" type="Node2D" parent="."]
+script = ExtResource("4_hud")

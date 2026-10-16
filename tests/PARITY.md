@@ -57,11 +57,11 @@ of the speed rule, 60 s without traffic, and three minutes of whole games in the
 | fuel-4 | collectFuelCar › pays a flat 1000 points every time, with no chain | `tests/test_fuel.gd::test_a_fuel_car_pays_a_flat_1000_every_time` | Unchanged. The world step pays the points (`Fuel.collect` only refills), so the test collects four fuel cars in a `World`: 1000, 2000, 3000, 4000. |
 | fuel-5 | applyCrashFuel › costs 5 or 6 units | `tests/test_fuel.gd::test_a_roadside_crash_costs_5_or_6_units` | Unchanged (seed 7, 50 draws); both costs occur. |
 | fuel-6 | applyCrashFuel › never goes below zero | `tests/test_fuel.gd::test_a_crash_never_leaves_the_tank_below_zero` | Unchanged. |
-| loop-1 | advance (fixed timestep) › runs one step per 1/60 s of frame time | dropped: the fixed-step accumulator is not simulation code in Godot; docs/GODOT_PLAN.md §3 puts it in `scripts/app` (A2), A2 must add the accumulator tests there and update rows loop-1 to loop-5 | — |
-| loop-2 | advance (fixed timestep) › a frame shorter than one step runs zero steps and carries the time over | dropped: fixed-step accumulator, moved to `scripts/app` (A2, docs/GODOT_PLAN.md §3) | — |
-| loop-3 | advance (fixed timestep) › a 240 Hz display still averages exactly one step per 1/60 s | dropped: fixed-step accumulator, moved to `scripts/app` (A2, docs/GODOT_PLAN.md §3) | — |
-| loop-4 | advance (fixed timestep) › a huge frame (tab switch) is clamped and never runs more than the per-frame cap | dropped: fixed-step accumulator (at most 5 steps per frame), moved to `scripts/app` (A2, docs/GODOT_PLAN.md §3) | — |
-| loop-5 | advance (fixed timestep) › negative or NaN-like inputs do not run steps | dropped: fixed-step accumulator, moved to `scripts/app` (A2, docs/GODOT_PLAN.md §3) | — |
+| loop-1 | advance (fixed timestep) › runs one step per 1/60 s of frame time | `tests/test_fixed_step.gd::test_one_step_per_sixtieth_of_frame_time`, `tests/test_fixed_step.gd::test_fixed_fps_60_is_one_step_every_frame` | Unchanged: 2/60 s + 1 ms runs 2 steps and keeps 1 ms. The accumulator is `scripts/app/fixed_step.gd` (docs/GODOT_PLAN.md §3), Phaser's `advance()` operation for operation; under `--fixed-fps 60` every frame is exactly one step (3600 frames checked). |
+| loop-2 | advance (fixed timestep) › a frame shorter than one step runs zero steps and carries the time over | `tests/test_fixed_step.gd::test_a_short_frame_runs_no_step_and_carries_its_time` | Unchanged: 1/120 s runs no step and is carried; a second 1/120 s runs one. |
+| loop-3 | advance (fixed timestep) › a 240 Hz display still averages exactly one step per 1/60 s | `tests/test_fixed_step.gd::test_240_hz_averages_one_step_per_sixtieth` | Unchanged: 240 frames of 1/240 s run exactly 60 steps. |
+| loop-4 | advance (fixed timestep) › a huge frame (tab switch) is clamped and never runs more than the per-frame cap | `tests/test_fixed_step.gd::test_a_huge_frame_is_clamped_to_the_cap`, `tests/test_fixed_step.gd::test_a_frame_of_exactly_the_cap_drops_the_remainder` | Unchanged: a 5 s frame (or an infinite one) runs 5 steps and leaves the accumulator at 0. |
+| loop-5 | advance (fixed timestep) › negative or NaN-like inputs do not run steps | `tests/test_fixed_step.gd::test_negative_or_nan_frames_run_no_steps` | Unchanged for negative frames. A NaN frame counts as 0 s, so the accumulator stays a number (in JavaScript it became NaN and stopped the loop for good). |
 | loop-6 | latchEdges › keeps a press that has not been consumed yet | `tests/test_input.gd::test_latch_keeps_a_press_until_a_step_consumes_it` | Unchanged; the presses are the pause and confirm bits of the input byte (`PlayerInput.latch`). |
 | loop-7 | latchEdges › combines simultaneous presses of different actions | `tests/test_input.gd::test_latch_combines_presses_of_different_actions` | Unchanged; held bits are never latched. |
 | state-1 | createGame › starts running on stage 1 with a full tank and the first goal | `tests/test_world.gd::test_a_new_world_starts_running_with_a_full_tank_and_the_first_goal` | Goal 13 500 px (24 000 × K); start x = 291, lane 2 of 6 (Phaser 167, lane 1 of 3). |
@@ -100,7 +100,9 @@ of the speed rule, 60 s without traffic, and three minutes of whole games in the
   - every frame lies inside the atlas: `test_atlas_frames_lie_inside_the_atlas`;
   - scales are whole numbers: `test_view_scales_are_whole_numbers`.
 
-  The first and third read `scripts/view/` and `scenes/` (A2's files) and have nothing to check until that code exists.
+  The first and third read `scripts/view/` and `scenes/` (A2's files) as text, and each must find at least one frame
+  name or scale there. `tests/test_view.gd` checks the view's layout and rules, and `tools/scalecheck.gd` the pixels on
+  screen.
 - **Other Phaser checks**, outside the 60: `assets.test.ts` became `tests/test_assets.gd::test_assets_listed`,
   `purity.test.ts` became `tests/test_sim_purity.gd::test_sim_purity`, and `no-audio.test.ts` became
   `tests/test_assets.gd::test_no_audio`. The Playwright end-to-end tests are replaced by A2's smoke test
