@@ -18,8 +18,11 @@ extends SceneTree
 ## It prints one line per seed, then the summary:
 ## - the first elimination of each round (any seat out; with every seat human it ends the round), in running seconds:
 ##   the median of the first rounds (one per seed) and of all rounds;
-## - leader changes per minute: how often the car furthest ahead (the camera's car; the lower seat on a tie) changes,
-##   over running time;
+## - leader changes per minute of running time, in two counts. The leader is the live car furthest ahead after each
+##   running step (the camera's car; the lower seat on a tie). A racing change: another car leads while the car that
+##   led is still in the round. A handover: the car that led went out in the step and the next car takes the lead
+##   without passing it; with every seat human that happens only in a round's last step (the summary says how many
+##   were). The per-round spread counts the racing changes;
 ## - how rounds end: the seats that went out in the step that ended each round, by a truck or with an empty tank (and
 ##   of those, how many were touching the bottom edge on their last step), and rounds where several went out at once;
 ## - share of running time cars spent touching the bottom edge, and on top of another car (hitboxes overlapping);
@@ -98,11 +101,12 @@ func _read_options() -> bool:
 
 func _new_totals() -> Dictionary:
 	return {
-		"first_rounds": [], "all_rounds": [], "round_lengths": [], "leader_changes": 0, "running_ticks": 0,
-		"leader_rates": [], "ends_truck": 0, "ends_dry": 0, "ends_dry_edge": 0, "ends_several": 0, "rounds": 0,
-		"rounds_won": 0, "rounds_no_winner": 0, "matches_decided": 0, "matches_won": 0, "match_rounds": [],
-		"car_ticks": 0, "edge_ticks": 0, "pair_ticks": 0, "stacked_ticks": 0, "pickups": 0, "crashes": 0,
-		"bumps": 0, "skids": 0, "bot_outs_before_end": 0,
+		"first_rounds": [], "all_rounds": [], "round_lengths": [], "leader_changes": 0, "leader_handovers": 0,
+		"handovers_at_end": 0, "running_ticks": 0, "leader_rates": [], "ends_truck": 0, "ends_dry": 0,
+		"ends_dry_edge": 0, "ends_several": 0, "rounds": 0, "rounds_won": 0, "rounds_no_winner": 0,
+		"matches_decided": 0, "matches_won": 0, "match_rounds": [], "car_ticks": 0, "edge_ticks": 0,
+		"pair_ticks": 0, "stacked_ticks": 0, "pickups": 0, "crashes": 0, "bumps": 0, "skids": 0,
+		"bot_outs_before_end": 0,
 	}
 
 
@@ -115,6 +119,7 @@ func _play(cfg: Config, seed_value: int, total: Dictionary) -> void:
 	var leader := -1
 	var first_out := -1
 	var changes := 0
+	var handovers := 0
 	var running := 0
 	var touching: Array[int] = []
 	touching.resize(seats)
@@ -134,8 +139,14 @@ func _play(cfg: Config, seed_value: int, total: Dictionary) -> void:
 			var now := _leader(w)
 			if now >= 0:
 				if leader >= 0 and now != leader:
-					changes += 1
-					total["leader_changes"] += 1
+					if w.players[leader].alive != 0:
+						changes += 1
+						total["leader_changes"] += 1
+					else:
+						handovers += 1
+						total["leader_handovers"] += 1
+						if (m.events & Match.EV_ROUND_OVER) != 0:
+							total["handovers_at_end"] += 1
 				leader = now
 			_count_cars(w, total)
 			for p: Car in w.players:
@@ -152,13 +163,14 @@ func _play(cfg: Config, seed_value: int, total: Dictionary) -> void:
 				total["leader_rates"].append(changes * 3600.0 / running)
 			line += " r%d %.1fs %s%s;" % [m.round_number, w.stage_ticks / 60.0, record, _winner_text(w.winner)]
 			if per_round:
-				print("  seed %d round %d: first out %.1f s, round %.1f s, %s, leader changes %d (%.1f a minute), scores %s" % [
+				print("  seed %d round %d: first out %.1f s, round %.1f s, %s, leader changes %d racing (%.1f a minute) and %d handovers, scores %s" % [
 					seed_value, m.round_number, seconds, w.stage_ticks / 60.0, record, changes,
-					changes * 3600.0 / maxi(running, 1), _scores(w)
+					changes * 3600.0 / maxi(running, 1), handovers, _scores(w)
 				])
 			leader = -1
 			first_out = -1
 			changes = 0
+			handovers = 0
 			running = 0
 		if m.phase == Match.MATCH_OVER:
 			break
@@ -254,8 +266,11 @@ func _summary(t: Dictionary) -> void:
 	print("first elimination, first round of each seed: %s" % _spread(t["first_rounds"]))
 	print("first elimination, all rounds: %s" % _spread(t["all_rounds"]))
 	print("round length, all rounds: %s" % _spread(t["round_lengths"]))
-	print("leader changes per minute: %.2f over %.1f running minutes (per round: %s)" % [
-		t["leader_changes"] / maxf(minutes, 1e-9), minutes, _spread(t["leader_rates"], "")
+	print("leader changes while racing (the car that led still in the round): %d, %.2f a minute over %.1f running minutes; per round: %s" % [
+		t["leader_changes"], t["leader_changes"] / maxf(minutes, 1e-9), minutes, _spread(t["leader_rates"], "")
+	])
+	print("leader handovers (the car that led went out in the step): %d, %.2f a minute; %d of them in a round's last step" % [
+		t["leader_handovers"], t["leader_handovers"] / maxf(minutes, 1e-9), t["handovers_at_end"]
 	])
 	print("rounds: %d, ended by %d seats out by a truck and %d with an empty tank (%d of them touching the bottom edge); %d rounds with several out at once" % [
 		t["rounds"], t["ends_truck"], t["ends_dry"], t["ends_dry_edge"], t["ends_several"]

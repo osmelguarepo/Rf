@@ -297,8 +297,9 @@ func test_oil_stays_until_every_live_car_has_used_it() -> void:
 
 
 ## A blue car that changes lane heads for the live seat nearest it in y (centre to centre) within reach, the lowest
-## seat on a tie; it ignores seats that are out or out of reach. Versus draws its random lane even then, so the world
-## RNG moves the same whatever the seats do.
+## seat on a tie; it ignores seats that are out or out of reach. A seat is in reach while the blue car's rear edge is
+## less than 112.5 px (Config blue_reach, Phaser's 200 px x K) ahead of the seat's front edge. Versus draws its random
+## lane even then, so the world RNG moves the same whatever the seats do.
 func test_blue_targets_nearest_alive_player() -> void:
 	# Seats in lanes 0, 1, 5 and 2 at distances 30, 20, 10 and 100 from a blue car in lane 3. Seat 2 (lane 5) is
 	# the nearest: one lane right. The first seat in reach would be seat 0: one lane left.
@@ -310,10 +311,18 @@ func test_blue_targets_nearest_alive_player() -> void:
 	assert_eq(_blue_scene([-30.0, -20.0, -10.0, -100.0], 0b0100)[0], 2, "toward seat 1: seat 2 is out")
 	# Seats 1 and 2 are both 20 away, one behind and one ahead: the lower seat, 1.
 	assert_eq(_blue_scene([-30.0, -20.0, 20.0, -100.0], 0b0000)[0], 2, "a tie goes to the lower seat")
-	# Every seat out of reach (the blue car 150 px ahead of the furthest): a random adjacent lane, from the draw.
-	var far := _blue_scene([0.0, -20.0, -10.0, -100.0], 0b0000, 150.0)
-	assert_eq(far[0], far[3], "the drawn lane")
-	assert_has([2, 4], far[0])
+	# The reach. Seat 2 (lane 5) leads with its front at y = 0, the others 20 px or more behind it. This seed's draw
+	# gives lane 2, one lane left, and seat 2 is one lane right, so only the reach decides the way. The blue car's rear
+	# edge (its front less its 24 px) 1 px inside seat 2's reach: toward seat 2. 1 px and 55 px outside it (short of
+	# 168.75 px, 1.5 times the reach), every seat is out of reach: the drawn lane.
+	var ahead := [-30.0, -20.0, 0.0, -100.0]
+	var blue_h: float = std.kind_h[Config.KIND_BLUE]
+	var inside := _blue_scene(ahead, 0b0000, 112.5 - 1.0 + blue_h)
+	assert_eq([inside[0], inside[3]], [4, 2], "1 px inside the reach: toward seat 2, not the drawn lane 2")
+	for outside: float in [1.0, 55.0]:
+		var far := _blue_scene(ahead, 0b0000, 112.5 + outside + blue_h)
+		assert_eq([far[0], far[3]], [2, 2], "%s px outside the reach: the drawn lane, away from seat 2" % outside)
+		assert_true(far[2], "%s px outside the reach: the random lane was drawn" % outside)
 
 
 ## A passed car pays 50 to each seat once: three seats pass the same standing car in one step and each gets 50 for

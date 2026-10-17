@@ -26,7 +26,7 @@ var std := Config.standard()
 
 ## Plan §7: the first to 2 round wins takes the match; 1-1 decides nothing. With three or more humans the wins can be
 ## shared (1-1-1): after 5 rounds the most wins decide, then the most points over the match, then the most distance;
-## level on all three, nobody wins the match.
+## level on all three, nobody wins the match. Only the human seats are ranked: a bot never wins the match.
 func test_first_to_two_and_cap_five() -> void:
 	# Two humans and a bot: 1-1, then seat 0's second win.
 	var m := _match(3, 0b011)
@@ -86,6 +86,32 @@ func test_first_to_two_and_cap_five() -> void:
 			_end_round(level, [300, 300, 0], [0, 1])
 		assert_eq([level.phase, level.wins, level.totals], [Match.MATCH_OVER, [1, 1, 0], [1500, 1500, 0]])
 		assert_eq(level.winner, 1 if distance_1 > 0.0 else NO_WINNER, "distance %s" % distance_1)
+
+	# The cap ranks the human seats only. Two, then three humans level on points, distance and fuel, going out together
+	# in each of five rounds, so nobody wins a round; the bot, in the last seat, scores far more and drives further
+	# each round. Nobody wins the match, and never the bot, though it leads on points and distance over the match.
+	for humans: int in [0b011, 0b0111]:
+		var seats := 3 if humans == 0b011 else 4
+		var bot_seat := seats - 1
+		var capped := _match(seats, humans)
+		var scores: Array = []
+		var distances: Array = []
+		var dry: Array = []
+		for seat in seats:
+			scores.append(9000 if seat == bot_seat else 300)
+			distances.append(4000.0 if seat == bot_seat else 250.0)
+			if seat != bot_seat:
+				dry.append(seat)
+		for i in Config.MATCH_ROUNDS_MAX:
+			if i > 0:
+				_next(capped)
+			_end_round(capped, scores, dry, distances)
+			assert_eq(capped.last_round_winner(), NO_WINNER, "%d humans, round %d: level" % [seats - 1, i + 1])
+		assert_eq([capped.phase, capped.rounds_played(), capped.winner], [Match.MATCH_OVER, 5, NO_WINNER],
+			"%d humans: five rounds, nobody wins the match" % (seats - 1))
+		assert_ne(capped.winner, bot_seat, "%d humans: not the bot" % (seats - 1))
+		assert_eq([capped.totals[bot_seat], capped.totals[0], capped.distances[bot_seat], capped.distances[0]],
+			[45000, 1500, 20000.0, 1250.0], "%d humans: the bot leads on points and distance" % (seats - 1))
 
 
 ## Plan §7: each round starts afresh (World.start_round()): every seat back in its start lane on the anchor line,
