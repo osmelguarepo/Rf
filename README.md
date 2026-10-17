@@ -1,88 +1,183 @@
-# ROAD FIGHTER (MVP)
+# Fuel Rivals
 
-A driving survival game inspired by Konami's *Road Fighter* (NES, 1985). This MVP covers gameplay and mechanics, with pixel-art sprites (GrafxKid's CC0 sheet) and the Press Start 2P font. No sound. Every shipped asset and its licence is listed in `ASSETS.md`.
+A top-down driving game made with Godot 4.7.2, inspired by Konami's *Road Fighter* (NES, 1985). Drive up a six-lane
+road, pass the traffic, keep clear of trucks and oil, and pick up fuel cars before the tank runs dry. Pixel art from
+GrafxKid's CC0 sheet, the Press Start 2P font, no sound.
 
-Working title. "Road Fighter" is a Konami trademark, so rename `GAME_TITLE` in `src/config.ts` before any store release.
+![A game: the six-lane road with traffic, and the score and fuel panels either side](docs/screenshots/02-game.png)
+
+## State
+
+- **Phase A, the single-player game, is done.** The rules of the earlier Phaser prototype are ported to a pure,
+  deterministic GDScript simulation and checked against traces recorded from the TypeScript version. Phase A also
+  covers the scenes, the view, keyboard and gamepad input, the tests, a smoke test, a pack export check and CI.
+- **Phase B, local multiplayer, is planned and not built yet:** up to 6 cars on one screen, one gamepad each, bots
+  for the empty seats, best of 3 rounds, and Steam Input through GodotSteam. The owner's decisions are in
+  `docs/DECISIONES_MULTIJUGADOR.md`, the plan in `docs/GODOT_PLAN.md` (both in Spanish). `docs/HANDOFF.md` has each
+  step's notes: files, how to verify, APIs, known gaps.
+- Targets: Steam on the desktop (Linux and Windows) first, the web later.
+- The Phaser prototype is no longer in the tree. It is in git at commit `0a0841f`.
 
 ## Run
 
-```bash
-npm install
-npm run dev        # http://localhost:5173
-```
+You need the Godot 4.7.2 editor, the standard build (not .NET): the `Godot_v4.7.2-stable_*` downloads of the
+[4.7.2-stable release](https://github.com/godotengine/godot/releases/tag/4.7.2-stable).
 
-## Test and build
+- **In the editor:** import `project.godot` in the Project Manager, then press F5 (Run Project).
+- **From the command line**, where `godot` is the editor binary (`Godot_v4.7.2-stable_linux.x86_64` on Linux):
 
-```bash
-npm test           # unit tests (vitest): rules, traffic, skids, fuel, loop, purity, no-audio check
-npm run typecheck  # tsc --noEmit (strict)
-npm run build      # production build into dist/ (relative paths, for any sub-path and for Electron loadFile)
-npm run e2e        # Playwright smoke tests in headless Chromium, desktop and phone viewports
-```
+  ```bash
+  godot --headless --path . --import   # once per clone: imports the art into .godot/
+  godot --path .                       # the game
+  godot --path . -- --seed=42          # the first game uses seed 42, the next ones 43, 44, ...
+  ```
 
-`npm run e2e` uses the browser that `@playwright/test@1.56.1` expects. In the sandbox this is the pre-installed Chromium 141 under `PLAYWRIGHT_BROWSERS_PATH`. Elsewhere, run `npx playwright install chromium` first.
+  Without the import the art does not load. Without `--seed` the first game's seed is random; every new game uses
+  the previous seed + 1.
+
+The window opens at 1920x1080, three times the 640x360 picture. On a smaller screen it shrinks to the largest whole
+multiple that fits, such as 1280x720 on a 1366x768 screen. There is no fullscreen key yet. The game pauses when its
+window loses focus. The best score lasts for the session only; nothing is saved.
 
 ## Controls
 
-| Action | Keyboard | Gamepad (standard mapping) |
-|---|---|---|
-| Throttle | Up / W, Z (B) | D-pad up, B, left stick up |
-| High gear (held, also throttle) | X (A) | A |
-| Brake | Down / S | D-pad down, left stick down |
-| Steer | Left / Right, A / D | D-pad left / right, left stick |
-| Start / confirm | Enter / Space | Start, or A |
-| Pause | Esc / P | Start |
+The keyboard and every connected gamepad drive the car together. Keys are bound by position (the names are QWERTY).
 
-Gears are held: high gear (up to 400 km/h) only while X or A is held. Low gear tops out at 198 km/h.
-Losing window focus or hiding the tab pauses the game.
+| Action | Keyboard | Gamepad |
+|---|---|---|
+| Throttle | Up, W or Z | B, D-pad up or left stick up |
+| High gear, with throttle (hold) | X | A |
+| Brake | Down or S | D-pad down or left stick down |
+| Steer | Left and Right, or A and D | D-pad, or the left stick past half way |
+| Start a game; go on after a stage clear | Enter, keypad Enter or Space | A or Start |
+| Pause and resume | Esc or P | Start |
+| After a game over: play again | Enter, keypad Enter or Space | A |
+| After a game over: back to the title | Esc or P | Start |
+
+Gamepad buttons are by position: A is the bottom face button, B the right one. A click or tap on START also starts
+a game.
 
 ## Rules
 
-- **Fuel**: 100 units, drains 1 per second while the run is active, moving or not. A fuel car adds 10 and pays 1000 points. Each stage starts with a full tank.
-- **Bumps**: hitting a car costs no fuel. It starts a skid away from the car, and each car can bump you only once.
-- **Oil**: driving onto an oil patch starts a skid. Steer into the slide to recover it. Left alone, the car reaches the roadside and crashes.
-- **Roadside**: touching the roadside is a crash. It costs 5–6 fuel and slows the car to 30 %.
-- **Trucks**: contact destroys the car. Game over.
-- **Scoring**: +50 per passed car, +1000 per fuel car, +30 per whole fuel unit when a stage clears.
-- **Stages**: the goal is 24 000 px, then 28 000, 32 000, 36 000, and it loops. Each stage has denser traffic.
+The numbers come from `scripts/sim/config.gd`. Distances are in pixels of the 640x360 picture.
 
-Design choices where the original sources disagree, and the review outcomes, are listed in `docs/PLAN.md` (sections 10 and 11).
+- **Stages.** Reach the goal: 13 500 px of road in stage 1, then 15 750, 18 000 and 20 250, then the four again. The
+  GOAL gauge shows how far you are. At 400 km/h the car covers 225 px a second.
+- **Gears.** High gear lasts only while X or A is held. Low gear: up to 198 km/h, gaining 70 km/h a second. High
+  gear: up to 400 km/h, but it gains only 15 km/h a second below 160 km/h and 45 above. Braking takes 120 km/h a
+  second, coasting 25. Above the gear's top (after letting go of high gear) the car slows by 25 km/h a second.
+  Steering does nothing at a standstill and is slower at high speed.
+- **Fuel.** The tank holds 100 and loses 1 a second while the game runs, moving or not. Each stage starts with a full
+  tank. An empty tank ends the game. A **fuel car** (the rainbow-coloured car) gives +10 fuel (up to 100) and 1000
+  points.
+- **Bumps.** Touching a yellow, salmon or blue car costs nothing, but it starts a skid away from that car. Each car
+  bumps you once at most.
+- **Oil.** Driving onto an oil patch starts a skid to the left or the right. While skidding, steering does not move
+  the car: steering into the slide stops it in a quarter of a second, steering the other way or not at all lets it go
+  on. A skid into the roadside is a crash.
+- **Roadside.** Touching the barrier on either side of the road is a crash: speed x 0.3 and 5 or 6 fuel lost.
+- **After a bump or a crash** the car blinks for about 1.5 s. Meanwhile cars, trucks and the roadside cannot touch it;
+  oil and fuel cars still can.
+- **Trucks.** Touching one ends the game.
+- **Points.** +50 for each car or truck you pass, +1000 for each fuel car, and at a stage clear +30 for each whole unit
+  of fuel left.
+- **Traffic.** New cars are small yellow cars (60 %, 80 to 120 km/h, they keep to their lane), salmon cars (20 %, 90
+  to 110 km/h, one lane change), blue cars (10 %, 100 to 130 km/h, two or three lane changes, towards your lane when
+  you are close) and trucks (10 %, 60 km/h). Lane changes go to a neighbouring lane only. In stage 1 a new car comes
+  every 98 px of road, a fuel car (90 km/h) about every 4 500 px and an oil patch about every 1 125 px. Each stage
+  spaces them 0.9 times as far apart as the stage before (the car gap stops at 56 px), so the road gets busier.
+- The game ends as soon as the tank is empty or a truck is hit. If that happens in the step that reaches the goal,
+  the game over wins.
+
+The simulation (`scripts/sim/`) is pure and deterministic: the same seed and the same inputs give the same game, bit
+for bit. It reads one input byte per seat per step of 1/60 s, which is what local multiplayer and, later, online
+play build on.
+
+## Tests and tools
+
+Set `GODOT` to the editor binary. Each command imports the project first, so it works on a fresh clone, and fails on
+any line of Godot's output that starts with `ERROR:` or `SCRIPT ERROR:` (WARNING lines do not count). Exit code 0
+means a pass; the header of each script lists its other exit codes.
+
+```bash
+export GODOT=/path/to/Godot_v4.7.2-stable_linux.x86_64
+
+tools/test.sh                   # every test, headless; ends with "N passed, 0 failed"
+tools/test.sh --only=test_fuel  # the tests whose id (tests/test_x.gd::test_y) contains a pattern; comma-separated
+tools/run_tool.sh smoke         # plays 10 800 frames with keyboard and gamepad events; ends with "smoke: PASS"
+tools/run_tool.sh screenshots   # the pictures in docs/screenshots/ (needs xvfb-run)
+tools/run_tool.sh scalecheck    # whole-number scaling, in five windows (needs xvfb-run)
+tools/export_check.sh           # exports build/fuel_rivals.pck and runs its self test; ends with "export_check: PASS"
+```
+
+- `--selftest` (after `--`, also in an exported game) boots, plays 600 steps through the real screens with a
+  scripted input, checks pause and resume and that a replay gives the same game, draws 120 frames and quits with 0 or
+  1: `"$GODOT" --headless --path . -- --selftest` prints `selftest: ok (600 ticks checked, 120 frames drawn)`. It
+  starts from seed 1 unless `--seed=N` is given.
+- The tests use their own runner, `tests/run_tests.gd`, with GUT-style asserts (`tests/test_case.gd`).
+  `tests/PARITY.md` maps each rule test of the Phaser version to its GDScript test, or gives the reason it was
+  dropped.
+- **CI** (`.github/workflows/ci.yml`) runs on every push and pull request: it downloads the official Godot 4.7.2
+  editor, checks it against the release's `SHA512-SUMS.txt`, caches it, runs `tools/test.sh`,
+  `tools/run_tool.sh smoke` and `tools/export_check.sh`, and keeps the pack as an artifact.
+
+## Export
+
+`export_presets.cfg` has two presets, **Linux** and **Windows Desktop**. Both embed the pack in the binary, leave out
+`tests/`, `tools/` and `docs/`, include the font's licence (`assets/font/OFL.txt`) and write to
+`build/linux/fuel_rivals.x86_64` and `build/windows/fuel_rivals.exe`. Godot writes this file itself when presets are
+edited in Project > Export, so edit them there.
+
+A pack needs no export templates:
+
+```bash
+mkdir -p build
+"$GODOT" --headless --path . --export-pack "Linux" build/fuel_rivals.pck
+"$GODOT" --main-pack build/fuel_rivals.pck   # the game, from the pack
+```
+
+`--export-pack` does not create a missing folder, hence the `mkdir`. `tools/export_check.sh` does both, checks what
+the pack holds and runs its self test. Binaries need Godot's 4.7.2 export templates, which this repository does not
+set up yet: real Linux and Windows exports come in phase B3.
 
 ## Layout
 
 ```
-src/
-  main.ts           Phaser config (360×640, FIT, pixelArt, audio disabled)
-  config.ts         Every tunable number
-  input.ts          Keyboard and gamepad → GameInput
-  session.ts        High score for this page load
-  game/             Pure rules, no Phaser imports
-    state.ts        GameState and step(); composes everything else
-    car.ts          Speed, gears, steering, skid, crash
-    traffic.ts      Spawning, relative motion, lane changes, passing
-    fuel.ts         Tank, drain, pickups, chain bonus
-    stage.ts        Goal distance and stage-clear bonus
-    loop.ts         Fixed-timestep accumulator
-    edges.ts        Keeps one-shot presses until a step consumes them
-    rng.ts          Seeded RNG (reproducible runs)
-    collision.ts    Rectangle overlap
-  scenes/
-    BootScene.ts    Loads the sprite atlas and the font, then starts Title
-    TitleScene.ts   Controls and start
-    GameScene.ts    Game loop, HUD, overlays
-  render/
-    draw.ts         Road, traffic, player and HUD drawing (sprites, or rectangles if the atlas is missing)
-    sprites.ts      Atlas frames and SpriteLayer (pooled images drawn in call order)
-    pixelArt.ts     Sprites the sheet lacks (truck, oil puddle), drawn as pixel grids
-    text.ts         Press Start 2P text styles
-public/assets/      Sprite atlas, frame map and font (see ASSETS.md)
-tests/              Unit tests for src/game, purity and the no-audio check
-e2e/                Playwright smoke tests
-docs/PLAN.md        Research, framework decision, spec, review outcomes
+project.godot        engine settings: 640x360, whole-number scaling, nearest filtering, no audio
+export_presets.cfg   the Linux and Windows Desktop presets
+icon.svg
+assets/              sprites.png and sprites.json (the atlas), font/ (Press Start 2P and its OFL.txt),
+                     source/ (the original sheet; Godot ignores it)
+scenes/              boot.tscn (main scene), title.tscn, game.tscn
+scripts/
+  sim/               the rules: config, rng, car, fuel, traffic, collision, player_input, world (no nodes)
+  input/             keyboard (input map built in code), pads (read per device), held, local_input
+  view/              atlas, pixel_art, draw, road, cars, hud, title_view, view_config
+  app/               app (boot, fixed step, focus pause, screens, --selftest), fixed_step, title, game
+tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, PARITY.md, golden/
+tools/               test.sh, run_tool.sh, export_check.sh; smoke.gd, screenshots.gd, scalecheck.gd, tool_base.gd;
+                     slice-sheet.py and fetch_assets.py (the atlas); gen_golden/ (the TypeScript golden traces)
+docs/                GODOT_PLAN.md, DECISIONES_MULTIJUGADOR.md, HANDOFF.md, PLAN.md and ART_PLAN.md (the Phaser
+                     prototype's plans), screenshots/
+.github/workflows/   ci.yml
+ASSETS.md            every shipped asset, its source and licence
 ```
 
-## Next steps (not in this MVP)
+## Assets and licences
 
-- Steam: wrap `dist/` in Electron (Phaser has an official guide). For Steamworks, evaluate `steamworks-ffi-node` (steamworks.js has had no release since August 2024). See `docs/PLAN.md` §2.
-- Konami Man cameo and the other NES courses.
-- Mobile touch controls.
+- Sprites: GrafxKid's "Top-down arcade racing game" sheet, CC0, cut into the atlas by `tools/slice-sheet.py`. The
+  truck and the oil puddle are drawn in code from pixel grids (`scripts/view/pixel_art.gd`), the project's own work.
+- Font: Press Start 2P, SIL Open Font License 1.1. Its licence, `assets/font/OFL.txt`, ships in the exports with the
+  font.
+- No audio: the audio driver is Dummy and the game has no sound files.
+
+`ASSETS.md` lists every shipped file with its source, author and licence, and how to rebuild the atlas;
+`tests/test_assets.gd` fails if a file under `assets/` is missing from it.
+
+## Steam
+
+- Development uses the Steam App ID **480** (Spacewar, Valve's test app) until the game has its own.
+- There is no Steam code in the repository yet. GodotSteam comes in phase B (B4), for Steam Input, so that 5 and 6
+  gamepads work, also with Remote Play Together. No physical gamepad, no Steam Input and no Windows machine has been
+  tested yet.
+- The name "Fuel Rivals" still has to be checked as a trademark before publishing.

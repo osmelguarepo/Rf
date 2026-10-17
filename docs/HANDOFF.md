@@ -496,3 +496,178 @@ The A2 adversarial verify passed in round 2. Its remaining minor findings are ha
 - New games use the previous seed + 1 (`App.next_seed()`), a deviation from Phaser's random seed per game. Keep it:
   it makes a session reproducible from its first seed.
 - The smoke test never reaches the stage-clear branch in 10 800 frames; the screenshot tool covers that panel.
+
+## A3: export presets, pack export check, CI and README
+
+### Files
+
+- **New:** `export_presets.cfg` (written by the 4.7.2 editor itself, see below), `tools/export_check.sh` (mode 100755)
+  and `.github/workflows/ci.yml`.
+- **Rewritten:** `README.md`, for the Godot project: the game and its state, how to run it, the controls and rules
+  as `scripts/input` and `scripts/sim` implement them, tests and tools, export, layout, assets and licences, Steam.
+- **Files of other agents that A3 edited** (the lead's A2 note on the PASS line):
+  - `tools/tool_base.gd` (A2): `finish(code, pass_line := "")`. With exit code 0 it keeps `pass_line`, and
+    `_finalize()` prints it at the very end, only if no error was logged after `finish()`; otherwise it prints
+    `<tool>: FAIL: errors logged at the end of the run` as before. `finish(code)` alone works as before.
+  - `tools/smoke.gd` (A2): `_report()` prints `smoke: FAIL` at once when the run fails and gives `smoke: PASS` to
+    `finish()`.
+  - No automated test: `_finalize()` runs only when the tool's own Godot process shuts down, which a test inside the
+    runner's process cannot reach. It was checked by runs instead (below), and
+    `tests/test_scripts.gd::test_all_scripts_compile` compiles both files.
+- Nothing under `scripts/` changed: the game runs from the pack as it is.
+
+### Verify
+
+| Command | Last line | Exit |
+|---|---|---|
+| `GODOT=/tmp/claude-0/godot/Godot_v4.7.2-stable_linux.x86_64 tools/test.sh` | `173 passed, 0 failed` | 0 |
+| `tools/run_tool.sh smoke` (about 22 s) | `smoke: PASS` | 0 |
+| `tools/export_check.sh` (about 12 s: the import, the export, the pack's file list, the self test) | `export_check: PASS` | 0 |
+| The three, in that order, in a copy of `git ls-files -co --exclude-standard` (no `.godot/`, no `build/`) | the same | 0 |
+| `tools/run_tool.sh smoke` and `tools/export_check.sh`, each alone in such a copy | the same | 0 |
+| The three in such a copy with an empty `HOME` (no editor settings or caches, as on a CI runner) | the same | 0 |
+| `tools/run_tool.sh screenshots` and `scalecheck` in such a copy (both extend `tools/tool_base.gd`) | `screenshots: saved ...` (the six pictures byte for byte the same as the committed ones); `scalecheck: 5 windows passed` | 0 |
+
+`tools/export_check.sh` prints, on success:
+
+```
+export_check: exported build/fuel_rivals.pck with the "Linux" preset (111996 bytes)
+export_check: build/fuel_rivals.pck holds 66 files, none under tests/, tools/ or docs/, with project.binary and assets/font/OFL.txt
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+selftest: ok (600 ticks checked, 120 frames drawn)
+export_check: PASS
+```
+
+Exit codes: 0 passed; 1 the export failed, the pack's file list is wrong or the self test failed; 2 an ERROR line
+while everything else passed; 3 the import failed twice; 64 bad usage (it takes no arguments); 124 a run took more
+than 300 s; 127 Godot not found. Checked to fail, each on a scratch copy unless said:
+
+| Change | Exit | Output |
+|---|---|---|
+| `push_error()` in `App._begin_selftest()`, in the repository (then restored: same SHA-256, `git diff` clean) | 1 | `selftest: FAIL ...`, `the self test from build/fuel_rivals.pck failed (exit 1)`, the ERROR line |
+| `exclude_filter` without `tests/*` | 1 | the `tests/` files found in the pack |
+| `include_filter=""` | 1 | `build/fuel_rivals.pck has no assets/font/OFL.txt` |
+| preset name `Linux Typo` | 1 | Godot's `ERROR: Invalid export preset name: Linux Typo.` |
+| `push_error()` in an `App._exit_tree()`, printed after the self test passed | 2 | the ERROR line |
+| a pack without `scripts/view/`, with `TIMEOUT` cut to 20 s | 124 | `SCRIPT ERROR` lines: the game cannot start from that pack and hangs |
+| `GODOT=/nonexistent/godot`; an argument | 127; 64 | the reason |
+
+Its pack reader (`pack_files()`) also rejects at once a truncated pack, a huge file count, a directory offset outside
+the file, pack format 3, a corrupted path length and a file that is not a pack.
+
+The PASS line of the tools, before and after the change:
+
+| Run | Before | After |
+|---|---|---|
+| `tools/run_tool.sh smoke` | `smoke: PASS` last, exit 0 | the same |
+| `tools/run_tool.sh smoke --scenario=1p --frames=600` (too short, fails) | the `smoke: FAIL ...` reasons, `smoke: FAIL`, exit 1 | the same |
+| The same command as the first row, with a `push_error()` in an `App._exit_tree()` (scratch copy) | `smoke: PASS`, then `smoke: FAIL: errors logged at the end of the run`, exit 1 | no PASS line, only the FAIL line, exit 1 (also the bare smoke command) |
+
+### The pack check (`tools/export_check.sh`)
+
+1. Imports the project, as `tools/test.sh` does.
+2. `rm -f build/fuel_rivals.pck`, then `timeout 300 godot --headless --path . --export-pack "Linux"
+   build/fuel_rivals.pck` (after `mkdir -p build`: Godot does not create a missing folder, it fails with `Save PCK:
+   Can't open file for writing`). The export's output is shown only when it fails.
+3. Reads the pack's directory with `od`, `tail` and `head` (Godot has no command that lists a pack). Godot 4.7.2
+   writes pack format 4: a 112-byte header ("GDPC", the format, 4, 7, 2, the flags, the file base and the
+   directory's offset), the files, then the directory at the end (per file: the path length padded to 4, the path
+   without `res://`, offset, size, MD5, flags). The reader stops if the directory does not end exactly at the end of
+   the file. It fails on any file under `tests/`, `tools/` or `docs/`, and when `project.binary` or
+   `assets/font/OFL.txt` is missing.
+4. Runs `timeout 300 godot --headless --main-pack <repo>/build/fuel_rivals.pck -- --selftest` from an empty
+   temporary directory, and needs exit 0 and a `selftest: ok` line. **From the project directory the run proves
+   nothing:** Godot reads a `res://` file that the pack lacks from the working directory, so a pack without
+   `scripts/view/` passed there (`selftest: ok`, exit 0, WARNING lines only: `invalid UID ... using text path
+   instead`). From an empty directory the same pack fails.
+5. Fails on `ERROR:` and `SCRIPT ERROR:` lines in the import, the export or the run.
+
+The pack holds 66 files: the scripts as `.gdc` (compressed binary tokens, `script_export_mode=2`) with their
+`.gd.remap`, the three scenes converted to binary under `.godot/exported/`, the imported atlas, font and icon under
+`.godot/imported/` with their `.import` files, `assets/sprites.json`, `assets/font/OFL.txt`, `icon.svg`,
+`project.binary`, `.godot/uid_cache.bin` and `.godot/global_script_class_cache.cfg`. No `.gd` source and nothing from
+`tests/`, `tools/` or `docs/`.
+
+### `export_presets.cfg`
+
+- Two presets, as plan §6 describes for B3: **Linux** (`build/linux/fuel_rivals.x86_64`) and **Windows Desktop**
+  (`build/windows/fuel_rivals.exe`), each with `binary_format/embed_pck=true`,
+  `exclude_filter="tests/*, tools/*, docs/*"` and `include_filter="assets/font/OFL.txt"`. Every other value is the
+  4.7.2 default. A pack export with the Windows Desktop preset gives the same 66 files.
+- The 4.7.2 format differs from older Godot files: a `[runnable_presets]` section maps each platform to its runnable
+  preset (no `runnable=` key per preset), there are `patch_delta_*` keys, and `[preset.N.options]` lists every option
+  of the platform.
+- **How it was made:** on a scratch copy of the repository, a throwaway editor plugin (enabled in that copy's
+  `project.godot`) registered an `EditorExportPlugin`, collected each platform from its `_get_export_options()`, and
+  set `binary_format/embed_pck` on each preset from `EditorExportPlatform.get_current_presets()`, which makes the
+  editor save the file. The headless editor (`--editor`) loaded a short hand-written file and saved the full one.
+  Loading that output and saving again gave the same bytes.
+- Edit presets in the editor (Project > Export). Godot rewrites the whole file, so comments there would be lost.
+- `--import` and `--export-pack` runs leave it byte for byte unchanged (checked by checksum after them), and print
+  nothing about it. When the editor does save it, the bytes stay the same (the second pass above).
+
+### CI (`.github/workflows/ci.yml`)
+
+- On `push` and `pull_request`; `permissions: contents: read`; no secrets; `ubuntu-24.04`; 30-minute job timeout;
+  `shell: bash` (`bash --noprofile --norc -eo pipefail`).
+- Steps: `actions/checkout@v7` (`persist-credentials: false`); `actions/cache/restore@v6` of
+  `Godot_v4.7.2-stable_linux.x86_64.zip`, key `godot-4.7.2-stable-linux-x86_64`; on a miss, `curl` from
+  `https://github.com/godotengine/godot/releases/download/4.7.2-stable/`; **every run** downloads the release's
+  `SHA512-SUMS.txt` and checks the zip (`sha512sum --check --strict`), so a cached zip is checked too;
+  `actions/cache/save@v6` right after the check, so a failing test does not throw the download away (the plain
+  `actions/cache` saves only when the whole job succeeds); unzip, `--version`, `GODOT` into `$GITHUB_ENV`; then
+  `tools/test.sh`, `tools/run_tool.sh smoke` and `tools/export_check.sh`, each `if: ${{ !cancelled() &&
+  steps.godot.outcome == 'success' }}`, so one run reports all three; `actions/upload-artifact@v7` uploads
+  `build/fuel_rivals.pck` (artifact `fuel_rivals-pck`, 14 days) when the export check passed.
+- Action versions: the newest major tag of each (`git ls-remote`): checkout v7 (7.0.0 in June 2026, now 7.0.1),
+  cache v6 (6.0.0 in June 2026, now 6.1.0), upload-artifact v7 (7.0.0 in February 2026, now 7.0.2). Each runs on
+  node24, and the inputs and outputs used were read from their `action.yml` at that tag.
+- **Checked here:** PyYAML parses it; actionlint 1.7.12, with shellcheck 0.11.0 for the `run:` blocks, reports
+  nothing (its database knows upload-artifact v7's inputs, but not checkout v7's or cache v6's: those were checked by
+  hand); shellcheck is clean on the three shell scripts. A local driver ran every step of the file in order: each
+  `run:` block exactly as written with `bash --noprofile --norc -eo pipefail`, the `if:` conditions evaluated, the
+  `$GITHUB_ENV` lines passed on, and stand-ins for checkout, cache and upload. Four runs: a cache miss (the real
+  78 MB download and `Godot_v4.7.2-stable_linux.x86_64.zip: OK`, then `173 passed, 0 failed`, `smoke: PASS`,
+  `export_check: PASS`); a cache hit in a new workspace (no download, the check again, the same results); a corrupted
+  cached zip (`FAILED`, every later step skipped, job failed); and a failing test (the smoke test and the export still
+  ran and passed, the pack was uploaded, job failed).
+
+### Deviations from the plan, with reasons
+
+- **`include_filter="assets/font/OFL.txt"`**, which plan §6 does not list: a `.txt` file is not a resource, so the
+  export left the font's licence out, while ASSETS.md says it ships with the font (the OFL asks for it).
+- **The pack runs from an empty directory, with the pack's absolute path**, not as plan §6 writes it from the project
+  root: from the root, files missing from the pack are read from the checkout (see "The pack check").
+- **CI also runs `tools/export_check.sh`** (plan §6 names `tools/test.sh` and the smoke test; the lead asked for all
+  three), and runs the three checks even after one fails.
+
+### Known gaps, not verified here
+
+- **The workflow has not run on GitHub**; Actions cannot be run from here. What only GitHub can show: the hosted
+  runner image, `actions/cache` restore and save, the artifact upload, and the download without this sandbox's
+  proxy. The first real run should end with the three steps green and a `fuel_rivals-pck` artifact; its second run
+  should restore the editor from the cache.
+- No binary was exported: the export templates are B3's. The presets were loaded and used only for packs.
+- The pack ran on the editor binary (`--main-pack`), not on an export template.
+- The licence travels inside the pack, where a player cannot read it. For the Steam build (B3), put
+  `assets/font/OFL.txt` next to the executable too, or show the credits of ASSETS.md in the game.
+- `export_check.sh` reads pack format 4 only (Godot 4.7). A Godot version that changes the format makes it fail with
+  `cannot read ...: pack format N`; update `pack_files()` then. It reads integers in the machine's byte order
+  (little-endian on x86-64 and ARM). It was run on Linux x86-64 only.
+- README claims were checked against the code and by runs (the numbers of the rules by a scratch script that printed
+  them from `scripts/sim`; the window under xvfb; `--seed`, `--selftest`, `--only`; the failed selftest without an
+  import). Opening the project in the editor's GUI was not tried.
+
+### For the next agents
+
+- **B1, B2:** CI runs `tools/test.sh` on every push, so new tests run there without changes. Keep the three scripts
+  the entry points. `README.md` describes phase A: update its State, Controls and Rules sections when phase B lands.
+- **B3:** the presets are ready: `mkdir -p build/linux build/windows`, install the 4.7.2 templates, then
+  `--export-release "Linux" build/linux/fuel_rivals.x86_64` and `--export-release "Windows Desktop"
+  build/windows/fuel_rivals.exe` (not tried here). New smoke scenarios can end with `finish(0 if ok else 1,
+  "smoke: PASS")` to get the same PASS line. If CI should run the scenarios, add them to `ci.yml` after the smoke
+  step.
+- **B4:** a Steam build adds `addons/godotsteam/` to the pack; a build without Steam adds `addons/godotsteam/*` to
+  `exclude_filter` (plan §5). If the GodotSteam import prints ERROR lines on a first import, all three scripts fail
+  on them; narrow the filter in all three and note it here. `tools/export_check.sh` checks only the Linux preset.

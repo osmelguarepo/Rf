@@ -1,0 +1,101 @@
+# The tests, the smoke test and the pack export (docs/GODOT_PLAN.md §6 "CI", §8 A3), on the official Godot editor.
+# Each step runs one of the repository's entry points, as a developer would (README.md, "Tests and tools"); each of
+# them imports the project first, so the checkout needs no .godot/.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # The editor comes from this release of godotengine/godot and is checked against its SHA512-SUMS.txt.
+  GODOT_VERSION: 4.7.2-stable
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: Tests, smoke test and pack export
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Restore the Godot editor from the cache
+        id: godot-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/godot/Godot_v${{ env.GODOT_VERSION }}_linux.x86_64.zip
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Download the Godot editor
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/godot"
+          cd "$RUNNER_TEMP/godot"
+          zip="Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          curl -fsSL --retry 3 -o "$zip" "https://github.com/godotengine/godot/releases/download/$GODOT_VERSION/$zip"
+
+      # Every run, so a zip restored from the cache is checked too.
+      - name: Check the editor against the release's SHA-512 sums
+        run: |
+          cd "$RUNNER_TEMP/godot"
+          zip="Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          curl -fsSL --retry 3 -o SHA512-SUMS.txt \
+            "https://github.com/godotengine/godot/releases/download/$GODOT_VERSION/SHA512-SUMS.txt"
+          awk -v zip="$zip" '$2 == zip' SHA512-SUMS.txt >"$zip.sha512"
+          if [ "$(wc -l <"$zip.sha512")" -ne 1 ]; then
+            echo "::error::SHA512-SUMS.txt of Godot $GODOT_VERSION has no single line for $zip"
+            exit 1
+          fi
+          sha512sum --check --strict "$zip.sha512"
+
+      # Saved as soon as it is checked, so a failing test later does not throw the download away.
+      - name: Save the Godot editor in the cache
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/godot/Godot_v${{ env.GODOT_VERSION }}_linux.x86_64.zip
+          key: ${{ steps.godot-cache.outputs.cache-primary-key }}
+
+      - name: Unpack the Godot editor
+        id: godot
+        run: |
+          cd "$RUNNER_TEMP/godot"
+          unzip -o -q "Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          godot="$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64"
+          chmod +x "$godot"
+          "$godot" --headless --version
+          echo "GODOT=$godot" >>"$GITHUB_ENV"
+
+      # The three checks run even when one before them failed, so one run reports all of them.
+      - name: Tests (tools/test.sh)
+        if: ${{ !cancelled() && steps.godot.outcome == 'success' }}
+        run: tools/test.sh
+
+      - name: Smoke test (tools/run_tool.sh smoke)
+        if: ${{ !cancelled() && steps.godot.outcome == 'success' }}
+        run: tools/run_tool.sh smoke
+
+      - name: Pack export and its self test (tools/export_check.sh)
+        id: export
+        if: ${{ !cancelled() && steps.godot.outcome == 'success' }}
+        run: tools/export_check.sh
+
+      - name: Upload the pack
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuel_rivals-pck
+          path: build/fuel_rivals.pck
+          if-no-files-found: error
+          retention-days: 14

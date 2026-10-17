@@ -2,7 +2,8 @@ extends SceneTree
 ## What tools/smoke.gd, tools/screenshots.gd and tools/scalecheck.gd share. Each tool is a SceneTree run with -s: it
 ## boots the game's own main scene (scenes/boot.tscn) under itself, drives it with real input events
 ## (Input.parse_input_event(), delivered on the next frame as a keyboard's or a joypad's would be), counts the errors
-## logged while it runs, and ends with finish(code).
+## logged while it runs, and ends with finish(code), or finish(0, pass_line) to print a verdict such as "smoke: PASS"
+## once the run has really passed: _finalize() prints it, at the very end, only if no error was logged until then.
 ##
 ## Errors are counted in process, by a Logger, from begin() until _finalize(), which the engine calls after the last
 ## frame, once every node has been freed; a tool exits with 1 if any was logged. What the engine prints after that,
@@ -29,6 +30,8 @@ var _logging := false
 var _finished := false
 ## Errors already printed by finish().
 var _reported := 0
+## The line _finalize() prints if the run still passes at the end (finish(0, pass_line)), or "".
+var _pass_line := ""
 ## The steering key the autopilot holds, or KEY_NONE.
 var _steer_key: Key = KEY_NONE
 
@@ -140,8 +143,9 @@ func errors() -> PackedStringArray:
 
 
 ## Prints the errors logged so far and quits with `code`, or 1 if any error was logged. The run ends after this frame;
-## _finalize() looks for errors once more.
-func finish(code: int) -> void:
+## _finalize() looks for errors once more. `pass_line` is the tool's verdict when it passes ("smoke: PASS"):
+## _finalize() prints it if the run still passes then, so a run that fails at the very end never shows it.
+func finish(code: int, pass_line: String = "") -> void:
 	if _finished:
 		return
 	_finished = true
@@ -149,11 +153,15 @@ func finish(code: int) -> void:
 	_reported = logged.size()
 	for line: String in logged:
 		printerr("logged error: ", line)
-	quit(code if logged.is_empty() else 1)
+	var exit_code := code if logged.is_empty() else 1
+	if exit_code == 0:
+		_pass_line = pass_line
+	quit(exit_code)
 
 
 ## Called by the engine after the last frame, once the game's nodes have been freed. An error logged since finish()
-## (in the rest of the last frame, or while the nodes were freed) fails the run too. Then it stops counting.
+## (in the rest of the last frame, or while the nodes were freed) fails the run too. Then it stops counting, and a
+## run that still passes prints its pass line.
 func _finalize() -> void:
 	if not _logging:
 		return
@@ -161,6 +169,8 @@ func _finalize() -> void:
 	OS.remove_logger(_log)
 	_logging = false
 	if logged.size() <= _reported:
+		if not _pass_line.is_empty():
+			print(_pass_line)
 		return
 	for i in range(_reported, logged.size()):
 		printerr("logged error: ", logged[i])

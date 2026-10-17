@@ -435,5 +435,7 @@ func _report() -> void:
 		scenario, frame, game_overs, stage_clears, logged.size()
 	])
 	var ok := _failures.is_empty() and logged.is_empty()
-	print("smoke: %s" % ("PASS" if ok else "FAIL"))
-	finish(0 if ok else 1)
+	if not ok:
+		print("smoke: FAIL")
+	# "smoke: PASS" comes from _finalize() at the very end, and only if no error was logged until then.
+	finish(0 if ok else 1, "smoke: PASS")
