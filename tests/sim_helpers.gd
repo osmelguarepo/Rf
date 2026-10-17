@@ -24,10 +24,30 @@ const NO_LANE_CHANGE := 1000000
 ## A world whose spawner never fires, so the road holds only what the test puts on it.
 static func quiet_world(cfg: Config, seed_value: int = 1, seats: int = 1) -> World:
 	var w := World.new(cfg, seed_value, seats)
+	quiet(w)
+	return w
+
+
+## A versus world (World.versus(); `humans` has bit 1 << seat for each human seat) whose spawner never fires.
+static func quiet_versus(cfg: Config, seed_value: int, seats: int, humans: int) -> World:
+	var w := World.versus(cfg, seed_value, seats, humans)
+	quiet(w)
+	return w
+
+
+## Stops a world's spawner: nothing new comes onto the road.
+static func quiet(w: World) -> void:
 	w.spawner.car_gap = INF
 	w.spawner.oil_gap = INF
 	w.spawner.fuel_gap = INF
-	return w
+
+
+## Puts a seat's car with its hitbox's top-left corner at screen (x, screen_top).
+static func place(w: World, seat: int, x: float, screen_top: float) -> Car:
+	var p := w.players[seat]
+	p.x = x
+	p.y_world = w.camera_y + w.anchor - screen_top
+	return p
 
 
 ## Adds a traffic object of a kind, its own size, with its top-left corner at screen (x, screen_top).
@@ -63,6 +83,13 @@ static func run(w: World, byte: int, times: int = 1) -> void:
 	var bytes := PackedByteArray()
 	bytes.resize(w.players.size())
 	bytes.fill(byte)
+	for i in times:
+		w.step(bytes)
+
+
+## Steps the world `times` times with one byte per seat, as given.
+static func run_bytes(w: World, seat_bytes: Array, times: int = 1) -> void:
+	var bytes := PackedByteArray(seat_bytes)
 	for i in times:
 		w.step(bytes)
 

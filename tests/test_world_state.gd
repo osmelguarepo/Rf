@@ -8,10 +8,11 @@ const Car := preload("res://scripts/sim/car.gd")
 const Traffic := preload("res://scripts/sim/traffic.gd")
 const World := preload("res://scripts/sim/world.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
+const Bot := preload("res://scripts/sim/bot.gd")
 const H := preload("res://tests/sim_helpers.gd")
 
 ## World fields that to_array() writes as nested arrays rather than as SCALARS.
-const COMPOSITE_FIELDS := ["cfg", "rng", "spawner", "players", "traffic"]
+const COMPOSITE_FIELDS := ["cfg", "rng", "spawner", "players", "traffic", "bots"]
 
 
 ## Plan §6: restore at tick 600, run 600 more and get the same checksum as the run that never stopped. Also through
@@ -48,9 +49,13 @@ func test_to_array_covers_every_field() -> void:
 	var listed: Array = World.SCALARS.duplicate()
 	listed.append_array(COMPOSITE_FIELDS)
 	assert_eq(_sorted(world_fields), _sorted(listed), "World fields")
-	assert_eq(w.to_array().size(), 3 + World.SCALARS.size() + 3, "FORMAT, profile, rng, SCALARS, spawner, seats, traffic")
+	assert_eq(w.to_array().size(), 3 + World.SCALARS.size() + 4, "FORMAT, profile, rng, SCALARS, spawner, seats, traffic, bots")
 	var car := Car.new()
 	assert_eq(car.to_array().size(), _script_fields(car).size(), "Car fields")
+	assert_eq(_script_fields(car.rng), ["state"], "a seat's own Rng: one u32")
+	var bot := Bot.new(9)
+	assert_eq(bot.to_array().size(), _script_fields(bot).size(), "Bot fields")
+	assert_eq(_script_fields(bot.rng), ["state"], "a bot's own Rng: one u32")
 	var object := Traffic.new()
 	assert_eq(object.to_array().size(), _script_fields(object).size(), "Traffic fields")
 	assert_eq(w.spawner.to_array().size(), _script_fields(w.spawner).size(), "Spawner fields")
@@ -58,33 +63,48 @@ func test_to_array_covers_every_field() -> void:
 
 
 ## Each numeric field, set to a value no game would give it, survives to_array() / from_array(), and changing any one
-## of them changes the checksum.
+## of them changes the checksum. In a single-player world and in a versus world, whose bots add their fields and the
+## bytes each bot has decided and not yet sent.
 func test_every_field_round_trips_and_moves_the_checksum() -> void:
 	var cfg := Config.standard()
-	var w := World.new(cfg, 5, 2)
-	H.in_lane(w, Config.KIND_RED, 4, 100.0, 90.0)
-	H.in_lane(w, Config.KIND_OIL, 1, 50.0)
-	var targets := _numeric_targets(w)
-	var next_value := 7
-	for target: Array in targets:
-		var owner: Object = target[0]
-		var field: String = target[1]
-		next_value += 1
-		owner.set(field, next_value if typeof(owner.get(field)) == TYPE_INT else float(next_value) + 0.25)
-	var back := World.from_array(cfg, w.to_array())
-	assert_eq(_dump(back), _dump(w), "every field after the round trip")
-	assert_eq(back.checksum(), w.checksum())
-	var unchanged := 0
-	for target: Array in targets:
-		var copy := w.clone()
-		var owner_in_copy: Object = _same_owner(copy, w, target[0])
-		var field: String = target[1]
-		var value: Variant = owner_in_copy.get(field)
-		owner_in_copy.set(field, value + 1 if typeof(value) == TYPE_INT else value + 0.5)
-		if copy.checksum() == w.checksum():
-			unchanged += 1
-	assert_eq(unchanged, 0, "fields that do not change the checksum")
-	assert_gt(targets.size(), 40, "numeric fields checked")
+	for w: World in [World.new(cfg, 5, 2), World.versus(cfg, 5, 3, 0b011)]:
+		var label := "mode %d" % w.mode
+		H.in_lane(w, Config.KIND_RED, 4, 100.0, 90.0)
+		H.in_lane(w, Config.KIND_OIL, 1, 50.0)
+		var targets := _numeric_targets(w)
+		var next_value := 7
+		for target: Array in targets:
+			var owner: Object = target[0]
+			var field: String = target[1]
+			next_value += 1
+			owner.set(field, next_value if typeof(owner.get(field)) == TYPE_INT else float(next_value) + 0.25)
+		for b: Bot in w.bots:
+			for i in b.pending.size():
+				next_value += 1
+				b.pending[i] = next_value
+		var back := World.from_array(cfg, w.to_array())
+		assert_eq(_dump(back), _dump(w), label + ": every field after the round trip")
+		assert_eq(back.checksum(), w.checksum(), label)
+		var unchanged := 0
+		for target: Array in targets:
+			var copy := w.clone()
+			var owner_in_copy: Object = _same_owner(copy, w, target[0])
+			var field: String = target[1]
+			var value: Variant = owner_in_copy.get(field)
+			owner_in_copy.set(field, value + 1 if typeof(value) == TYPE_INT else value + 0.5)
+			if copy.checksum() == w.checksum():
+				unchanged += 1
+		for slot in w.bots.size():
+			for i in w.bots[slot].pending.size():
+				var copy := w.clone()
+				copy.bots[slot].pending[i] += 1
+				if copy.checksum() == w.checksum():
+					unchanged += 1
+		assert_eq(unchanged, 0, label + ": fields that do not change the checksum")
+		assert_gt(targets.size(), 40, label + ": numeric fields checked")
+		if w.mode == World.MODE_VERSUS:
+			assert_eq(w.bots.size(), 3, "a bot for each seat")
+			assert_gt(w.bots[0].pending.size(), 0, "bytes waiting in each bot")
 
 
 func test_checksum_is_sha256_of_var_to_bytes() -> void:
@@ -149,11 +169,17 @@ static func _sorted(values: Array) -> Array:
 	return out
 
 
-## [owner, field] for every int and float field of the world, its RNG, spawner, seats and traffic.
+## [owner, field] for every int and float field of the world, its RNG, spawner, seats (and each seat's own RNG
+## stream), traffic and bots (and each bot's own RNG stream).
 static func _numeric_targets(w: World) -> Array:
 	var owners: Array = [w, w.rng, w.spawner]
 	owners.append_array(w.players)
+	for p: Car in w.players:
+		owners.append(p.rng)
 	owners.append_array(w.traffic)
+	owners.append_array(w.bots)
+	for b: Bot in w.bots:
+		owners.append(b.rng)
 	var targets: Array = []
 	for owner: Object in owners:
 		for field: String in _script_fields(owner):
@@ -174,9 +200,16 @@ static func _same_owner(copy: World, original: World, original_owner: Object) ->
 	for i in original.players.size():
 		if original.players[i] == original_owner:
 			return copy.players[i]
+		if original.players[i].rng == original_owner:
+			return copy.players[i].rng
 	for i in original.traffic.size():
 		if original.traffic[i] == original_owner:
 			return copy.traffic[i]
+	for i in original.bots.size():
+		if original.bots[i] == original_owner:
+			return copy.bots[i]
+		if original.bots[i].rng == original_owner:
+			return copy.bots[i].rng
 	return null
 
 
@@ -186,13 +219,18 @@ static func _dump(w: World) -> Dictionary:
 	var owners := {"world": w, "rng": w.rng, "spawner": w.spawner}
 	for i in w.players.size():
 		owners["seat%d" % i] = w.players[i]
+		owners["seat%d.rng" % i] = w.players[i].rng
 	for i in w.traffic.size():
 		owners["traffic%d" % i] = w.traffic[i]
+	for i in w.bots.size():
+		owners["bot%d" % i] = w.bots[i]
+		owners["bot%d.rng" % i] = w.bots[i].rng
+		out["bot%d.pending" % i] = w.bots[i].pending.duplicate()
 	for name: String in owners:
 		var owner: Object = owners[name]
 		for field: String in _script_fields(owner):
 			var value: Variant = owner.get(field)
 			if typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT:
 				out["%s.%s" % [name, field]] = value
-	out["counts"] = [w.players.size(), w.traffic.size(), w.cfg.profile]
+	out["counts"] = [w.players.size(), w.traffic.size(), w.bots.size(), w.cfg.profile]
 	return out
