@@ -15,26 +15,46 @@ extends Node
 ##   root script has setup(app), called before it enters the tree (it builds everything there, not in _ready()),
 ##   frame(steps, delta) and on_focus_lost().
 ## - The session: the best score and the seeds of new games.
+## - Versus (B2): the title's VERSUS choice opens the join screen (show_join()), whose Start opens a versus race
+##   (start_versus()). The active input is then `seats` (scripts/input/seats.gd: one byte per seat from each seat's
+##   joypad) instead of `solo` (the keyboard and every pad as one player); going back to the title lets every pad go.
+##   Menu commands (up, down, accept, back...) of every device go to `nav` (scripts/input/nav.gd) for the menus.
+## - F11 and Alt+Enter, on every screen, switch between a window and fullscreen (toggle_fullscreen()); the picture
+##   keeps its whole-number scale (project.godot's stretch settings). The key never reaches the screens.
 ## - --selftest (after the "--" of the command line): boots, drives SELFTEST_TICKS steps through the real screens and
 ##   checks the result (selftest_problems(): among others, a pause press pauses the game and a second one resumes
-##   it), then draws SELFTEST_FRAMES frames of a driven game, and quits with 0 (pass) or 1 (fail, or an error logged on
-##   the way). Its first game's seed is SELFTEST_SEED. --seed=N fixes the first game's seed.
+##   it), then a versus race of SELFTEST_TICKS steps through the join and race screens (selftest_versus_problems(),
+##   B2), then draws SELFTEST_FRAMES frames of a driven game, SELFTEST_JOIN_FRAMES of the join screen and
+##   SELFTEST_VERSUS_FRAMES of a versus race, and quits with 0 (pass) or 1 (fail, or an error logged on the way). Its
+##   first game's seed is SELFTEST_SEED. --seed=N fixes the first game's seed.
 
 const Atlas := preload("res://scripts/view/atlas.gd")
+const PlayerColours := preload("res://scripts/view/player_colours.gd")
 const LocalInput := preload("res://scripts/input/local_input.gd")
+const Seats := preload("res://scripts/input/seats.gd")
+const Nav := preload("res://scripts/input/nav.gd")
 const Keyboard := preload("res://scripts/input/keyboard.gd")
 const FixedStep := preload("res://scripts/app/fixed_step.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
+const Match := preload("res://scripts/sim/match.gd")
 
 const TITLE_SCENE := "res://scenes/title.tscn"
 const GAME_SCENE := "res://scenes/game.tscn"
+const JOIN_SCENE := "res://scenes/join.tscn"
+const VERSUS_SCENE := "res://scenes/versus.tscn"
 const SELFTEST_TICKS := 600
 const SELFTEST_FRAMES := 120
+## Frames of the join screen and of a versus race the self test draws after the game's (B2).
+const SELFTEST_JOIN_FRAMES := 30
+const SELFTEST_VERSUS_FRAMES := 60
 const SELFTEST_SEED := 1
 ## The ticks of the self test's two pause presses: the first pauses the game, the second resumes it.
 const SELFTEST_PAUSE_TICK := 300
 const SELFTEST_RESUME_TICK := 310
+## The versus leg (B2): two synthetic pads (devices no real pad uses), and the tick at which the second goes away.
+const SELFTEST_PADS: Array[int] = [90, 91]
+const SELFTEST_DISCONNECT_TICK := 400
 
 
 ## Collects the errors logged while the self test runs (warnings do not count), as tests/run_tests.gd does.
@@ -69,7 +89,19 @@ class ErrorLog extends Logger:
 
 
 var atlas: Atlas
+## The active input, which every input event goes to: `solo` or `seats`.
 var input: LocalInput
+## Single player and the title: the keyboard and every pad together.
+var solo: LocalInput
+## Versus: the join screen and the races. Its seats last until the app goes back to the title.
+var seats: Seats
+## Menu commands from every device, for the menus (title, join screen, versus pause and results).
+var nav := Nav.new()
+## The title's last choice (title.gd CHOICE_SINGLE or CHOICE_VERSUS), shown again when it opens.
+var title_choice: int = 0
+## The window that F11 and Alt+Enter switch: the game's own when null. Tests give another, since a headless window
+## never changes mode on a screen.
+var fullscreen_window: Window = null
 var clock := FixedStep.new()
 ## Best score this session. A new game starts with it as its high score.
 var high_score: int = 0
@@ -160,12 +192,15 @@ static func fitted_window_size(window: Vector2i, usable: Vector2i, view: Vector2
 	return view * multiple
 
 
-## Loads the art and the font and builds the input map. Returns `booted`.
+## Loads the art and the font (and the six seats' recoloured cars) and builds the input map. Returns `booted`.
 func boot() -> bool:
 	Keyboard.build_input_map()
-	input = LocalInput.new()
+	solo = LocalInput.new()
+	seats = Seats.new()
+	input = solo
 	atlas = Atlas.new()
 	booted = atlas.load_all()
+	PlayerColours.add_frames(atlas)
 	return booted
 
 
@@ -184,21 +219,72 @@ func current_screen() -> Node:
 	return _screen
 
 
+## The title screen. Every pad leaves its versus seat.
 func show_title() -> Node:
+	if seats != null:
+		seats.reset()
+	input = solo
 	return _switch_to(TITLE_SCENE)
 
 
+## A single-player game.
 func start_game() -> Node:
+	input = solo
 	return _switch_to(GAME_SCENE)
 
 
-## Replaces the current screen with a new instance of a scene. Presses and leftover step time do not carry over.
+## The join screen (B2): the versus seats are open again; pads already on a seat stay there (back from a match).
+func show_join() -> Node:
+	seats.open()
+	input = seats
+	return _switch_to(JOIN_SCENE)
+
+
+## A versus race of the join screen's seats: locks their line-up and opens the race screen. Returns null, and leaves
+## the current screen alone, when the seats cannot make a match (World.versus_valid()).
+func start_versus() -> Node:
+	if not seats.lock():
+		return null
+	input = seats
+	return _switch_to(VERSUS_SCENE)
+
+
+## F11 and Alt+Enter: fullscreen, or back to a window (whose size and place the platform restores).
+func toggle_fullscreen() -> void:
+	var window := fullscreen_window
+	if window == null and is_inside_tree():
+		window = get_window()
+	if window != null:
+		window.mode = toggled_window_mode(window.mode)
+
+
+## Fullscreen (either kind) goes to a window; any other mode to fullscreen.
+static func toggled_window_mode(mode: Window.Mode) -> Window.Mode:
+	if mode == Window.MODE_FULLSCREEN or mode == Window.MODE_EXCLUSIVE_FULLSCREEN:
+		return Window.MODE_WINDOWED
+	return Window.MODE_FULLSCREEN
+
+
+## True for F11, or Enter (either) with Alt, going down. A key repeat is not one.
+static func is_fullscreen_key(event: InputEvent) -> bool:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo:
+		return false
+	var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
+	if code == KEY_F11:
+		return true
+	return key.alt_pressed and (code == KEY_ENTER or code == KEY_KP_ENTER)
+
+
+## Replaces the current screen with a new instance of a scene. Presses, menu commands and leftover step time do not
+## carry over.
 func _switch_to(path: String) -> Node:
 	if _screen != null:
 		remove_child(_screen)
 		_screen.queue_free()
 		_screen = null
 	input.clear_presses()
+	nav.clear()
 	clock.reset()
 	var scene := load(path) as PackedScene
 	_screen = scene.instantiate()
@@ -208,8 +294,12 @@ func _switch_to(path: String) -> Node:
 
 
 func _input(event: InputEvent) -> void:
+	if is_fullscreen_key(event):
+		toggle_fullscreen()
+		return
 	if input != null:
 		input.handle_event(event)
+	nav.handle_event(event)
 
 
 func _process(delta: float) -> void:
@@ -219,6 +309,9 @@ func _process(delta: float) -> void:
 	if _screen == null:
 		return
 	_screen.frame(clock.advance(delta), delta)
+	# Menu commands live for one frame: a screen takes them in frame(), and a screen without menus (the game) never
+	# does, so they must not pile up there.
+	nav.clear()
 
 
 func _notification(what: int) -> void:
@@ -227,34 +320,60 @@ func _notification(what: int) -> void:
 			_screen.on_focus_lost()
 
 
+## Both inputs follow the pads, whichever is active, and so do the menu commands.
 func _on_joy_connection_changed(device: int, connected: bool) -> void:
-	if input != null:
-		input.connection_changed(device, connected)
+	for each: LocalInput in [solo, seats]:
+		if each != null:
+			each.connection_changed(device, connected)
+	nav.connection_changed(device, connected)
 
 
 # --- Self test -------------------------------------------------------------------------------------------------------
 
 
-## Starts the self test: the checks of selftest_problems() now, then SELFTEST_FRAMES frames of a game drawn by the
-## engine (_selftest_draw_frame()), so drawing code runs too. Errors logged on the way fail it.
+## Starts the self test: the checks of selftest_problems() and selftest_versus_problems() now, then frames drawn by
+## the engine (_selftest_draw_frame()): a game, the join screen and a versus race, so drawing code runs too. Errors
+## logged on the way fail it.
 func _begin_selftest() -> void:
 	if seed_override < 0:
 		seed_override = SELFTEST_SEED
 	_selftest_log = ErrorLog.new()
 	OS.add_logger(_selftest_log)
 	_selftest_problems = selftest_problems()
+	_selftest_problems.append_array(selftest_versus_problems())
 	start_game()
 	_selftest_frame = 0
 
 
-## One frame of the self test's drawn game: a step with the scripted input, then the view. Ends the test at the end.
+## One frame of the self test's drawing: SELFTEST_FRAMES frames of the game (a step with the scripted input, then the
+## view), then SELFTEST_JOIN_FRAMES of the join screen with the two pads of the versus leg on their seats and a bot,
+## then SELFTEST_VERSUS_FRAMES of their race (a step with the seats' bytes, then the view). Ends the test at the end.
 func _selftest_draw_frame() -> void:
-	if _selftest_frame >= SELFTEST_FRAMES:
+	var join_from := SELFTEST_FRAMES
+	var race_from := join_from + SELFTEST_JOIN_FRAMES
+	var end := race_from + SELFTEST_VERSUS_FRAMES
+	if _selftest_frame >= end:
 		return
-	_screen.step_once(PackedByteArray([selftest_byte(_selftest_frame)]))
-	_screen.render()
+	if _selftest_frame < join_from:
+		_screen.step_once(PackedByteArray([selftest_byte(_selftest_frame)]))
+		_screen.render()
+	elif _selftest_frame == join_from:
+		show_join()
+		for device: int in SELFTEST_PADS:
+			seats.join(device)
+		seats.set_bots(1)
+	elif _selftest_frame < race_from:
+		_screen.frame(0, FixedStep.STEP)
+	else:
+		if _selftest_frame == race_from and start_versus() == null:
+			_selftest_problems.append("the versus race to draw did not open")
+			_selftest_frame = end
+			get_tree().quit(_end_selftest())
+			return
+		_screen.step_once(seats.step_bytes(seats.lineup.size()))
+		_screen.render()
 	_selftest_frame += 1
-	if _selftest_frame == SELFTEST_FRAMES:
+	if _selftest_frame == end:
 		get_tree().quit(_end_selftest())
 
 
@@ -267,7 +386,9 @@ func _end_selftest() -> int:
 		printerr("selftest: FAIL ", problem)
 	if not problems.is_empty():
 		return 1
-	print("selftest: ok (%d ticks checked, %d frames drawn)" % [SELFTEST_TICKS, SELFTEST_FRAMES])
+	print("selftest: ok (%d ticks checked, %d versus ticks checked, %d frames drawn)" % [
+		SELFTEST_TICKS, SELFTEST_TICKS, SELFTEST_FRAMES + SELFTEST_JOIN_FRAMES + SELFTEST_VERSUS_FRAMES
+	])
 	return 0
 
 
@@ -340,4 +461,88 @@ func selftest_problems(byte_at: Callable = selftest_byte) -> PackedStringArray:
 		problems.append("a replay of the same inputs differs")
 	if show_title() == null:
 		problems.append("could not go back to the title")
+	return problems
+
+
+## The versus leg of the self test (B2): through the real join and race screens, two pads (SELFTEST_PADS: synthetic
+## devices with nothing held, so their cars only get pushed along by the bottom edge) and one bot race SELFTEST_TICKS
+## steps on a road kept empty (the rules are the simulation tests' business; here no seed can end the round early).
+## It checks that the join screen and the race open, as a versus match of the two pads' seats and the bot's;
+## that the program's pause press at SELFTEST_PAUSE_TICK pauses the round and nothing moves until the one at
+## SELFTEST_RESUME_TICK resumes it; that the bot drives; that when the second pad goes away (SELFTEST_DISCONNECT_TICK)
+## its seat's byte is 0xFF from then on and the round goes on; that a replay of the same bytes gives the same match;
+## that a seat that runs dry ends the round; and that the title lets the pads go. Returns what went wrong.
+func selftest_versus_problems() -> PackedStringArray:
+	var problems := PackedStringArray()
+	var join := show_join()
+	if join == null or join.name != "Join":
+		problems.append("the join screen did not open")
+		return problems
+	for device: int in SELFTEST_PADS:
+		seats.join(device)
+	seats.set_bots(1)
+	var race := start_versus()
+	if race == null or race.name != "Versus":
+		problems.append("the versus race did not open")
+		show_title()
+		return problems
+	var game_match: Match = race.game_match
+	var world := game_match.world
+	var slots := seats.lineup.size()
+	if world.mode != World.MODE_VERSUS or slots != 3 or seats.humans_mask() != 0b011:
+		problems.append("the race is not a versus match of two pads and a bot")
+		show_title()
+		return problems
+	var seed_value := world.game_seed
+	var bytes: Array[PackedByteArray] = []
+	var paused := false
+	var still := true
+	var resumed := false
+	var orphan_bytes := true
+	for tick in SELFTEST_TICKS:
+		if tick == SELFTEST_PAUSE_TICK or tick == SELFTEST_RESUME_TICK:
+			seats.press(PlayerInput.PAUSE)
+		if tick == SELFTEST_DISCONNECT_TICK:
+			_on_joy_connection_changed(SELFTEST_PADS[1], false)
+		var step := seats.step_bytes(slots)
+		bytes.append(step)
+		var y_bot := world.players[2].y_world
+		world.traffic.clear()
+		race.step_once(step)
+		if tick == SELFTEST_PAUSE_TICK:
+			paused = world.phase == World.PAUSED
+		elif tick > SELFTEST_PAUSE_TICK and tick < SELFTEST_RESUME_TICK:
+			still = still and world.phase == World.PAUSED and world.players[2].y_world == y_bot
+		elif tick == SELFTEST_RESUME_TICK:
+			resumed = world.phase == World.RUNNING
+		if tick >= SELFTEST_DISCONNECT_TICK:
+			orphan_bytes = orphan_bytes and step[1] == PlayerInput.BOT
+		if tick % 60 == 0:
+			race.render()
+	if not paused:
+		problems.append("versus: the pause press at tick %d did not pause the round" % SELFTEST_PAUSE_TICK)
+	elif not still:
+		problems.append("versus: the round did not stay paused, or a car moved, before tick %d" % SELFTEST_RESUME_TICK)
+	elif not resumed:
+		problems.append("versus: the pause press at tick %d did not resume the round" % SELFTEST_RESUME_TICK)
+	if world.players[2].distance <= 0.0:
+		problems.append("versus: the bot did not drive")
+	if not orphan_bytes or not seats.is_orphan(1):
+		problems.append("versus: the seat of the pad that went away was not handed to its bot")
+	if game_match.phase != Match.PLAYING or world.tick != SELFTEST_TICKS:
+		problems.append("versus: the round did not go on for %d ticks" % SELFTEST_TICKS)
+	# Determinism: the same seed and bytes, without the screens, give the same match.
+	var replay := Match.create(world.cfg, seed_value, slots, 0b011)
+	for step: PackedByteArray in bytes:
+		replay.world.traffic.clear()
+		replay.step(step)
+	if replay.checksum() != game_match.checksum():
+		problems.append("versus: a replay of the same inputs differs")
+	world.players[0].fuel = 0.01
+	race.step_once(seats.step_bytes(slots))
+	if game_match.phase != Match.ROUND_OVER or game_match.last_round_winner() != 1:
+		problems.append("versus: the round did not end with the seat that ran dry")
+	race.render()
+	if show_title() == null or seats.people() != 0:
+		problems.append("versus: could not go back to the title")
 	return problems

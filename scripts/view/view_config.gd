@@ -165,8 +165,15 @@ const CONTROLS_PAD := [
 	"START   pause",
 	"A START start",
 ]
-## The START button; a click or tap on it starts the game too.
-const START_BUTTON := Rect2i(260, 152, 120, 32)
+## The two choices (B2), top to bottom: the single-player game and the versus mode's join screen. Up and Down move
+## between them; the one shown is drawn lit. A click or tap on a button picks it too.
+const TITLE_CHOICES := ["1 PLAYER", "VERSUS"]
+## The 1 PLAYER button (the name it had when it was the only one, START).
+const START_BUTTON := Rect2i(240, 100, 160, 28)
+const VERSUS_BUTTON := Rect2i(240, 136, 160, 28)
+## Under the VERSUS button, in small type.
+const VERSUS_NOTE := "2 TO 6 CARS, GAMEPADS ONLY"
+const VERSUS_NOTE_Y := 172
 ## The player's car, still, in its start lane.
 const TITLE_CAR_TOP := 208
 ## Footer lines, each on a dark band so the lane dashes behind do not cut through the text: y of the band's top.
@@ -174,7 +181,9 @@ const PROMPT_BAND_Y := 264
 const BEST_BAND_Y := 312
 const BAND_H := 24
 const BAND_ALPHA := 0.7
-const PROMPT := "PRESS ENTER / SPACE / GAMEPAD START"
+const PROMPT := "UP / DOWN CHOOSE    ENTER / SPACE / A / START GO"
+## On the best score's band: the best on the left half, the fullscreen keys on the right half.
+const FULLSCREEN_HINT := "F11 / ALT+ENTER  FULLSCREEN"
 ## The prompt blinks between full and this alpha every half second.
 const PROMPT_DIM_ALPHA := 0.35
 const PROMPT_BLINK_SECONDS := 0.5

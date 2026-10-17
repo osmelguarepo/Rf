@@ -13,6 +13,7 @@ extends Node2D
 const ViewConfig := preload("res://scripts/view/view_config.gd")
 const Atlas := preload("res://scripts/view/atlas.gd")
 const Draw := preload("res://scripts/view/draw.gd")
+const PlayerColours := preload("res://scripts/view/player_colours.gd")
 const Config := preload("res://scripts/sim/config.gd")
 const World := preload("res://scripts/sim/world.gd")
 const Car := preload("res://scripts/sim/car.gd")
@@ -20,6 +21,9 @@ const Traffic := preload("res://scripts/sim/traffic.gd")
 
 var atlas: Atlas
 var world: World
+## Versus (B2): the seat of each world slot (the match's line-up), so every car is drawn in its seat's colour
+## (player_colours.gd). Empty in single player, whose car is car_red.
+var seat_colours: Array[int] = []
 
 
 func setup(p_atlas: Atlas) -> void:
@@ -57,6 +61,13 @@ static func player_sprite(car: Car) -> Dictionary:
 	if car.slide_vx < 0.0:
 		return ViewConfig.PLAYER_SKID_LEFT
 	return ViewConfig.PLAYER
+
+
+## A seat's car sprite: player_sprite(), in the colour of its seat when `colours` (slot -> seat, versus) has one.
+static func seat_car_sprite(car: Car, colours: Array[int]) -> Dictionary:
+	if car.slot < colours.size():
+		return PlayerColours.seat_sprite(player_sprite(car), colours[car.slot])
+	return player_sprite(car)
 
 
 ## The fuel car's tint at a stage tick: a full trip round the hue circle every 1.5 s.
@@ -100,7 +111,10 @@ func _draw() -> void:
 	for p: Car in world.players:
 		if p.alive != 0 and player_visible(p, ticks):
 			var box := hitbox_pos(world, p.x, p.y_world)
-			Draw.sprite_on_hitbox(self, atlas, player_sprite(p), box, Vector2i(roundi(p.w), roundi(p.h)), ViewConfig.PLAYER_FALLBACK)
+			var fallback := ViewConfig.PLAYER_FALLBACK
+			if p.slot < seat_colours.size():
+				fallback = PlayerColours.colour(seat_colours[p.slot])
+			Draw.sprite_on_hitbox(self, atlas, seat_car_sprite(p, seat_colours), box, Vector2i(roundi(p.w), roundi(p.h)), fallback)
 
 
 func _draw_traffic(c: Traffic, modulate: Color) -> void:

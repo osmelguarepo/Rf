@@ -1153,3 +1153,249 @@ match taking a confirm; round winners left out of to_array(); no cap; start_roun
   bot-driven seats if wanted); build the game on `Match` rather than on `World.versus()` directly.
 - **B3:** scenario (a) of plan §8 (one scripted human and five bots) needs its own driver; `tools/bot_stats.gd` covers
   (b) and can run `--humans=1` for one human seat driven by a bot.
+
+## B2
+
+### Part 1 (agent B2a): the versus flow
+
+The versus mode from the title to the rematch, built on B1's `Match`: the title's mode choice, the join screen (a seat
+per pad, the number of bots), the race screen with one input byte per seat, pause and quit, the round-over and
+match-over panels with the confirm delay, rematch and back to the join screen, pads that disconnect and come back,
+the fullscreen toggle, and a versus leg in `--selftest`. The drawing is a first, legible version: the six colours are
+placeholders and the HUD and panels are plain. B2b gives them their final form (see "For B2b").
+
+#### Files
+
+- **New (B2's):**
+  - Input: `scripts/input/seats.gd` (the seats, extends `local_input.gd`), `scripts/input/nav.gd` (menu commands).
+  - Screens: `scripts/app/join.gd` with `scenes/join.tscn` (`Join`: `Road`, `JoinView`); `scripts/app/versus.gd` with
+    `scenes/versus.tscn` (`Versus`: `Road`, `Cars`, `Hud`).
+  - View: `scripts/view/player_colours.gd` (the six colours and the recoloured cars, provisional),
+    `scripts/view/join_view.gd`, `scripts/view/versus_hud.gd`.
+  - Tests (55 new, 283 in all): `tests/test_join_seats.gd` (15: the seats), `tests/test_menu_nav.gd` (4),
+    `tests/test_join_screen.gd` (9), `tests/test_race_screen.gd` (13), `tests/test_title_choice.gd` (10: the title,
+    fullscreen, single player), `tests/test_seat_colours.gd` (4); `tests/screen_helpers.gd` (helpers for the screen
+    tests, not a test file: boot an App, deliver key and pad events as the engine would, let go of them).
+- **Files of other agents edited**, each with tests (details under "Edits of other agents' files"):
+  `scripts/app/app.gd`, `scripts/app/title.gd`, `scripts/view/title_view.gd`, `scripts/view/view_config.gd`,
+  `scripts/view/cars.gd` (A2's); `README.md` (A3's); `docs/screenshots/01-title.png` re-made.
+- Nothing under `scripts/sim/` changed.
+
+#### Verify
+
+| Command | Last line | Exit |
+|---|---|---|
+| `GODOT=/tmp/claude-0/godot/Godot_v4.7.2-stable_linux.x86_64 tools/test.sh` | `283 passed, 0 failed` | 0 |
+| The same after `rm -rf .godot` | `283 passed, 0 failed` | 0 |
+| `tools/test.sh --only=test_join_seats,test_menu_nav,test_join_screen,test_race_screen,test_title_choice,test_seat_colours` | `55 passed, 0 failed` | 0 |
+| `tools/run_tool.sh smoke` | `smoke: PASS` | 0 |
+| `tools/run_tool.sh screenshots` | `screenshots: saved 01-title.png, ... in <repo>/docs/screenshots` | 0 |
+| `tools/run_tool.sh scalecheck` | `scalecheck: 5 windows passed` | 0 |
+| `tools/export_check.sh` | `export_check: PASS` (the pack holds 88 files) | 0 |
+| `$GODOT --headless --path . -- --selftest` | `selftest: ok (600 ticks checked, 600 versus ticks checked, 210 frames drawn)` | 0 |
+| `tools/test.sh`, `tools/run_tool.sh smoke` and `tools/export_check.sh` in a copy of `git ls-files -co --exclude-standard` | the same | 0 |
+
+- **Single player is unchanged.** The smoke test's output is line for line the same as at 14b30a8 (a pristine
+  `git archive` of it, run side by side). The screenshots 02 to 06 are byte for byte the committed ones; only
+  `01-title.png` changed: 1 PLAYER (lit) and VERSUS buttons on the road, the note "2 TO 6 CARS, GAMEPADS ONLY" on a
+  dark band, the prompt "UP / DOWN CHOOSE ... GO", and the fullscreen keys beside the best score; the controls boxes
+  and the car as before. Looked at, also as an enlarged 1:1 crop: sharp text, nothing overlapping. `scalecheck`
+  passes in its five windows (the title's car still lands on its atlas frame pixel for pixel). Every A2 test passes
+  unchanged.
+- **Checked to fail.** 36 mutations, one at a time, with a script that restored each file (checked by MD5): every one
+  made at least one of the new tests fail. They covered: an orphan seat's or a bot seat's byte not 0xFF; joins on the
+  highest free seat; no minimum bot; seven cars; claims ignoring the GUID or taking the highest orphan seat; no
+  reconnect by GUID; a disconnect freeing a seat in a race; `open()` keeping orphan seats; the program's press on slot
+  0; presses not kept per seat; the lone person's bot staying; no delay on the match-over keys; a rematch on the same
+  seed; Back or Esc not quitting while paused, or B at the match's end going to the title; no pause on focus loss or
+  on Esc; no claim; Start ignoring validity; B, Left and Right doing nothing, or counting pads that hold no seat;
+  presses on the join screen reaching the race; Alt+Enter not consumed, F11 not recognised; the title keeping the
+  seats, ignoring Down or forgetting its choice; no stick hysteresis, key repeats counted; PRESS A shown too early;
+  NO PAD never shown; cars not in their seat's colour; a recolour that skips a shade; the self test's versus leg
+  without its disconnect.
+- **Seen in pictures** (a scratch tool under xvfb, not committed): the title with VERSUS chosen, the join screen
+  empty, with people and bots, and full; a race with six cars (four people, two bots), PAUSED, a seat with NO PAD and
+  EDGE, ROUND 1 OVER before and after PRESS A, MATCH OVER. They are not in `docs/screenshots/`: the versus pictures
+  of plan §8 come with B2b's colours and HUD.
+
+#### How it fits together
+
+- **Inputs.** `App.input` is the active input, `App.solo` (a `LocalInput`: keyboard and every pad, single player and
+  the title) or `App.seats` (a `Seats`: the join screen and the races). `show_title()` and `start_game()` make `solo`
+  active and the title lets every pad leave its seat (`seats.reset()`); `show_join()` and `start_versus()` make
+  `seats` active. Both follow `Input.joy_connection_changed`. The tools and A2's tests still read
+  `app.input.pads.devices` and `app.input.held()` in single player.
+- **Menu commands.** `App._input()` gives every event to the active input (bytes) and to `App.nav` (menus), after the
+  fullscreen keys (which reach neither). A screen takes its commands in `frame()` (`app.nav.take()`); `App._process()`
+  drops what is left after the frame, and a screen switch drops them too.
+- **Screens and transitions:**
+
+  ```
+  Title --VERSUS chosen + confirm (Enter, Space, A, Start), or a click--> Join
+  Join --a seated pad's Start, when World.versus_valid() holds--> Versus (App.start_versus(): seats.lock())
+  Join --Esc, or a seated pad's Back (Select)--> Title (every pad leaves)
+  Versus, paused --a seated pad's Back, or Esc--> Title
+  Versus, match over, from MATCH_CONFIRM_TICKS steps --a seated pad's A or Start--> a rematch on the same screen
+                                                     --a seated pad's B or Back, or Esc--> Join (same pads, same bots)
+  ```
+
+  Within a match the rounds follow each other on the bytes (B1): any person's Start pauses and resumes; after a round,
+  a person's A (or Start) from `Config.MATCH_CONFIRM_TICKS` steps on starts the next one.
+- **The race screen** (`versus.gd`): `new_match()` makes `Match.create(Config.standard(), app.next_seed(), slots,
+  seats.humans_mask())` of the locked line-up; each frame takes the menu commands, then runs the clock's steps with
+  `seats.step_bytes(slots)` (it keeps stepping between rounds and after the match, so `phase_ticks` counts), then
+  draws. Esc while a round runs and the focus loss latch a pause press of the program (`seats.press()`), which the
+  next step carries. A rematch is a new `Match` with the next seed on the same line-up.
+- **Bytes.** A person's seat with its pad: `Held.to_byte(Pads.held_of(device), presses)`, the single-player mapping
+  (B or up throttle, A high gear and throttle, down brake, D-pad or stick steers; A and Start presses confirm, Start
+  pauses). A bot's seat, and a person's seat whose pad has gone: `PlayerInput.BOT`. A slot past the line-up: `NONE`.
+  The keyboard drives nothing in versus.
+
+#### The seats (`scripts/input/seats.gd`)
+
+Six seats, 0 to 5; seat s is P(s + 1) and has colour s for good. A seat is `FREE`, `PERSON` or `BOT` (`kind_of()`).
+
+| Call | What it does |
+|---|---|
+| `join(device)` | Join screen: a pad that holds no seat takes the lowest free seat (or -1). Its GUID is kept. |
+| `leave(device)` | Join screen: frees the pad's seat. |
+| `set_bots(n)` | Join screen: the players' choice (`wanted_bots`); `bots` is that choice within `min_bots()` (1 with one person, else 0) and `max_bots()` (6 - people). A person joining when every seat is taken pushes a bot out; the choice stays, so the bot comes back when the person leaves, and the bot a lone person gets goes when a second person joins. |
+| `bot_seats()`, `next_lineup()`, `can_start()` | Bots take the lowest free seats; the line-up is every person's and bot's seat in seat order; `can_start()` is `World.versus_valid()` for it. |
+| `lock()` / `open()` | Fix the line-up for a match (false, and nothing changes, unless `can_start()`) / end it: orphan seats are freed, the pads still here keep their seats, the bots stay chosen. |
+| `lineup`, `seat_at(slot)`, `humans_mask()` | World slot -> seat while locked; the human mask by slot for `Match.create()`. Slots are contiguous, seats need not be: people on seats 1 and 3 with one bot make slots 0, 1, 2 = seats 0 (the bot), 1, 3. |
+| `step_bytes(slots)`, `seat_byte(seat)` | The bytes above; each seat's pad presses count once. |
+| `press(bits)`, `program_slot()` | The program's presses (focus loss, Esc) go to the lowest person's seat that has its pad; if none has, to the lowest person's seat, whose byte is then `NONE` plus the press for that one step instead of 0xFF (a step that pauses moves nothing, so no car goes undriven). |
+| `connection_changed(device, connected)` | A pad gone: on the join screen it leaves its seat; in a race its seat is orphaned at once (0xFF from the next step, the seat stays a person's). A pad connected in a race takes back the lowest orphan seat whose pad had its GUID. |
+| `claim(device)` | In a race, A on a pad that holds no seat: the lowest orphan seat whose GUID matches, or else the lowest orphan seat. |
+| `seat_of(device)`, `has_pad(seat)`, `is_orphan(seat)`, `people()`, `cars()` | Queries. |
+| `guid_of` | `device -> GUID`: `Seats.engine_guid()` (`Input.get_joy_guid()` for a pad in `Input.get_connected_joypads()`, "" otherwise: the engine logs an error for a device it does not know). Tests set a fake. "" never matches. |
+| `handle_event()`, `take_presses()`, `clear_presses()`, `held()` | As `LocalInput`'s, per seat: only a seated pad's button events latch presses. |
+
+#### Menu commands (`scripts/input/nav.gd`)
+
+`Vector2i(device, command)`, the keyboard's device being `Nav.KEYBOARD` (-1). Keys by physical key: Up/W `UP`,
+Down/S `DOWN`, Left/A `LEFT`, Right/D `RIGHT`, Enter, keypad Enter and Space `ACCEPT`, Esc `BACK`; no repeats. Pads:
+D-pad and left stick directions, A `ACCEPT`, B `BACK`, Start `START`, Back `SELECT`. The stick makes a command when it
+crosses 0.5 (`Pads.STICK_THRESHOLD`) and again only after coming back inside 0.3.
+
+#### Fullscreen
+
+F11, or Enter or keypad Enter with Alt, going down (not a repeat), on any screen: `App.toggle_fullscreen()` sets the
+window's mode to `MODE_FULLSCREEN`, or back to `MODE_WINDOWED` from either fullscreen mode. The event reaches neither
+input nor nav, so Alt+Enter is no confirm press. project.godot's stretch settings keep the whole-number scale. Tests
+give the app a stand-in `Window` (`App.fullscreen_window`), since a headless window has no screen. Under xvfb the
+real window's DisplayServer mode went to fullscreen (3) on F11 and back on Alt+Enter, and the title stayed; the
+window's size did not change there (no window manager), so the fullscreen picture itself was not seen. The title's
+best-score band names the keys.
+
+#### The self test's versus leg
+
+`App.selftest_versus_problems()`, run by `--selftest` after A2's checks (so by `tools/export_check.sh` on the pack):
+the join screen and the race through the real screens, two synthetic pads (devices 90 and 91, nothing held) and one
+bot, `SELFTEST_TICKS` steps on a road kept empty (the rules are the simulation tests' business; an empty road keeps
+any `--seed` from ending the round early). It checks the match's seats, a pause and a resume by the program's press,
+that the bot drove, that the second pad's disconnect (through the app's handler) hands its seat to its bot without
+stopping the round, a replay of the same bytes, a round ended by an empty tank, and the way back to the title. Then
+the drawn part: A2's 120 frames of a game, 30 of the join screen with two pads and a bot, 60 of their race. The line
+became `selftest: ok (600 ticks checked, 600 versus ticks checked, 210 frames drawn)`; `tools/export_check.sh` checks
+only its `selftest: ok` start. The A2 and A3 sections above quote the old line.
+
+#### Edits of other agents' files, with tests
+
+- `scripts/app/app.gd` (A2): `solo`, `seats`, `nav`, `title_choice`, `fullscreen_window`; `show_join()`,
+  `start_versus()`, `toggle_fullscreen()`, `toggled_window_mode()`, `is_fullscreen_key()`; `show_title()` and
+  `start_game()` choose the input; `_switch_to()` and `_process()` drop menu commands; `_input()` handles the
+  fullscreen keys first; connection changes go to both inputs and nav; `boot()` adds the recoloured cars; the self
+  test's versus leg and drawn frames (`selftest_versus_problems()`, `SELFTEST_PADS`, `SELFTEST_DISCONNECT_TICK`,
+  `SELFTEST_JOIN_FRAMES`, `SELFTEST_VERSUS_FRAMES`). Tests: `tests/test_title_choice.gd`, `test_join_screen.gd`,
+  `test_race_screen.gd` (`test_the_self_tests_versus_leg_passes`); every test of `tests/test_app.gd` passes
+  unchanged.
+- `scripts/app/title.gd` (A2): the two choices (`CHOICE_SINGLE`, `CHOICE_VERSUS`), Up and Down from `nav`, confirm from
+  `app.input` as before, a click on either button, the remembered choice. Tests: `tests/test_title_choice.gd`; A2's
+  `test_a_confirm_press_on_the_title_starts_a_game`, `test_a_click_on_start_starts_a_game` and
+  `test_pad_events_drive_the_game` pass unchanged (1 PLAYER is the default choice, and `START_BUTTON` is its button).
+- `scripts/view/title_view.gd` and `scripts/view/view_config.gd` (A2): `TITLE_CHOICES`, `START_BUTTON` (moved: now the
+  1 PLAYER button), `VERSUS_BUTTON`, `VERSUS_NOTE` on a dark band (`note_band()`), the prompt's text, `FULLSCREEN_HINT`
+  on the best-score band, `choice_buttons()`, `set_choice()`. Tests:
+  `tests/test_title_choice.gd::test_the_two_buttons_fit_between_the_title_and_the_car`, A2's view tests (the prompt
+  fits the screen, the car stays clear of `START_BUTTON`, text sizes), `scalecheck`, and the 01 screenshot looked at.
+- `scripts/view/cars.gd` (A2): `seat_colours` (slot -> seat, empty in single player) and `seat_car_sprite()`, which
+  is `player_sprite()` in single player. Tests: `tests/test_seat_colours.gd`; the screenshots 02 to 06 unchanged.
+- `README.md` (A3): State, Run (the fullscreen keys), Controls (the title, 1 PLAYER, VERSUS), the `--selftest`
+  line, Layout (with B1's `match` and `bot`, which it lacked). The Rules section still describes single player only:
+  the versus rules are B1's to add.
+
+#### Deviations from the plan and the lead's design, with reasons
+
+- **World slots are not seats.** A seat keeps its colour; the match's world gets slots 0, 1, ... for the seats with a
+  car, in seat order (`Seats.lineup`), and the view maps slots to seats. Without it, a seat left free between two
+  people (B on the join screen) would either force bots into the gap or change somebody's colour.
+- **The bot count keeps the players' choice** and uses it within the rules' bounds, so the bot forced on a lone person
+  goes away when a second person joins instead of staying as if chosen.
+- **A pad that disconnects on the join screen leaves its seat**, and back on the join screen after a match the orphan
+  seats are freed: there is no car to drive there, and a reserved seat nobody holds would only be confusing.
+- **The keyboard in versus**: Esc goes back on the join screen and at the match's end, quits while paused (the lead's
+  design) and pauses a running round (a press of the program, like the focus loss); nothing else. Versus is pads
+  only for driving, and Esc is the PC's pause key.
+- **The match-over keys wait `MATCH_CONFIRM_TICKS` steps**, like the round's confirm: A is held for high gear while
+  racing, so a press in a race's last second would skip the panel. Start also plays the rematch (it confirms
+  elsewhere).
+- **The program's press on an orphan seat** (all people's pads gone) is a `NONE` byte with the press for one step
+  instead of 0xFF, so the focus loss can still pause.
+- **A new input file, `nav.gd`**, not in plan §2: menus need per-device presses the byte does not carry (B, Back, the
+  D-pad as presses) and the keyboard's arrows as presses.
+- **The self test** gained a versus leg and 90 drawn frames, and its line changed (above).
+- **The title**: the START button became the 1 PLAYER button (same constant), the prompt names both choices, a note
+  under VERSUS, the fullscreen keys on the best-score band; the app remembers the last choice.
+- **Distances in the round panel** are whole px of world (the rules define no unit for players).
+- **A rematch keeps the line-up even with a pad gone**: the seat stays a person's and its bot drives until the pad, or
+  another one with A, takes it.
+
+#### Known gaps
+
+- **No physical pad** was used: joins, presses, held controls, disconnects and reconnects were driven with synthetic
+  `InputEvent`s and `Input.joy_connection_changed.emit()`, GUIDs by a fake source. `Input.get_joy_guid()` of real pads
+  is untried. With XInput on Windows every Xbox pad may report the same GUID; pads that share a GUID come back in seat
+  order, whichever is which.
+- **Fullscreen** was not seen on a real desktop (above).
+- **The colours are placeholders**: RED is car_red itself, PURPLE, PINK, TEAL, WHITE, BLACK. WHITE (#d9d6d2) is close
+  to the white the truck's container and every sprite's details use (#f0eeec); BLACK (#3a3a40) is close to the
+  traffic's dark grey (#383838) and hard to see on the road. Nothing measures their distance yet.
+- **The HUD and panels are plain**: a seat panel uses a third of a side panel, mostly empty at the bottom; no event
+  messages (PASS +50, OIL...) per seat in versus; the round panel's table is small type.
+- **No versus smoke scenario** (B3's) and no versus pictures in `docs/screenshots/` (B2b's, plan §8).
+- A pad pressing A to claim an orphan seat does not also confirm (its first press only claims).
+- When every person's pad is gone, a paused round stays paused until a pad takes a seat (0xFF never resumes), and the
+  results wait (B1: 0xFF never confirms); Esc still quits while paused.
+
+#### For B2b
+
+- **Colours**: change `PlayerColours.SHADES` (body, dark, light per seat, replacing car_red's #ae2633, #611732,
+  #f26864) and `NAMES`; everything else follows (`colour()`, `text_colour()`, `add_frames()`, which recolours
+  `car_red`, `car_red_ccw45` and `car_red_cw45` at boot into frames named by `frame_name()`). Traffic colours to keep
+  away from (the atlas, besides the black outline and the window greys): yellow car #f1bb3b, #e86c18; salmon car
+  #d4705c, #844239, #efb681; blue car #1f95e1, #264fa4, #6de0e5; truck #42ad37, #206348, #b4e357, #f0eeec, #a69f96,
+  #383838; the fuel car (police sprite, always tinted by the rainbow) is the declared exception. Plan §8 wants
+  `test_colour_sets_disjoint` and a pixel-sampling check of the six cars on a versus screenshot.
+- **HUD** (`versus_hud.gd`): the pure parts are tested and can stay: `seat_panel_rect()`, `seat_info()`, `mark_of()`,
+  `overlay_for()`, `round_lines()`, `match_lines()`, `row()`; the drawing is `draw_seat_panel()`, `draw_bar()`,
+  `draw_panel()`. Text sizes must be `ViewConfig.TEXT_SIZES` (`tests/test_view.gd`); keep string literals that look
+  like frame names out of `scripts/view/` unless they are atlas frames (`tests/test_assets.gd`).
+- **Join view** (`join_view.gd`): `card_rect()`, `draw_card()`, `state_text()`, `status_text()`.
+- **Pictures**: the versus shots of plan §8 (join screen, six cars, the six-seat HUD, a round's end). A versus leg
+  for `tools/screenshots.gd` must leave 01 to 06 as they are; `tools/tool_base.gd`'s `pad_tap()` and
+  `pad_button()` drive the join screen as a player would (A per pad, D-pad right for bots, Start).
+
+#### Requests for B1
+
+None: B2 needed nothing new from the simulation. The self test's versus leg keeps the road empty by clearing
+`world.traffic` before each step from `scripts/app` (it checks the screens, not the rules). What B2 relies on, so that
+B1's review fixes keep it:
+
+- `Match`: `create()`, `step()`, `phase`, `phase_ticks` (counting in `MATCH_OVER` too: the match-over keys wait on
+  it), `round_number`, `wins`, `totals`, `winner`, `last_round_winner()`, `human_seats()`, `world`;
+  `Config.MATCH_CONFIRM_TICKS`, `Config.VERSUS_SEATS_MAX`.
+- `World`: a human seat's byte other than 0xFF pauses a running round and that step moves nothing (the program's
+  press on an orphan seat; `tests/test_join_seats.gd::test_a_press_on_an_orphan_seat_pauses_without_moving`); `Car`
+  fields `human`, `alive`, `score`, `distance`, `fuel`, `touching_edge`, `slot`.
+- If B1's review changes any of these, the tests above say where.

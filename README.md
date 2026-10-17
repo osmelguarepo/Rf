@@ -11,10 +11,14 @@ GrafxKid's CC0 sheet, the Press Start 2P font, no sound.
 - **Phase A, the single-player game, is done.** The rules of the earlier Phaser prototype are ported to a pure,
   deterministic GDScript simulation and checked against traces recorded from the TypeScript version. Phase A also
   covers the scenes, the view, keyboard and gamepad input, the tests, a smoke test, a pack export check and CI.
-- **Phase B, local multiplayer, is planned and not built yet:** up to 6 cars on one screen, one gamepad each, bots
-  for the empty seats, best of 3 rounds, and Steam Input through GodotSteam. The owner's decisions are in
-  `docs/DECISIONES_MULTIJUGADOR.md`, the plan in `docs/GODOT_PLAN.md` (both in Spanish). `docs/HANDOFF.md` has each
-  step's notes: files, how to verify, APIs, known gaps.
+- **Phase B, local multiplayer, is under way.** The versus mode is playable from the title's VERSUS choice: up to 6
+  cars on one screen, one gamepad each, bots for the seats people leave empty, best of 3 rounds. Done: the versus
+  rules, the match and the bots (B1), and the versus screens (B2, first part): the join screen, a seat per gamepad, the
+  race, the round and match results, rematch, gamepads that disconnect and come back. Still to come: the six final
+  player colours and the final look of the six-player HUD (the colours and panels in the game now are placeholders),
+  QA with six cars and real Linux and Windows builds (B3), and Steam Input through GodotSteam (B4). The owner's
+  decisions are in `docs/DECISIONES_MULTIJUGADOR.md`, the plan in `docs/GODOT_PLAN.md` (both in Spanish).
+  `docs/HANDOFF.md` has each step's notes: files, how to verify, APIs, known gaps.
 - Targets: Steam on the desktop (Linux and Windows) first, the web later.
 - The Phaser prototype is no longer in the tree. It is in git at commit `0a0841f`.
 
@@ -36,10 +40,17 @@ You need the Godot 4.7.2 editor, the standard build (not .NET): the `Godot_v4.7.
   the previous seed + 1.
 
 The window opens at 1920x1080, three times the 640x360 picture. On a smaller screen it shrinks to the largest whole
-multiple that fits, such as 1280x720 on a 1366x768 screen. There is no fullscreen key yet. The game pauses when its
-window loses focus. The best score lasts for the session only; nothing is saved.
+multiple that fits, such as 1280x720 on a 1366x768 screen. **F11** or **Alt+Enter**, on any screen, switches between
+the window and fullscreen; the picture keeps a whole-number scale (3x on a 1920x1080 screen, with black bars where it
+does not fill the screen). The game pauses when its window loses focus. The best score lasts for the session only;
+nothing is saved.
 
 ## Controls
+
+The title has two choices, **1 PLAYER** and **VERSUS**: Up and Down (arrow keys, W and S, a gamepad's D-pad or left
+stick) choose, and Enter, Space, A or Start picks. A click or tap on a choice picks it too.
+
+### 1 PLAYER
 
 The keyboard and every connected gamepad drive the car together. Keys are bound by position (the names are QWERTY).
 
@@ -54,8 +65,31 @@ The keyboard and every connected gamepad drive the car together. Keys are bound 
 | After a game over: play again | Enter, keypad Enter or Space | A |
 | After a game over: back to the title | Esc or P | Start |
 
-Gamepad buttons are by position: A is the bottom face button, B the right one. A click or tap on START also starts
-a game.
+Gamepad buttons are by position: A is the bottom face button, B the right one.
+
+### VERSUS (gamepads only)
+
+Each player has a gamepad; the keyboard only goes back (Esc) and switches fullscreen. Each player's car is the colour
+of their seat, which is the only way to tell players apart: P1 to P6, each colour for good.
+
+| When | What | Gamepad | Keyboard |
+|---|---|---|---|
+| Join screen | Join: take the lowest free seat and its colour | A | |
+| Join screen | Leave the seat | B | |
+| Join screen | Fewer or more bots (one at least with one player, six cars at most) | D-pad or stick left and right | |
+| Join screen | Start the race (two cars at least) | Start | |
+| Join screen | Back to the title | Back (Select, View) | Esc |
+| Race | Drive | As in 1 PLAYER: B or up throttle, A high gear, down brake, D-pad or stick steers | |
+| Race | Pause and resume (any player) | Start | Esc pauses |
+| Paused | Quit to the title | Back | Esc |
+| Round over | Next round (after one second) | A or Start | |
+| Match over | Rematch: same seats, new traffic (after one second) | A or Start | |
+| Match over | Back to the join screen, with the same players | B or Back | Esc |
+| Any time | A gamepad that holds no seat takes the seat of a disconnected gamepad | A | |
+
+Bots take the lowest free seats and show as BOT. When a gamepad disconnects mid-race, its bot drives
+that car without stopping the round (its panel says NO PAD); the same gamepad gets it back when it reconnects, and
+otherwise any gamepad that holds no seat takes it with A.
 
 ## Rules
 
@@ -111,9 +145,12 @@ tools/export_check.sh           # exports build/fuel_rivals.pck and runs its sel
 ```
 
 - `--selftest` (after `--`, also in an exported game) boots, plays 600 steps through the real screens with a
-  scripted input, checks pause and resume and that a replay gives the same game, draws 120 frames and quits with 0 or
-  1: `"$GODOT" --headless --path . -- --selftest` prints `selftest: ok (600 ticks checked, 120 frames drawn)`. It
-  starts from seed 1 unless `--seed=N` is given.
+  scripted input, checks pause and resume and that a replay gives the same game, then plays a 600-step versus race
+  through the join and race screens (two synthetic gamepads and a bot: pause, a gamepad that disconnects, the end of a
+  round), draws 210 frames (a game, the join screen, a race) and quits with 0 or 1:
+  `"$GODOT" --headless --path . -- --selftest` prints
+  `selftest: ok (600 ticks checked, 600 versus ticks checked, 210 frames drawn)`. It starts from seed 1 unless
+  `--seed=N` is given.
 - The tests use their own runner, `tests/run_tests.gd`, with GUT-style asserts (`tests/test_case.gd`).
   `tests/PARITY.md` maps each rule test of the Phaser version to its GDScript test, or gives the reason it was
   dropped.
@@ -148,13 +185,16 @@ export_presets.cfg   the Linux and Windows Desktop presets
 icon.svg
 assets/              sprites.png and sprites.json (the atlas), font/ (Press Start 2P and its OFL.txt),
                      source/ (the original sheet; Godot ignores it)
-scenes/              boot.tscn (main scene), title.tscn, game.tscn
+scenes/              boot.tscn (main scene), title.tscn, game.tscn; join.tscn and versus.tscn (versus)
 scripts/
-  sim/               the rules: config, rng, car, fuel, traffic, collision, player_input, world (no nodes)
-  input/             keyboard (input map built in code), pads (read per device), held, local_input
-  view/              atlas, pixel_art, draw, road, cars, hud, title_view, view_config
-  app/               app (boot, fixed step, focus pause, screens, --selftest), fixed_step, title, game
-tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, PARITY.md, golden/
+  sim/               the rules: config, rng, car, fuel, traffic, collision, player_input, world, match, bot (no nodes)
+  input/             keyboard (input map built in code), pads (read per device), held, local_input (1 player),
+                     seats (versus: a seat per gamepad), nav (menu commands)
+  view/              atlas, pixel_art, draw, road, cars, hud, title_view, view_config; join_view, versus_hud,
+                     player_colours (versus)
+  app/               app (boot, fixed step, focus pause, screens, fullscreen, --selftest), fixed_step, title, game;
+                     join and versus (versus)
+tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, screen_helpers.gd, PARITY.md, golden/
 tools/               test.sh, run_tool.sh, export_check.sh; smoke.gd, screenshots.gd, scalecheck.gd, tool_base.gd;
                      slice-sheet.py and fetch_assets.py (the atlas); gen_golden/ (the TypeScript golden traces)
 docs/                GODOT_PLAN.md, DECISIONES_MULTIJUGADOR.md, HANDOFF.md, PLAN.md and ART_PLAN.md (the Phaser

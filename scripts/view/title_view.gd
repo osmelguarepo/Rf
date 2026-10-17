@@ -1,7 +1,8 @@
 extends Node2D
 ## The title screen's drawing (create() in src/scenes/TitleScene.ts, Phaser version), laid out for 16:9: the title
-## over the road, keyboard and gamepad controls in boxes on the grass either side, the START button, the player's
-## car in its start lane, a blinking prompt and the best score this session. The road behind is a road.gd node.
+## over the road, keyboard and gamepad controls in boxes on the grass either side, the two choices (1 PLAYER and
+## VERSUS, B2) with the one shown lit, the player's car in its start lane, a blinking prompt, and the best score this
+## session with the fullscreen keys. The road behind is a road.gd node.
 
 const ViewConfig := preload("res://scripts/view/view_config.gd")
 const Atlas := preload("res://scripts/view/atlas.gd")
@@ -15,6 +16,8 @@ var cfg: Config
 var best: int = 0
 ## The prompt is drawn at full alpha when true, dimmed when false.
 var prompt_bright: bool = true
+## The choice drawn lit: an index of ViewConfig.TITLE_CHOICES.
+var choice: int = 0
 
 
 func setup(p_atlas: Atlas, p_cfg: Config, p_best: int) -> void:
@@ -29,6 +32,25 @@ func set_prompt_bright(bright: bool) -> void:
 	if bright != prompt_bright:
 		prompt_bright = bright
 		queue_redraw()
+
+
+func set_choice(p_choice: int) -> void:
+	if p_choice != choice:
+		choice = p_choice
+		queue_redraw()
+
+
+## The buttons of the choices, in ViewConfig.TITLE_CHOICES order.
+static func choice_buttons() -> Array[Rect2i]:
+	return [ViewConfig.START_BUTTON, ViewConfig.VERSUS_BUTTON]
+
+
+## The dark band under the versus note, so the lane dashes do not cut through it.
+static func note_band(p_font: Font) -> Rect2i:
+	var small := ViewConfig.TEXT_SMALL
+	var width := Draw.text_width(p_font, ViewConfig.VERSUS_NOTE, small) + small
+	var left := (ViewConfig.VIEW_W - width) >> 1
+	return Rect2i(left, ViewConfig.VERSUS_NOTE_Y - (small >> 1), width, small * 2)
 
 
 ## Hitbox of the still player car: its start lane, its top at TITLE_CAR_TOP.
@@ -48,19 +70,31 @@ func _draw() -> void:
 	_draw_controls(ViewConfig.CONTROLS_LEFT, "KEYBOARD", ViewConfig.CONTROLS_KEYBOARD)
 	_draw_controls(ViewConfig.CONTROLS_RIGHT, "GAMEPAD", ViewConfig.CONTROLS_PAD)
 
-	var button := ViewConfig.START_BUTTON
-	Draw.rect(self, button, ViewConfig.LIGHT_RED)
-	Draw.rect(self, button.grow(-2), ViewConfig.RED)
-	var label_top := button.position.y + ((button.size.y - ViewConfig.TEXT_MEDIUM) >> 1)
-	Draw.shadowed_centred(self, font, button.get_center().x, label_top, "START", ViewConfig.TEXT_MEDIUM, ViewConfig.WHITE)
-
+	var buttons := choice_buttons()
+	for i in buttons.size():
+		_draw_button(buttons[i], ViewConfig.TITLE_CHOICES[i], i == choice)
 	var small := ViewConfig.TEXT_SMALL
+	Draw.rect(self, note_band(font), Color(0, 0, 0, ViewConfig.BAND_ALPHA))
+	Draw.text_centred(self, font, centre, ViewConfig.VERSUS_NOTE_Y, ViewConfig.VERSUS_NOTE, small, ViewConfig.WHITE)
+
 	var text_dy := (ViewConfig.BAND_H - small) >> 1
 	for band_y: int in [ViewConfig.PROMPT_BAND_Y, ViewConfig.BEST_BAND_Y]:
 		Draw.rect(self, Rect2i(0, band_y, ViewConfig.VIEW_W, ViewConfig.BAND_H), Color(0, 0, 0, ViewConfig.BAND_ALPHA))
 	var prompt_colour := Color(ViewConfig.WHITE, 1.0 if prompt_bright else ViewConfig.PROMPT_DIM_ALPHA)
 	Draw.text_centred(self, font, centre, ViewConfig.PROMPT_BAND_Y + text_dy, ViewConfig.PROMPT, small, prompt_colour)
-	Draw.text_centred(self, font, centre, ViewConfig.BEST_BAND_Y + text_dy, "BEST THIS SESSION: %d" % best, small, ViewConfig.GREY)
+	var quarter := ViewConfig.VIEW_W >> 2
+	var best_top := ViewConfig.BEST_BAND_Y + text_dy
+	Draw.text_centred(self, font, quarter, best_top, "BEST THIS SESSION: %d" % best, small, ViewConfig.GREY)
+	Draw.text_centred(self, font, centre + quarter, best_top, ViewConfig.FULLSCREEN_HINT, small, ViewConfig.GREY)
+
+
+## A choice's button: lit (red with a light-red rim, white label) when it is the one shown, dark otherwise.
+func _draw_button(button: Rect2i, label: String, lit: bool) -> void:
+	Draw.rect(self, button, ViewConfig.LIGHT_RED if lit else ViewConfig.GREY)
+	Draw.rect(self, button.grow(-2), ViewConfig.RED if lit else ViewConfig.BLACK)
+	var label_top := button.position.y + ((button.size.y - ViewConfig.TEXT_MEDIUM) >> 1)
+	var colour := ViewConfig.WHITE if lit else ViewConfig.GREY
+	Draw.shadowed_centred(self, font, button.get_center().x, label_top, label, ViewConfig.TEXT_MEDIUM, colour)
 
 
 func _draw_controls(r: Rect2i, heading: String, lines: Array) -> void:
