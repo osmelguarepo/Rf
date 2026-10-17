@@ -1,7 +1,8 @@
 extends "res://tests/test_case.gd"
-## Seats: the N-player data model that phase B builds on (docs/GODOT_PLAN.md §3, §7). One input byte per seat,
-## 0xFF for a bot, per-seat bit masks on traffic, cars that pass through each other, and a camera on the leading
-## live car. The versus rules themselves (scoring, elimination, rounds) are phase B's and are not tested here.
+## Seats: the N-player data model that phase B builds on (docs/GODOT_PLAN.md §3, §7), in the single-player mode's
+## rules. One input byte per seat, 0xFF for a bot, per-seat bit masks on traffic, cars that pass through each other,
+## and a camera on the leading live car. The versus rules (scoring, elimination, rounds, each seat's own RNG stream)
+## are tested in tests/test_versus.gd, test_versus_round.gd and test_versus_rng.gd.
 
 const Config := preload("res://scripts/sim/config.gd")
 const Car := preload("res://scripts/sim/car.gd")
@@ -13,11 +14,17 @@ const H := preload("res://tests/sim_helpers.gd")
 var std := Config.standard()
 
 
-## Plan §6: two seats fed the same bytes stay identical, tick after tick, through passes and bumps. Each traffic
-## car is off the seats' centre line, so no bump direction is left to the RNG, and the seats steer into every skid,
-## so no roadside crash draws a fuel cost per seat.
-func test_two_players_same_inputs_identical() -> void:
+## Plan §6, narrowed as the lead's note after A1 asks: two seats fed the same bytes stay identical, tick after tick,
+## through passes and bumps, while neither draws from an RNG. In this mode every seat's random events (oil-skid
+## direction, roadside crash cost, centre-bump direction) draw from the one world RNG, in seat order, so the seats
+## would part at the first draw. Here no draw is left to happen: each traffic car is off the seats' centre line (no
+## bump direction to draw), there is no oil, and the seats steer into every skid (no roadside crash); the world RNG
+## is checked to be untouched. The general case, seats that draw, is the versus mode's: each seat has its own
+## stream, and tests/test_versus_rng.gd::test_traffic_same_for_2_and_6_seats checks that seats which draw leave the
+## traffic and the other seats alone.
+func test_two_players_same_inputs_identical_while_neither_draws() -> void:
 	var w := H.quiet_world(std, 6, 2)
+	var world_rng := w.rng.state
 	var x := w.player().x
 	H.add_traffic(w, Config.KIND_YELLOW, x + 5.0, 150.0, 60.0)
 	H.add_traffic(w, Config.KIND_RED, x - 4.0, 20.0, 80.0)
@@ -28,15 +35,12 @@ func test_two_players_same_inputs_identical() -> void:
 	for tick in 600:
 		var into_slide := int(signf(w.players[0].slide_vx))
 		H.run(w, PlayerInput.encode(true, false, into_slide, tick > 120))
-		var a := w.players[0].to_array()
-		var b := w.players[1].to_array()
-		a[0] = 0
-		b[0] = 0
-		if not strict_equal(a, b):
+		if not strict_equal(_seat_state(w.players[0]), _seat_state(w.players[1])):
 			differing += 1
 		seen[0] |= w.players[0].events
 		seen[1] |= w.players[1].events
 	assert_eq(differing, 0, "ticks where the two seats differed")
+	assert_eq(w.rng.state, world_rng, "no seat drew from the world RNG, so the property applies")
 	assert_eq(seen[0], seen[1])
 	assert_true((seen[0] & World.EV_PASS) != 0, "both passed cars")
 	assert_true((seen[0] & World.EV_BUMP) != 0, "both were bumped")
@@ -130,3 +134,12 @@ func test_camera_follows_the_leading_live_seat() -> void:
 		w.step(PackedByteArray([H.ACCEL, H.ACCEL]))
 	assert_eq(w.camera_y, w.players[0].y_world, "seat 0 caught up and leads")
 	assert_gt(w.camera_y, camera)
+
+
+## A seat's car state without what differs between seats by design: its slot and its own RNG stream (seeded per
+## seat, unused in this mode).
+static func _seat_state(p: Car) -> Array:
+	var a := p.to_array()
+	a[0] = 0
+	a[a.size() - 1] = 0
+	return a

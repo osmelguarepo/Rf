@@ -51,6 +51,7 @@ func test_to_array_covers_every_field() -> void:
 	assert_eq(w.to_array().size(), 3 + World.SCALARS.size() + 3, "FORMAT, profile, rng, SCALARS, spawner, seats, traffic")
 	var car := Car.new()
 	assert_eq(car.to_array().size(), _script_fields(car).size(), "Car fields")
+	assert_eq(_script_fields(car.rng), ["state"], "a seat's own Rng: one u32")
 	var object := Traffic.new()
 	assert_eq(object.to_array().size(), _script_fields(object).size(), "Traffic fields")
 	assert_eq(w.spawner.to_array().size(), _script_fields(w.spawner).size(), "Spawner fields")
@@ -149,10 +150,13 @@ static func _sorted(values: Array) -> Array:
 	return out
 
 
-## [owner, field] for every int and float field of the world, its RNG, spawner, seats and traffic.
+## [owner, field] for every int and float field of the world, its RNG, spawner, seats (and each seat's own RNG
+## stream) and traffic.
 static func _numeric_targets(w: World) -> Array:
 	var owners: Array = [w, w.rng, w.spawner]
 	owners.append_array(w.players)
+	for p: Car in w.players:
+		owners.append(p.rng)
 	owners.append_array(w.traffic)
 	var targets: Array = []
 	for owner: Object in owners:
@@ -174,6 +178,8 @@ static func _same_owner(copy: World, original: World, original_owner: Object) ->
 	for i in original.players.size():
 		if original.players[i] == original_owner:
 			return copy.players[i]
+		if original.players[i].rng == original_owner:
+			return copy.players[i].rng
 	for i in original.traffic.size():
 		if original.traffic[i] == original_owner:
 			return copy.traffic[i]
@@ -186,6 +192,7 @@ static func _dump(w: World) -> Dictionary:
 	var owners := {"world": w, "rng": w.rng, "spawner": w.spawner}
 	for i in w.players.size():
 		owners["seat%d" % i] = w.players[i]
+		owners["seat%d.rng" % i] = w.players[i].rng
 	for i in w.traffic.size():
 		owners["traffic%d" % i] = w.traffic[i]
 	for name: String in owners:

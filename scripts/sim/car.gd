@@ -3,9 +3,12 @@ extends RefCounted
 ##
 ## x is the left edge of the hitbox in screen px. y_world is the front (top) edge in world px: the distance driven
 ## this stage in single-player mode. The car's screen top is World.screen_y(y_world).
+##
+## The fields from `human` on are the versus mode's (World.MODE_VERSUS, B1); single-player mode leaves them alone.
 
 const Self := preload("res://scripts/sim/car.gd")
 const Config := preload("res://scripts/sim/config.gd")
+const Rng := preload("res://scripts/sim/rng.gd")
 
 const GEAR_LOW := 0
 const GEAR_HIGH := 1
@@ -29,6 +32,19 @@ var score: int = 0
 var alive: int = 1
 ## World.EV_* bits of the last step that concern this car.
 var events: int = 0
+## 1 for a person's seat, 0 for a bot's. Fixed when the world is made: a human seat that a bot drives after its
+## controller went away (input byte 0xFF) still counts as human.
+var human: int = 1
+## Versus: px of world driven while not touching the bottom edge (speed x K x dt per step). Distance points are paid
+## on it, and it breaks ties on points.
+var distance: float = 0.0
+## Versus: 1 if the car touched the bottom edge in the last running step (held on it, or its bottom edge at
+## Config.edge_touch or lower). It then earns no pass or distance points and loses extra fuel.
+var touching_edge: int = 0
+## The seat's own RNG stream, seeded by World.seat_seed(). In versus mode the seat's oil-skid direction, roadside
+## crash cost and centre-bump direction come from it, so a seat never moves the world RNG that makes the traffic.
+## Single-player mode draws them from the world RNG, as Phaser did.
+var rng: Rng = Rng.new(0)
 
 
 func is_skidding() -> bool:
@@ -129,11 +145,19 @@ func clone() -> Self:
 	c.score = score
 	c.alive = alive
 	c.events = events
+	c.human = human
+	c.distance = distance
+	c.touching_edge = touching_edge
+	c.rng = rng.clone()
 	return c
 
 
+## The RNG is its one u32 state.
 func to_array() -> Array:
-	return [slot, x, y_world, w, h, speed, gear, slide_vx, invulnerable, fuel, score, alive, events]
+	return [
+		slot, x, y_world, w, h, speed, gear, slide_vx, invulnerable, fuel, score, alive, events, human, distance,
+		touching_edge, rng.state
+	]
 
 
 static func from_array(a: Array) -> Self:
@@ -151,4 +175,8 @@ static func from_array(a: Array) -> Self:
 	c.score = a[10]
 	c.alive = a[11]
 	c.events = a[12]
+	c.human = a[13]
+	c.distance = a[14]
+	c.touching_edge = a[15]
+	c.rng = Rng.new(a[16])
 	return c
