@@ -16,7 +16,8 @@ extends RefCounted
 ##   pass through each other; points for passes, fuel cars and distance; denser traffic every 20 s; an empty tank or
 ##   a truck puts a seat out. A human out (or, against a single human, the last bot out) ends the round at the end
 ##   of the step: phase ROUND_OVER, with `winner` set. Each seat draws its own random events from its own stream
-##   (Car.rng), so the number of seats never changes the traffic's draws.
+##   (Car.rng), so the number of seats never changes the traffic's draws. A seat whose byte is 0xFF is driven by its
+##   bot (bot.gd, `bots`), which has a stream of its own too. match.gd plays rounds of one world into a match.
 
 const Self := preload("res://scripts/sim/world.gd")
 const Config := preload("res://scripts/sim/config.gd")
@@ -26,9 +27,10 @@ const Traffic := preload("res://scripts/sim/traffic.gd")
 const Fuel := preload("res://scripts/sim/fuel.gd")
 const Collision := preload("res://scripts/sim/collision.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
+const Bot := preload("res://scripts/sim/bot.gd")
 
-## Layout version of to_array(). 2: the versus fields (World.winner, and Car.human to Car.rng).
-const FORMAT := 2
+## Layout version of to_array(). 2: the versus fields (World.winner, and Car.human to Car.rng). 3: the bots.
+const FORMAT := 3
 
 ## Single-player stages: the Phaser game.
 const MODE_STAGES := 0
@@ -104,6 +106,9 @@ var winner: int = NO_WINNER
 var players: Array[Car] = []
 var traffic: Array[Traffic] = []
 var spawner: Traffic.Spawner
+## Versus: one bot per seat (bot.gd), whichever seat it is, so a human seat whose controller goes away can be driven
+## too. Single player has none: a 0xFF seat there gets no input, as in A1.
+var bots: Array[Bot] = []
 
 
 ## A new game: stage 1, full tanks, empty road. Every seat starts at the same place, in cfg.start_lane at
@@ -158,9 +163,15 @@ static func versus_valid(p_cfg: Config, p_seats: int, p_humans: int) -> bool:
 
 ## Seed of a slot's own RNG stream (Car.rng): the world's seed moved (slot + 1) x 2^28 draws along mulberry32's
 ## cycle (Config.SEAT_SEED_STEP). Slots 0 to 14 give streams that never overlap the world's or each other's within
-## 2^28 draws; bot.gd can use slot + VERSUS_SEATS_MAX for a stream of its own.
+## 2^28 draws.
 static func seat_seed(p_game_seed: int, p_slot: int) -> int:
 	return (p_game_seed + (p_slot + 1) * Config.SEAT_SEED_STEP) & 0xFFFFFFFF
+
+
+## Seed of a seat's bot stream (Bot.rng): seat_seed() of slot + Config.BOT_STREAM_SLOT_OFFSET, so slots 6 to 11,
+## apart from the world's stream and the seats' own.
+static func bot_seed(p_game_seed: int, p_slot: int) -> int:
+	return seat_seed(p_game_seed, p_slot + Config.BOT_STREAM_SLOT_OFFSET)
 
 
 func _init_versus(p_seats: int, p_humans: int) -> void:
@@ -175,14 +186,16 @@ func _init_versus(p_seats: int, p_humans: int) -> void:
 		car.human = (p_humans >> slot) & 1
 		car.rng = Rng.new(seat_seed(game_seed, slot))
 		players.append(car)
+		bots.append(Bot.new(bot_seed(game_seed, slot)))
 	start_round()
 
 
 ## Versus: starts a round. Every seat is back in its start lane on the anchor line, alive, stopped in low gear, with
 ## a full tank and no score, distance, skid or invulnerability. The road is empty, the gaps and the difficulty clock
-## (gap_scale, stage_ticks) start over with a new spawner (three world-RNG draws), the phase is RUNNING and nobody
-## has won. Kept: the world RNG and every seat's stream (they continue, plan §7), the human flags, tick, game_seed.
-## World.versus() calls it; match.gd (B1b) can call it again for each later round.
+## (gap_scale, stage_ticks) start over with a new spawner (three world-RNG draws), every bot starts afresh
+## (Bot.reset()), the phase is RUNNING and nobody has won. Kept: the world RNG, every seat's stream and every bot's
+## (they continue, plan §7), the human flags, tick, game_seed. World.versus() calls it, and match.gd for each later
+## round.
 func start_round() -> void:
 	var lanes: Array = Config.VERSUS_START_LANES[players.size()]
 	for p: Car in players:
@@ -206,6 +219,8 @@ func start_round() -> void:
 	events = 0
 	traffic = []
 	spawner = _versus_spawner()
+	for b: Bot in bots:
+		b.reset()
 
 
 ## Seat 0, the single player.
@@ -307,11 +322,13 @@ func _step_versus(inputs: PackedByteArray) -> void:
 		events |= p.events
 
 
-## Phase B: bot.gd picks the byte here, from this world, so a bot takeover replays exactly. Until then a bot seat
-## gets no input. Versus calls it only on running steps (_step_versus()); single player calls it on every step for
-## every 0xFF seat.
-func _bot_byte(_car: Car) -> int:
-	return PlayerInput.NONE
+## The byte of a seat whose input byte is 0xFF. Versus: the seat's bot picks it from this world (Bot.next_byte()),
+## so a bot or a bot takeover replays exactly; _step_versus() asks only on running steps, once per live 0xFF seat, in
+## seat order. Single player: no input, as in A1 (it asks on every step, paused or not, and has no bots).
+func _bot_byte(car: Car) -> int:
+	if mode != MODE_VERSUS:
+		return PlayerInput.NONE
+	return bots[car.slot].next_byte(cfg, car, players, traffic, camera_y + anchor, stage_ticks)
 
 
 ## One running step, in the order of Phaser's runStep(). The RNG draws happen in the same order, so the phaser
@@ -847,7 +864,7 @@ func _next_stage() -> void:
 
 
 ## Every field of the state, as plain ints, floats and arrays: [FORMAT, profile, rng state, SCALARS...,
-## spawner, seats, traffic]. Floats are never turned into text.
+## spawner, seats, traffic, bots]. Floats are never turned into text.
 func to_array() -> Array:
 	var a: Array = [FORMAT, cfg.profile, rng.state]
 	for field: String in SCALARS:
@@ -861,12 +878,16 @@ func to_array() -> Array:
 	for c: Traffic in traffic:
 		objects.append(c.to_array())
 	a.append(objects)
+	var drivers: Array = []
+	for b: Bot in bots:
+		drivers.append(b.to_array())
+	a.append(drivers)
 	return a
 
 
 ## Rebuilds a world from to_array(). p_cfg must be the profile the array was made with.
 static func from_array(p_cfg: Config, a: Array) -> Self:
-	if a.size() != 6 + SCALARS.size() or a[0] != FORMAT or a[1] != p_cfg.profile:
+	if a.size() != 7 + SCALARS.size() or a[0] != FORMAT or a[1] != p_cfg.profile:
 		push_error("World.from_array: wrong format or profile")
 		return null
 	var w := Self.new(p_cfg, 0, 0)
@@ -878,6 +899,8 @@ static func from_array(p_cfg: Config, a: Array) -> Self:
 		w.players.append(Car.from_array(seat))
 	for object: Array in a[5 + SCALARS.size()]:
 		w.traffic.append(Traffic.from_array(object))
+	for driver: Array in a[6 + SCALARS.size()]:
+		w.bots.append(Bot.from_array(driver))
 	return w
 
 
@@ -896,4 +919,6 @@ func clone() -> Self:
 		w.players.append(p.clone())
 	for c: Traffic in traffic:
 		w.traffic.append(c.clone())
+	for b: Bot in bots:
+		w.bots.append(b.clone())
 	return w

@@ -36,8 +36,9 @@ const FORBIDDEN := [
 	["await", "\\bawait\\b"],
 	["literal with 10+ decimals", "\\b\\d+\\.\\d{10,}"],
 ]
-## Types a field may have: numbers, and the simulation's own classes and arrays of them.
-const FIELD_TYPE := "^(int|float|Config|Rng|Car|Traffic|Spawner|Traffic\\.Spawner|Self|Array\\[(int|float|Car|Traffic)\\])$"
+## Types a field may have: numbers, and the simulation's own classes and arrays of them (Bot and World since B1b:
+## World.bots and Match.world).
+const FIELD_TYPE := "^(int|float|Config|Rng|Car|Traffic|Spawner|Traffic\\.Spawner|Bot|World|Self|Array\\[(int|float|Car|Traffic|Bot)\\])$"
 
 
 func test_sim_purity() -> void:

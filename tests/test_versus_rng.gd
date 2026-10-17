@@ -15,8 +15,6 @@ const DT := Config.DT
 const EPS := 1e-9
 ## mulberry32's state step per draw (scripts/sim/rng.gd).
 const RNG_STEP := 0x6D2B79F5
-## The seed of the 6-seat determinism run (test_versus_six_seats_same_checksum_twice).
-const SIX_SEED := 7200
 ## _scripted_step(): no round ended in the step.
 const NOT_ENDED := -2
 
@@ -94,10 +92,11 @@ func test_seat_streams_start_2_pow_28_draws_apart() -> void:
 
 ## Adding seats does not change the traffic: two versus worlds from one seed, with 2 seats and with 6, seats 0 and 1
 ## driving the same way in both (invulnerable and fast, so they never fall back among the others). In the 6-seat
-## world four bots trail on the bottom edge, where traffic bumps them, oil spins them, the roadside costs them fuel
-## (draws from their own streams), they take fuel cars and blue cars head their way. At every tick both worlds still
-## have the same world RNG, camera and spawner, seats 0 and 1 are identical, and they spawn the same objects in the
-## same places. One extra draw from the world RNG at the start would have changed the whole sequence.
+## world four bot seats with no input trail on the bottom edge, where traffic bumps them, oil spins them, the roadside
+## costs them fuel (draws from their own streams), they take fuel cars and blue cars head their way. At every tick both
+## worlds still have the same world RNG, camera and spawner, seats 0 and 1 are identical, and they spawn the same
+## objects in the same places. One extra draw from the world RNG at the start would have changed the whole sequence.
+## (The same with bots that drive: tests/test_bot.gd::test_traffic_does_not_depend_on_the_number_of_bots.)
 func test_traffic_same_for_2_and_6_seats() -> void:
 	var two := _pair_world(2)
 	var six := _pair_world(6)
@@ -163,19 +162,6 @@ func test_versus_restore_midway_same_checksum() -> void:
 	assert_gt(rounds, 0, "a round ended and a new one started")
 
 
-## Plan §8 B1: 6 seats for 7200 ticks give the same checksum on two runs (2 humans, scripted, and 4 bots; a new round
-## starts whenever one ends). The golden checksum file, tests/golden/versus_checksum.txt, is left to B1b: its run must
-## include bot.gd, which does not exist yet.
-func test_versus_six_seats_same_checksum_twice() -> void:
-	var first := _six_seat_run()
-	var second := _six_seat_run()
-	assert_eq(second, first, "checksum and round winners")
-	assert_eq(str(first[0]).length(), 64)
-	assert_gt((first[1] as Array).size(), 2, "rounds played in 7200 ticks")
-	for winner: int in first[1]:
-		assert_has([World.NO_WINNER, 0, 1], winner, "a human seat or nobody")
-
-
 # --- helpers ---------------------------------------------------------------------------------------------------------
 
 
@@ -192,14 +178,15 @@ func _pair_world(seats: int) -> World:
 	return w
 
 
-## Seats 0 and 1: throttle in high gear, steering into any skid. Bots: 0xFF.
+## Seats 0 and 1: throttle in high gear, steering into any skid. Bot seats: no input (a bot given a byte is driven
+## by it), so they stand in the traffic's way and draw from their own streams.
 static func _pair_bytes(w: World) -> PackedByteArray:
 	var bytes := PackedByteArray()
 	for p: Car in w.players:
 		if p.slot < 2:
 			bytes.append(PlayerInput.encode(true, false, int(signf(p.slide_vx)), true))
 		else:
-			bytes.append(PlayerInput.BOT)
+			bytes.append(PlayerInput.NONE)
 	return bytes
 
 
@@ -237,14 +224,3 @@ static func _scripted_step(w: World, tick: int) -> int:
 	var winner := w.winner
 	w.start_round()
 	return winner
-
-
-## [checksum, winners of the rounds that ended] of 7200 ticks of a 6-seat game.
-func _six_seat_run() -> Array:
-	var w := World.versus(std, SIX_SEED, 6, 0b000011)
-	var winners: Array = []
-	for tick in 7200:
-		var winner := _scripted_step(w, tick)
-		if winner != NOT_ENDED:
-			winners.append(winner)
-	return [w.checksum(), winners]

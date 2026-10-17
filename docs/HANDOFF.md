@@ -704,3 +704,274 @@ Car or World field; `tests/test_world_state.gd` checks coverage).
   `distance_step`, `VERSUS_SHRINK_TICKS`, `VERSUS_GAP_SHRINK` and `versus_gap_min`. Not tried by playing.
 - In single player a `0xFF` seat still asks the hook on paused steps (A1's behaviour, kept unchanged); it would only
   matter if a bot ever drove a single-player seat.
+
+### Part 2 (agent B1b): the match and the bots
+
+The best-of-three match (`scripts/sim/match.gd`), the bots (`scripts/sim/bot.gd`, hooked into `World._bot_byte()`),
+the versus golden checksum and a tool that measures bot play. Part 1's B1b gaps are closed: bots drive, the match
+exists, `test_first_to_two_and_cap_five` and `test_round_reset` pass, `tests/golden/versus_checksum.txt` is written.
+Still no UI (B2).
+
+#### Files
+
+- **Simulation** (B1's):
+  - `scripts/sim/match.gd` (new): rounds of one versus World until the match is decided.
+  - `scripts/sim/bot.gd` (new): the bot policy and each bot's state.
+  - `scripts/sim/world.gd`: `bots` (one Bot per seat in versus; none in single player), `World.bot_seed()`,
+    `_bot_byte()` asks the seat's bot in versus, `start_round()` resets the bots, `to_array()` / `from_array()` /
+    `clone()` carry them; `FORMAT` is 3.
+  - `scripts/sim/config.gd`: the bot values (`BOT_*` constants, `bot_*` standard-profile fields) and the match values
+    (`MATCH_*`).
+- **Tests** (26 new, 1 replaced: 226 in all): `tests/test_bot.gd` (16), `tests/test_match.gd` (9),
+  `tests/test_versus_golden.gd` (1) and `tests/golden/versus_checksum.txt`.
+- **B1's own tests changed** (`tests/test_versus_rng.gd`):
+  - `test_traffic_same_for_2_and_6_seats` gives its four trailing bot seats no input (`NONE`) instead of 0xFF. With
+    0xFF they used to stand still too (no bot existed); now bot.gd would drive them out of the traffic's way and the
+    test would no longer see seats that draw from their own streams. The same property with driving bots is
+    `tests/test_bot.gd::test_traffic_does_not_depend_on_the_number_of_bots`.
+  - `test_versus_six_seats_same_checksum_twice` is replaced by
+    `tests/test_versus_golden.gd::test_six_seats_7200_ticks_match_the_golden_checksum` (two runs and the file, every
+    seat driven by bot.gd, through Match).
+- **Files of other agents edited** (A1's tests), each checked by the tests it is part of:
+  - `tests/test_world_state.gd`: `bots` is a composite field of World; `to_array()` has one more entry; a Bot has one
+    `to_array()` entry per field and its Rng one u32; `test_every_field_round_trips_and_moves_the_checksum` also runs
+    on a versus world, covering every bot field, each bot's stream and every byte a bot has pending.
+  - `tests/test_sim_purity.gd`: the allowed field types include `Bot`, `World` and `Array[Bot]` (`World.bots`,
+    `Match.world`); `test_sim_purity` scans the two new files like the others.
+- **Tools**: `tools/bot_stats.gd` (bot play measured over seeds, for B3) and `tools/versus_golden.gd` (rewrites the
+  golden file).
+
+#### Verify
+
+| Command | Last line | Exit |
+|---|---|---|
+| `GODOT=/tmp/claude-0/godot/Godot_v4.7.2-stable_linux.x86_64 tools/test.sh` | `226 passed, 0 failed` (about 16 s of tests) | 0 |
+| The same after `rm -rf .godot` | `226 passed, 0 failed` | 0 |
+| `tools/test.sh --only=test_bot.gd,test_match,test_versus_golden` | `26 passed, 0 failed` | 0 |
+| `tools/run_tool.sh smoke` | `smoke: PASS` | 0 |
+| `$GODOT --headless --path . -s res://tools/bot_stats.gd` (about 65 s) | `bot_stats: ran in 65.6 s` (the time varies; numbers below) | 0 |
+| `$GODOT --headless --path . -s res://tools/versus_golden.gd` (only to regenerate, below) | `versus_golden: wrote <repo>/tests/golden/versus_checksum.txt` | 0 |
+
+Single player is unchanged: `tests/test_golden.gd` and every A1/A2 test pass; in single player `_bot_byte()` still
+returns no input and the world has no bots.
+
+#### The match (`match.gd`): API for B2
+
+**Making one.** `Match.create(Config.standard(), seed, seats, humans)`, with `World.versus()`'s arguments (null, with
+an error, unless `World.versus_valid()`; the join screen can ask that first). `match.world` is the one World of the
+whole match: B2 draws it as in part 1, and it is the same object from round to round.
+
+**Each fixed step.** `match.step(bytes)`, one byte per seat, as `World.step()`: the pad's byte for a connected
+human seat, `PlayerInput.BOT` (0xFF) for a bot seat and for a human seat whose pad went away. The world steps in every
+phase (it counts the tick; between rounds it takes no input). Pause stays the world's (`world.phase == PAUSED`, any
+human's Start).
+
+**Phases** (`phase`, `Match.PHASE_NAMES`) and events of the last step (`events`, `Match.EVENT_NAMES`):
+
+| Phase | Meaning |
+|---|---|
+| `PLAYING` (0) | A round is under way (the world is RUNNING or PAUSED). |
+| `ROUND_OVER` (1) | The round ended and the match is not decided. Entered with `EV_ROUND_OVER` (1). |
+| `MATCH_OVER` (2) | The match is decided. Entered with `EV_ROUND_OVER` and `EV_MATCH_OVER` (2) together. It takes no input any more. |
+
+`EV_ROUND_START` (4): a confirm press started the next round on this step; that round's first step is the next one.
+
+**What the results screens read:**
+
+| Field or method | Meaning |
+|---|---|
+| `round_number` | The round being played, or just played: 1 for the first. |
+| `last_round_winner()` | The last finished round's winner (`world.winner` until the next round starts), or `Match.NO_WINNER` (-1): a tie, or, with a single human, a round the human lost (a bot ahead of or level with them). |
+| `world.players[i]` | That round's own `score`, `distance`, `fuel` and `alive`; they stay until the next round starts. |
+| `wins[i]`, `losses(i)` | Rounds won; rounds finished and not won (with a single human, the rounds lost). |
+| `totals[i]`, `distances[i]` | Points and distance over the finished rounds (the last one included), bots too. |
+| `round_winners` | Each finished round's winner, in order. `rounds_played()` is its size. |
+| `winner` | The match's winner once `MATCH_OVER`, or `NO_WINNER`: with a single human, the human lost the match (2 rounds not won); with several, a draw (level on wins, points and distance after 5 rounds). |
+| `phase_ticks` | Steps since the phase began. |
+| `human_seats()`, `human_confirmed(bytes)` | The human seats; whether a byte array holds a human seat's confirm press. |
+| `to_array()`, `Match.from_array(cfg, a)`, `checksum()`, `clone()` | As World's, the world included. |
+
+**Between rounds.** The match waits in `ROUND_OVER` until a human seat's byte has the confirm bit (pad A or Start),
+and counts it only from `Config.MATCH_CONFIRM_TICKS` (60) steps after the round ended: on a pad, A
+both shifts gear and confirms, so presses made while racing must not skip the results. Show "press A" once
+`phase_ticks >= Config.MATCH_CONFIRM_TICKS`. Bot seats never confirm, and neither does 0xFF: if every human's pad is
+gone, the match waits until one is back. The confirm press starts the next round on that step (`world.start_round()`).
+Because the flow runs on input bytes, a whole match replays from (seed, seats, humans, bytes), over the network too.
+
+**At the end** (`MATCH_OVER`) the match ignores input: B2 reads the presses itself, for a rematch (a new `Match` with
+`app.next_seed()`) or the title.
+
+**The rules as built:**
+- Several humans: the first to `MATCH_WINS` (2) round wins takes the match. Otherwise, after `MATCH_ROUNDS_MAX` (5)
+  rounds: the most wins, then the most points over the match (`totals`), then the most distance (`distances`); level
+  on all three, nobody wins it.
+- A single human: the match ends at the human's 2 wins (`winner` is the human) or at `MATCH_LONE_LOSSES` (2) rounds
+  not won (`winner` is `NO_WINNER`), so after 2 or 3 rounds.
+- A round nobody won counts for nobody: no win, one more round played (and, with a single human, a loss).
+- Each round starts afresh (part 1's `start_round()`, plus every bot's `reset()`); the world RNG, the seats' streams
+  and the bots' streams go on.
+
+#### The bots (`bot.gd`)
+
+**The hook.** In versus, `World._bot_byte(car)` returns `bots[car.slot].next_byte(cfg, car, players, traffic,
+camera_y + anchor, stage_ticks)`: once per running step for each live seat whose byte is 0xFF, in seat order, before
+anything moves (part 1's hook contract). Every seat has a bot, so a human seat whose pad goes away is driven by the
+same bot and stays human. Single player keeps A1's behaviour: no bots, and a 0xFF seat gets no input.
+
+**What a bot does each step**, all from the world before the step:
+1. **Prediction.** It knows the 12 bytes it has decided and not yet sent (`pending`) and works out where they will
+   put the car sideways (`ahead_of_time()`: `Car.step_lateral()`'s rules at the car's speed now). It plans from there.
+2. **What it sees.** Traffic whose rear edge is below the top of the screen and whose front edge is ahead of the
+   car's rear edge, except cars that already bumped this seat and oil this seat already drove over. An object that is
+   changing lane takes up its own span and its target lane's.
+3. **Gear** (plan §7). High gear when the speed is at least `BOT_HIGH_GEAR_KMH` (160 km/h) and the gap from the car's
+   front edge to the first obstacle in its own path is at least `bot_free_ahead` (150 px); otherwise low gear. Fuel
+   cars are not obstacles.
+4. **Lane** (plan §7). Of the predicted lane and its neighbours, each lane is as clear as the gap to its first
+   obstacle, at most `bot_look_ahead` (168 px). A truck counts `bot_truck_caution` (168 px) nearer than it is, so a
+   lane with a truck in view ranks below every lane without one. Another live player's car ahead of this one, or level
+   with it and of a lower seat, counts `bot_player_ease` (96 px) further than it is, so the car behind gives way. The
+   target lane is a fuel car's, if one is within `bot_fuel_reach` (160 px) in one of those lanes with no truck before
+   it; otherwise the clearest lane, when it is `bot_lane_margin` (24 px) clearer than the lane it is heading for. Two
+   neighbours equally clear: the bot's own RNG picks one.
+5. **Steering.** Into the slide while the predicted skid lasts; otherwise toward the target lane's centre, within half
+   a step of steering.
+6. **Throttle** always; never the brake.
+7. **Reaction** (plan §7). The decision joins the end of `pending`; the byte sent is the oldest, decided
+   `BOT_REACTION_TICKS` (12) steps before. A round starts with 12 `Bot.START_BYTE` (throttle, low gear, no steering).
+
+**State** (`World.to_array()`'s last entry, one per seat): `rng` (seeded `World.bot_seed(game_seed, slot)` =
+`seat_seed(game_seed, slot + BOT_STREAM_SLOT_OFFSET)`, slots 6 to 11, so (slot + 7) x 2^28 draws from the world's
+stream and apart from the seats' streams), `pending` (12 bytes), `lane` (the target, -1 for none) and `last_tick` (the
+round's running step it last drove). `reset()`, at each round's start: `pending` back to `START_BYTE`, `lane` and
+`last_tick` -1; the stream goes on. A bot that did not drive the round's previous step (a human seat whose pad has just
+gone away) first takes the car over: `pending` becomes the throttle with the car's present gear and no steering.
+
+**Randomness.** A bot draws only to break a tie between two lanes, from its own stream, so bots never move the world
+RNG and the traffic does not depend on how many there are (`test_traffic_does_not_depend_on_the_number_of_bots`).
+Nothing is drawn while paused: the world does not ask a bot then (`test_bots_never_draw_while_paused`).
+
+**Cost.** About 13 µs a decision; a 6-bot versus step takes about 240 µs (a 6-seat step without bots, 40 µs).
+
+**Config values.** Constants: `BOT_HIGH_GEAR_KMH` 160 and `BOT_REACTION_TICKS` 12 (the plan's), `BOT_STREAM_SLOT_OFFSET`
+6. Standard-profile fields (0 in the phaser profile): `bot_free_ahead` 150 (the plan's), and bot.gd's own
+`bot_look_ahead` 168, `bot_truck_caution` 168, `bot_player_ease` 96, `bot_lane_margin` 24, `bot_fuel_reach` 160,
+`bot_side_margin` 2. Match constants: `MATCH_WINS` 2, `MATCH_ROUNDS_MAX` 5, `MATCH_LONE_LOSSES` 2,
+`MATCH_CONFIRM_TICKS` 60.
+
+#### The versus golden checksum (plan §8 B1)
+
+`tests/test_versus_golden.gd::test_six_seats_7200_ticks_match_the_golden_checksum`. The scenario, through **Match**
+(`run_scenario()` in that file):
+- `Match.create(Config.standard(), 20261017, 6, 0b000101)`: seats 0 and 2 human, seats 1, 3, 4 and 5 bots; 7200 steps.
+- Every seat's byte is 0xFF on every step, so bot.gd drives every car, the human seats included (as after a
+  disconnect). Two exceptions, both on seat 0: a pause press (`PAUSE | STEER_NONE`) on steps 1800 and 1860 (pause,
+  then resume), and a confirm press (`CONFIRM | STEER_NONE`) on every step that begins with the match in `ROUND_OVER`
+  (so each round starts 60 steps after the last one ended).
+- The checksum is `Match.checksum()` after step 7200: the match, its world, the seats, the traffic and the bots.
+- What it plays: round 1 (seat 2 wins it; three bots go out on the way; five fuel cars taken) and part of round 2.
+  The test runs it twice and compares both with the file; it also checks that a round ended, the next started, the
+  pause lasted 60 steps, bots went out and fuel cars were taken, so the scenario cannot shrink unnoticed.
+- The file is the 64 hex digits and a newline: `8281604f11bec1a2b115d25886c467d0bc0ba8a40f3f169abd5b6def91280cf0`.
+
+**Regenerating it.** Any change to the rules, the bots, the traffic or the layout of `to_array()` changes the checksum,
+on purpose or not. After a deliberate change, and only then:
+`$GODOT --headless --path . -s res://tools/versus_golden.gd` (it imports nothing, so run `tools/test.sh` or `--import`
+first). It plays the scenario twice, writes the file only if both runs agree, and prints the old and the new checksum;
+say why in the commit.
+
+#### Bot statistics (`tools/bot_stats.gd`, for B3)
+
+`$GODOT --headless --path . -s res://tools/bot_stats.gd [-- --seeds=20 --first-seed=1 --ticks=18000 --seats=6
+--humans=0b111111 --rounds --set=FIELD=VALUE]`. Each seed plays one match for up to 18 000 steps, every seat 0xFF; while
+the match is between rounds the lowest human seat confirms; a seed stops when its match is decided. `--set` tries
+another value of a standard-profile field (`--set=bot_truck_caution=48`). It prints a line per seed and the summary
+below. No assertion: B3 owns the thresholds.
+
+With the defaults (20 seeds from 1, 6 seats all human, every seat driven by bot.gd, up to 18 000 steps; 65 s to run):
+
+| Measure | Value | B3's target (plan §8) |
+|---|---|---|
+| First elimination, first round of each seed | median **62.3 s** (31.3 to 82.8; quartiles 57.9 to 72.3; 20 rounds) | 45 to 180 s |
+| First elimination, every round | median 62.5 s (15.9 to 88.0; quartiles 54.1 to 71.9; 64 rounds) | |
+| Leader changes | **2.89 a minute** over 66.2 running minutes; per round median 2.4 (quartiles 1.1 to 4.1; 0 to 9.7) | at least 1 a minute |
+| How rounds end | 68 seats out in the 64 rounds' last steps: 20 by a truck, 48 with an empty tank (18 of those touching the bottom edge); 2 rounds with several out at once | |
+| Round winners | 64 rounds won, all by human seats (every seat is human here), none without a winner | |
+| Matches | 17 of 20 decided within 18 000 steps, each with a winner, in 2 to 5 rounds (median 3); the other 3 stood at 1-1-1-1 after 4 rounds | |
+| Bottom edge, overlap | cars touch the bottom edge 11.4 % of their time; two live cars overlap 10.0 % of the time | |
+| Per car and minute | 0.32 fuel cars, 0.08 roadside crashes, 6.19 bumps, 1.07 oil skids | |
+
+With one human seat (`--humans=1`, the human seat driven by a bot as well, five bots): rounds last longer (median
+86.6 s, 28.0 to 113.0), since a bot going out does not end them (127 did); the human seat won 12 of 51 rounds, and all
+20 matches were decided (1 won by the human seat). The first elimination of each first round is the same as with six
+humans: play is identical until a car first goes out.
+
+**Tuning.** The median is well inside 45 to 180 s, so no difficulty value was changed (`EDGE_FUEL_DRAIN_PER_SEC`,
+`VERSUS_SHRINK_TICKS`, `VERSUS_GAP_SHRINK`, `versus_gap_min` stay the plan's starting values). bot.gd's own values were
+set by measuring. Its first values, `bot_truck_caution` 48 and no give-way (measured with `--set=bot_truck_caution=48
+--set=bot_player_ease=1000`), gave: first rounds median 52.3 s (11.9 to 81.5), every round median 50.3 s (5.2 to 100.0;
+lower quartile 26.6 s), 64 seats out by a truck against 27 with an empty tank, 9 rounds with several out at once (bots
+driving as one), cars overlapping 21.3 % of the time, 3.22 leader changes a minute. The replays of those deaths showed
+the two faults described under deviations below.
+
+#### Checked to fail
+
+Each rule was broken on purpose, one at a time, in a scratch copy of the tree (50 edits of `bot.gd`, `world.gd`,
+`match.gd` and `config.gd`, by a script that is not committed), and each broken version failed the tests for that rule:
+a round's start byte without the throttle; no throttle at speed; braking when blocked; high gear from 150 km/h; 140 px
+free taken as enough; the free road ignoring a car that changes into the lane; oil not counting for the gear; fuel cars
+counted as obstacles; lanes two away; no lane margin; a truck caution of 48; ties always to the first lane; steering
+against a skid; no prediction of the pending bytes; a reaction of 11 ticks; no reaction delay; no fuel-car chase;
+chasing through a truck; chasing at any range; seeing above the screen; cars that already bumped the seat, or oil it
+already used, still counted; no give-way; both cars giving way when level; no takeover; a takeover in low gear; a reset
+that keeps the pending bytes or reseeds the bot's stream; bots seeded like the seats; start_round() leaving the bots as
+they were; single player driving 0xFF seats; the hook passing a screen top 100 px too high (first caught only by the
+golden checksum, so `test_bot_sees_only_the_screen_and_what_can_still_touch_it` now checks it through the world too);
+the bots left out of to_array() or clone(); 3 wins to take a match; a cap of 6 rounds; points before wins; no distance
+tie-break; a single human ending at 3 losses, or never by losses; confirm presses from bot seats, from 0xFF, or before
+the delay; totals not added up; a round nobody won giving seat 0 a win; the world not stepped between rounds; a decided
+match taking a confirm; round winners left out of to_array(); no cap; start_round() not called.
+
+#### Deviations from the plan, with reasons
+
+- **Bots in versus only.** Single player keeps A1's behaviour (a 0xFF seat gets no input, no bots in the state): the
+  single-player game has no bots, it must stay as it is, and its hook also runs on paused steps, where a bot must not.
+- **The confirm guard** (`MATCH_CONFIRM_TICKS`, 60 steps) is not in the plan: a pad's A shifts gear and confirms, so a
+  press made while racing in the last second of a round would skip its results.
+- **After 5 rounds**, the plan decides by wins and then total points; the match adds total distance (as DECISIONES §3
+  breaks a points tie), and level on all three nobody wins.
+- **A single human's round nobody won is a loss** (`losses()` counts the rounds not won): the human did not beat every
+  bot, and bots cannot win it.
+- **Bots give way to the car ahead** (`bot_player_ease`). Cars pass through each other, so this is not about contact:
+  without it, bots that come to one spot (two bots heading for the same clear lane; cars held on the bottom edge) make
+  the same decisions from then on and drive as one car. Seen before the rule: four bots out by trucks in one step, four
+  bots running dry together after 100 s.
+- **Trucks rank below any bump** (`bot_truck_caution` = `bot_look_ahead`). With a 48 px caution a boxed-in bot ranked
+  "truck 150 px ahead" above "car alongside" and drove toward the truck; by the time the margin let it change its mind,
+  the 12-step delay left no time. A bump costs a skid and gives 91 steps of invulnerability; a truck ends the round.
+- **The reaction delay is a queue of decisions**, and the bot plans from where its queued bytes will take the car.
+  Plan §7 says only "a 12-tick delay"; a bot that steered on a 12-step-old view of its own car would swing about 15 px
+  past each lane's centre and back.
+- **The golden scenario** has two kinds of non-0xFF bytes on seat 0: the confirm presses a match needs to go on, and one
+  pause, to cover pausing with bots.
+- **Part 1's tests**: `test_versus_six_seats_same_checksum_twice` replaced and `test_traffic_same_for_2_and_6_seats`
+  adapted (above, Files).
+
+#### Known gaps
+
+- **Bots never brake** (plan §7). Boxed in (a road edge or a car on one side, a car alongside on the other) they bump
+  the car ahead: about 6 bumps per car and minute. A bump only costs a skid, which they correct.
+- **Cars overlap** about 10 % of the time two live cars spend together (the same spot about 2 %): the give-way acts only
+  when a clearer lane exists. B2 draws them on top of each other.
+- **No difficulty value was tuned.** The median first elimination is inside 45 to 180 s with the plan's starting values
+  (`EDGE_FUEL_DRAIN_PER_SEC` 2, `VERSUS_SHRINK_TICKS` 1200, `VERSUS_GAP_SHRINK` 0.9, `versus_gap_min` 40), so they are
+  unchanged; only bot.gd's own values were set by measuring. Nothing was tried with people.
+- **Rounds are short for the difficulty clock**: most end in about a minute, after two or three shrinks of the gaps;
+  the 40 px floor (180 s) was never reached in these runs (the longest round lasted 113 s). Rounds end mostly by an
+  empty tank (fuel cars come every 4500 px of road, about 20 s at the top speed, for six cars).
+- **Matches in 5 minutes**: 17 of the 20 were decided within 18 000 steps; the other 3 stood at 1-1-1-1 after 4 rounds
+  and would end in round 5 (seeds 3, 4 and 12).
+- **B2:** the screens (results after each round and the match, "press A" after `MATCH_CONFIRM_TICKS`, a "BOT" mark for
+  bot-driven seats if wanted); build the game on `Match` rather than on `World.versus()` directly.
+- **B3:** scenario (a) of plan §8 (one scripted human and five bots) needs its own driver; `tools/bot_stats.gd` covers
+  (b) and can run `--humans=1` for one human seat driven by a bot.

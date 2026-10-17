@@ -5,8 +5,8 @@ extends RefCounted
 ## magnitude in px or px/s lives in a profile, built by standard() (the game: 640x360, six lanes) or phaser() (the
 ## Phaser version's 360x640 three-lane road, kept for the golden tests). A profile multiplies each Phaser px value
 ## by K = 360/640 = 0.5625; the phaser profile uses K = 1, so its numbers are Phaser's own. The versus mode's px
-## values (anchor_versus and the four after it) are the game's own, not Phaser's (Phaser had no versus mode), and
-## only the standard profile has them: World.versus() refuses the phaser profile.
+## values (anchor_versus and the fields after it, the bots' bot_* included) are the game's own, not Phaser's (Phaser
+## had no versus mode), and only the standard profile has them: World.versus() refuses the phaser profile.
 ##
 ## Pure: no class_name, no static var, no engine singletons. Fields are float and int only.
 
@@ -145,6 +145,30 @@ const VERSUS_GAP_SHRINK := 0.9
 ## the world stream and slots 0 to 14 never overlap within 268 435 456 draws.
 const SEAT_SEED_STEP := 0x50000000
 
+# --- Bots (scripts/sim/bot.gd; docs/GODOT_PLAN.md §7 "Bots"). The rules are the plan's: always accelerate, high
+# gear from 160 km/h with 150 px free ahead, the clearest adjacent lane, steer into skids, chase fuel cars one lane
+# away, react 12 ticks late. How a bot weighs the lanes is bot.gd's own; its px values are profile fields (bot_*),
+# measured with tools/bot_stats.gd (docs/HANDOFF.md, B1 part 2).
+## A bot takes high gear from this speed, while cfg.bot_free_ahead px ahead of it are free (plan §7).
+const BOT_HIGH_GEAR_KMH := 160.0
+## A bot's reaction time in ticks (plan §7: 12, 0.2 s): what it decides on one step drives its car 12 steps later.
+const BOT_REACTION_TICKS := 12
+## A bot's own RNG stream is World.seat_seed(game_seed, slot + BOT_STREAM_SLOT_OFFSET): slots 6 to 11, apart from the
+## world's stream and the seats' own (World.seat_seed() keeps slots 0 to 14 2^28 draws apart).
+const BOT_STREAM_SLOT_OFFSET := 6
+
+# --- Match (scripts/sim/match.gd; docs/GODOT_PLAN.md §7 "Partida"): best of three rounds.
+## Round wins that take the match.
+const MATCH_WINS := 2
+## With several humans and nobody at MATCH_WINS, the match ends after this many rounds: most wins, then most points,
+## then most distance over the match (level on all three: nobody wins it).
+const MATCH_ROUNDS_MAX := 5
+## With a single human, rounds the human does not win (a bot ahead or level) that end the match.
+const MATCH_LONE_LOSSES := 2
+## Steps after a round ends before a confirm press counts (1 s). On a pad, A shifts gear and confirms, so presses made
+## while racing must not skip the round's results (to tune).
+const MATCH_CONFIRM_TICKS := 60
+
 # --- Profile fields.
 var profile: int = PROFILE_STANDARD
 ## Phaser px x k = this profile's px.
@@ -204,6 +228,21 @@ var edge_touch: float = 0.0
 var distance_step: float = 0.0
 ## The smallest car and oil gap the shrinking can reach.
 var versus_gap_min: float = 0.0
+## Bots (bot.gd), standard profile only, in the game's px. A bot keeps high gear only while this much road ahead of
+## its car is free (plan §7: 150).
+var bot_free_ahead: float = 0.0
+## How far ahead of its car a bot weighs the lanes: a lane is as clear as the gap to its first obstacle, at most this.
+var bot_look_ahead: float = 0.0
+## A truck counts this much nearer than it is when a bot weighs a lane (trucks put a car out; other cars only bump).
+var bot_truck_caution: float = 0.0
+## Another player's car just ahead of a bot counts this much further than it is (the bot gives way to it).
+var bot_player_ease: float = 0.0
+## A bot heads for a neighbouring lane only when it is this much clearer than the lane it is heading for.
+var bot_lane_margin: float = 0.0
+## A bot chases a fuel car up to this far ahead (in its lane or the next one).
+var bot_fuel_reach: float = 0.0
+## A lane's corridor is a car's width centred in the lane, plus this much on each side.
+var bot_side_margin: float = 0.0
 
 
 ## The game: 640x360, six lanes of 44 px from x = 188 to 452, sprites drawn at 2x (docs/GODOT_PLAN.md §4).
@@ -237,6 +276,19 @@ static func standard() -> Self:
 	c.edge_touch = 351.5
 	c.distance_step = 100.0
 	c.versus_gap_min = 40.0
+	# Bots (bot.gd): 150 px free for high gear (plan §7). The rest are bot.gd's choices, measured with
+	# tools/bot_stats.gd: a lane is weighed 168 px ahead (about 0.9 s at the top closing speed, 400 km/h on a 60 km/h
+	# truck); a truck counts 168 px nearer, so any truck in that reach ranks a lane below every lane without one (with
+	# 48, bots took a truck's lane over a car alongside and died for it); another player's car just ahead counts 96 px
+	# further than it is; a lane must be 24 px clearer to change to it; fuel cars are chased 160 px ahead; 2 px of side
+	# margin.
+	c.bot_free_ahead = 150.0
+	c.bot_look_ahead = 168.0
+	c.bot_truck_caution = 168.0
+	c.bot_player_ease = 96.0
+	c.bot_lane_margin = 24.0
+	c.bot_fuel_reach = 160.0
+	c.bot_side_margin = 2.0
 	return c
 
 
@@ -336,4 +388,11 @@ func clone() -> Self:
 	c.edge_touch = edge_touch
 	c.distance_step = distance_step
 	c.versus_gap_min = versus_gap_min
+	c.bot_free_ahead = bot_free_ahead
+	c.bot_look_ahead = bot_look_ahead
+	c.bot_truck_caution = bot_truck_caution
+	c.bot_player_ease = bot_player_ease
+	c.bot_lane_margin = bot_lane_margin
+	c.bot_fuel_reach = bot_fuel_reach
+	c.bot_side_margin = bot_side_margin
 	return c
