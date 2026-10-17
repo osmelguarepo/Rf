@@ -90,7 +90,7 @@ empty road. `step(inputs: PackedByteArray)` advances one tick of 1/60 s, with on
 | `anchor` | 292 in single player. |
 | `stage`, `goal` | Current stage and its goal in px (13 500, 15 750, 18 000 and 20 250, then the cycle repeats). |
 | `stage_ticks`, `tick` | Running ticks this stage; all steps, in any phase. |
-| `high_score`, `game_seed` | Pass `high_score` to the next `World.new`. Phaser restarted with seed + 1. |
+| `high_score`, `game_seed` | Pass `high_score` to the next `World.new`. (Phaser drew a random seed per game; the Godot app uses the previous seed + 1, see A2.) |
 | `to_array()`, `World.from_array(cfg, array)`, `checksum()`, `clone()` | Complete state, restore, SHA-256 and deep copy. |
 
 **`car.gd` (Car), one per seat.**
@@ -214,9 +214,9 @@ The A1 adversarial verifier passed A1 (no blocker or major findings). The lead f
 
 ### Files
 
-- **App** (`scripts/app/`): `app.gd` (root of the main scene: boot, input routing, fixed step, focus pause, screen
-  switching, session, `--selftest`), `fixed_step.gd` (the accumulator), `title.gd` and `game.gd` (the two screens'
-  controllers).
+- **App** (`scripts/app/`): `app.gd` (root of the main scene: boot, window fit, input routing, fixed step, focus
+  pause, screen switching, session, `--selftest`), `fixed_step.gd` (the accumulator), `title.gd` and `game.gd` (the two
+  screens' controllers).
 - **Input** (`scripts/input/`): `keyboard.gd` (the input map, built in code), `pads.gd` (joypads, read per device),
   `held.gd` (held-control bits and the byte they make), `local_input.gd` (single player: keyboard plus every pad, with
   latched presses).
@@ -227,10 +227,10 @@ The A1 adversarial verifier passed A1 (no blocker or major findings). The lead f
 - **Scenes** (`scenes/`): `boot.tscn` (the main scene: an `App` node), `title.tscn` (`Title`: `Road`, `TitleView`),
   `game.tscn` (`Game`: `Road`, `Cars`, `Hud`).
 - **Tools**: `tools/smoke.gd`, `tools/screenshots.gd`, `tools/scalecheck.gd`, and `tools/tool_base.gd`, which they
-  extend (boots the game under the tool's SceneTree, sends key events, counts logged errors, an autopilot that steers
-  with the arrow keys).
-- **Tests** (58 new, 169 in all): `tests/test_fixed_step.gd` (8), `tests/test_input_devices.gd` (15),
-  `tests/test_view.gd` (19), `tests/test_app.gd` (16), and one more in `tests/test_assets.gd`.
+  extend (boots the game under the tool's SceneTree, sends key and joypad events, counts logged errors, an autopilot
+  that steers with the arrow keys). `tools/run_tool.sh` runs the three with the error filter of `tools/test.sh`.
+- **Tests** (62 new, 173 in all): `tests/test_fixed_step.gd` (8), `tests/test_input_devices.gd` (15),
+  `tests/test_view.gd` (18), `tests/test_app.gd` (20), and one more in `tests/test_assets.gd`.
 - **Screenshots**: `docs/screenshots/01-title.png` to `06-skid-low-fuel.png` (below).
 - **Files of other agents that A2 edited**, each with a test:
   - `project.godot`: `application/run/main_scene="res://scenes/boot.tscn"`, which the game needs to start
@@ -244,33 +244,79 @@ The A1 adversarial verifier passed A1 (no blocker or major findings). The lead f
 
 | Command | Last line | Exit |
 |---|---|---|
-| `GODOT=/tmp/claude-0/godot/Godot_v4.7.2-stable_linux.x86_64 tools/test.sh` | `169 passed, 0 failed` | 0 |
-| The same after `rm -rf .godot` | `169 passed, 0 failed` | 0 |
-| `timeout 300 $GODOT --headless --fixed-fps 60 --path . -s res://tools/smoke.gd -- --scenario=1p --frames=10800` (about 3 s) | `smoke: PASS` | 0 |
+| `GODOT=/tmp/claude-0/godot/Godot_v4.7.2-stable_linux.x86_64 tools/test.sh` | `173 passed, 0 failed` | 0 |
+| The same after `rm -rf .godot` | `173 passed, 0 failed` | 0 |
+| `tools/run_tool.sh smoke` (about 18 s: the import, then the plan's smoke command, which takes about 14 s) | `smoke: PASS` | 0 |
 | `$GODOT --headless --path . -- --selftest` | `selftest: ok (600 ticks checked, 120 frames drawn)` | 0 |
-| `xvfb-run -a -s "-screen 0 1920x1080x24" $GODOT --rendering-driver opengl3 --fixed-fps 60 --path . -s res://tools/screenshots.gd` (about 10 s) | `screenshots: saved 01-title.png, 02-game.png, 03-pause.png, 04-game-over.png, 05-stage-clear.png, 06-skid-low-fuel.png in <repo>/docs/screenshots` | 0 |
-| `for r in 1280x800 1920x1080 1366x768; do xvfb-run -a -s "-screen 0 1920x1080x24" $GODOT --rendering-driver opengl3 --fixed-fps 60 --resolution $r --path . -s res://tools/scalecheck.gd; done` | per size: `scalecheck WxH game: scale S, picture at (X, Y), 0 of N pixels differ` (S = 2, 3, 2; at (0, 40), (0, 0), (43, 24)) | 0 each |
+| `tools/run_tool.sh screenshots` (about 21 s) | `screenshots: saved 01-title.png, 02-game.png, 03-pause.png, 04-game-over.png, 05-stage-clear.png, 06-skid-low-fuel.png in <repo>/docs/screenshots` | 0 |
+| `tools/run_tool.sh scalecheck` (five windows, about 30 s) | `scalecheck: 5 windows passed` | 0 |
 
-- The smoke test and the tools need an imported project: run `tools/test.sh` first (or
-  `$GODOT --headless --path . --import`). On a fresh clone without `.godot/` they stop at once with "the project is
-  not imported yet" and exit 1, instead of failing on missing textures.
-- The smoke test's line before `smoke: PASS` reads `smoke 1p: 10800 frames, game overs 3, retries 3, stage clears 0,
-  Esc pause/resume true/true, focus pause true, errors 0`. It checks: the game screen is reached; Esc pauses at frame
-  600 and resumes at 660; `NOTIFICATION_APPLICATION_FOCUS_OUT` pauses, `FOCUS_IN` does not resume; at least one game
-  over followed by a retry; no error logged (a `Logger`, the same lines `tools/test.sh` rejects). With `--verbose` it
-  prints no leak or error line at exit either.
-- Each scalecheck run compares two still pictures (the title, and a game paused after 400 frames of driving) with the
-  window read back from the screen, and prints a third line, `scalecheck sprite: 0 of 424 pixels of the title's car
-  differ from its atlas frame at 2x`. It was checked to fail with `scale_mode="fractional"` at 1366x768 (576 025
-  pixels differ) and with linear canvas filtering (the sprite check: 367 of 424).
-- `--selftest` was checked to fail (exit 1, one `selftest: FAIL` line per error) when drawing code logs an error.
+`tools/run_tool.sh` reads `${GODOT:-godot}` as `tools/test.sh` does, and the screenshots and scalecheck need
+`xvfb-run`.
+
+- **Use `tools/run_tool.sh` wherever the exit code matters (CI).** For each tool it imports the project (a failed
+  import is retried once), runs the plan §6 command (smoke: `timeout 300 $GODOT --headless --fixed-fps 60 --path . -s
+  res://tools/smoke.gd -- --scenario=1p --frames=10800`; the other two under `xvfb-run -a -s "-screen 0 WxHx24"` with
+  `--rendering-driver opengl3 --fixed-fps 60`), shows its output, and fails on any line starting with `ERROR:` or
+  `SCRIPT ERROR:` in the import or the tool's output, as `tools/test.sh` does. Arguments after the tool's name go to
+  it after `--` (`tools/run_tool.sh smoke --frames=600`). Exit codes: 0 passed; 1 the tool failed; 2 an ERROR line
+  while the tool passed; 3 the import failed twice; 64 bad usage; 124 a run took over 300 s; 127 Godot or `xvfb-run`
+  not found.
+- **What the bare commands' exit codes cover.** Each tool counts logged errors in process, with a `Logger`
+  (`tools/tool_base.gd`), from its start until its `_finalize()`, which the engine calls after it has freed every node,
+  and exits 1 if any was logged. It cannot see what the engine prints after that, while it shuts down: leaked RIDs or
+  "resources still in use at exit" are only lines in the output, which `tools/run_tool.sh` reads. Checked on a scratch
+  copy: with a `PhysicsServer2D.body_create()` and a text-server `create_font()` leaked from `game.gd` `new_game()`,
+  the bare smoke command printed `smoke: PASS`, then `ERROR: 4 RID allocations of type 'P11GodotBody2D' were leaked at
+  exit.` (and one for the fonts), and exited 0; `tools/run_tool.sh smoke` exited 2. A `push_error()` in an
+  `App._exit_tree()` (it runs only at the end) made the bare command exit 1 with `smoke: FAIL: errors logged at the
+  end of the run`.
+- The bare tool commands need an imported project: on a fresh clone without `.godot/` they stop at once with "the
+  project is not imported yet" and exit 1. `tools/run_tool.sh` imports first.
+- **The smoke test** (`tools/smoke.gd`, scenario `1p`) ends with:
+  ```
+  smoke 1p keyboard: game started true, Esc pause/resume true/true, focus pause true, retries with Enter 1
+  smoke 1p joypad: A held true, stick left/right true/true, D-pad left/right true/true, Start pause/resume true/true, Start to title true, A on title true, retries with A 1
+  smoke 1p: 10800 frames, game overs 3, stage clears 0, errors 0
+  smoke: PASS
+  ```
+  Every event goes through `Input.parse_input_event()` and reaches the game through `App._input()`, as a driver's
+  would. The keyboard first: Enter on the title, X held, the arrow keys changing every 2 s, Esc at frames 600 and 660
+  (pause, resume), `NOTIFICATION_APPLICATION_FOCUS_OUT` at 900 (must pause), `FOCUS_IN` (must stay paused), Esc
+  (resume), and Enter one second after the first game over (must retry). Then a joypad on device 0, from 10 s after
+  that retry: the keys go up (the car must drop to low gear), A goes down (high gear and throttle, from the pad alone),
+  the left stick and the D-pad take turns steering left and right (each must move the car that way between two frames
+  without a skid), Start pauses and resumes, and the tank is set to 0.1 at two points (as the screenshots do), so that
+  two game overs come whatever the traffic does: at the first, Start must go to the title and A there must start a
+  game; at the next, A must retry. Then no error may have been logged.
+- **Each scalecheck run** prints a line about the window (`scalecheck window: 1280x720 at (43, 24) on a 1366x768
+  screen, picked by the game`), then compares two still pictures (the title, and a game paused after 400 frames of
+  driving) with the window read back from the screen, and checks the title's car against its atlas frame
+  (`scalecheck sprite: 0 of 424 pixels of the title's car differ from its atlas frame at 2x`). The five windows of
+  `tools/run_tool.sh scalecheck`: `--resolution` 1280x800, 1920x1080 and 1366x768 on a 1920x1080 screen (scale 2, 3, 2;
+  picture at (0, 40), (0, 0), (43, 24)); then, with no `--resolution`, the window the game picks on a 1366x768 screen
+  (1280x720 at (43, 24)) and on a 1280x800 screen (1280x720 at (0, 40)), each at scale 2 with the picture at (0, 0).
+  Godot keeps `--resolution` to itself (it is not in `OS.get_cmdline_args()`), so the size the window must have is
+  also passed after `--` as `--window=WxH`; the old check of the window size read `--resolution` and so never ran.
+  Checked to fail: with `scale_mode="fractional"` at 1366x768 (556 984 pixels of the title and 440 123 of the game
+  differ), with linear canvas filtering (the sprite check: 367 of 424), and on the 1366x768 screen without the window
+  fit (the 1920x1080 window is not inside the screen).
+- `--selftest` was checked to fail (exit 1, one `selftest: FAIL` line per problem) when drawing code logs an error, and
+  when its script loses the second pause press, so the game stays paused (`selftest: FAIL the pause press at tick 310
+  did not resume the game`).
 
 ### How it fits together
 
 - **Main scene.** `scenes/boot.tscn` is one `Node` with `app.gd`. `_ready()` calls `App.start()`: read `--selftest` and
-  `--seed=N` after `--`, `boot()` (input map, `LocalInput`, `Atlas.load_all()`), then the title. Tools set
-  `seed_override` before adding the node; tests call `start()` themselves, because the test runner works inside its
-  `_initialize()`, before the root enters the tree, so `_ready()` never comes there.
+  `--seed=N` after `--`, `fit_window()`, `boot()` (input map, `LocalInput`, `Atlas.load_all()`), then the title. Tools
+  set `seed_override` before adding the node; tests call `start()` themselves, because the test runner works inside
+  its `_initialize()`, before the root enters the tree, so `_ready()` never comes there.
+- **Window.** project.godot opens a 1920x1080 window (3x). `App.fit_window()` shrinks it when the screen's usable area
+  (`DisplayServer.screen_get_usable_rect()`) is smaller: to the largest whole multiple of 640x360 that fits
+  (`App.fitted_window_size()`), centred on the usable area, so 1280x720 (2x) on a 1366x768 or 1280x800 screen, or on a
+  1920x1080 screen whose taskbar leaves 1040 rows. It leaves the window alone headless, when it fits, when it is not a
+  plain window, and when its size is not project.godot's: Godot keeps `--resolution` to itself, so a window of another
+  size is how an asked-for size shows.
 - **Screens.** A screen is a scene whose root script has `setup(app)`, `frame(steps, delta)` and `on_focus_lost()`.
   `App._switch_to(path)` frees the old screen (`queue_free`), clears latched presses and the clock, instances the
   scene, calls `setup(app)` before `add_child()` (screens build everything in `setup()`, nothing in `_ready()`), and
@@ -284,6 +330,7 @@ The A1 adversarial verifier passed A1 (no blocker or major findings). The lead f
   into `on_focus_lost()`. The game screen latches a `PAUSE` press if the world is running, as Phaser did on blur.
   Godot itself lets go of every held key on focus out, so the player presses them again after resuming (Phaser cleared
   its held keys on blur too).
+- **Joypads coming and going.** `App` forwards `Input.joy_connection_changed` to `input.connection_changed()`.
 - **Session.** `App.high_score` is the best score this session; each new `World` gets it, and the title shows it.
 - **The byte.** `Held` bits (`ACCEL`, `BRAKE`, `LEFT`, `RIGHT`, `HIGH_GEAR`) from each device are OR-ed, and
   `Held.to_byte(mask, presses)` makes the `PlayerInput` byte. Bytes are never OR-ed: "left" (steer bits 0) OR "none"
@@ -308,17 +355,31 @@ The A1 adversarial verifier passed A1 (no blocker or major findings). The lead f
   or left stick (beyond 0.5) steers, up is throttle, down brakes; A is high gear and throttle; B throttle. Presses
   come from `InputEventJoypadButton` events (`Pads.press_bits(event)`): A confirms, Start pauses and confirms. Devices
   become known from `Input.get_connected_joypads()`, from `Input.joy_connection_changed` (the app forwards it to
-  `pads.connection_changed()`) and from their first event, since the connected list is empty without a display.
-- `LocalInput` (single player): `handle_event(event)`, `held()`, `step_byte()`, `step_bytes(seats)` (seat 0 gets the
-  byte, other seats `NONE`), `take_presses()`, `press(bits)` and `clear_presses()`.
+  `LocalInput.connection_changed()`, which tells `pads`) and from their first event, since the connected list is empty
+  without a display.
+- `LocalInput` (single player): `handle_event(event)`, `connection_changed(device, connected)`, `held()`, `step_byte()`,
+  `step_bytes(seats)` (seat 0 gets the byte, other seats `NONE`), `take_presses()`, `press(bits)` and
+  `clear_presses()`.
+
+### For A3: CI
+
+- Run `tools/test.sh`, then `tools/run_tool.sh smoke`, both with `GODOT` set to the Godot 4.7.2 binary. Do not run the
+  bare smoke command in CI: its exit code misses ERROR lines printed while the engine shuts down (see Verify). The
+  wrapper imports the project itself, so the smoke step also passes on a fresh clone (plan §8, A3).
+- The `--main-pack build/fuel_rivals.pck -- --selftest` run of plan §6 needs the same check on its output (`grep -E
+  '^(SCRIPT ERROR|ERROR):'`), which `tools/run_tool.sh` does not cover.
 
 ### For B2: where seats, HUD panels and join screens plug in
 
-- **Seats.** Write `scripts/input/seats.gd` with `LocalInput`'s calls (`handle_event`, `step_bytes(seats)`,
-  `take_presses`, `press`, `clear_presses`) and give it to `App.input` for versus games. Reuse `Pads`: `presses_of()`
-  notes each device and `press_bits()` gives its presses, `held_of(device)` its held bits, `Held.to_byte()` the byte.
-  A join is an `InputEventJoypadButton` with A from an unassigned `event.device` inside `handle_event()`. A
-  disconnected seat's byte is `PlayerInput.BOT` (plan §5); `connection_changed()` is where the app hears of it.
+- **Seats.** `App.input` is declared `var input: LocalInput` (`scripts/app/app.gd`), so make `scripts/input/seats.gd`
+  extend `scripts/input/local_input.gd` and override what differs: `handle_event()` (a join is an
+  `InputEventJoypadButton` with A from an unassigned `event.device`), `connection_changed()` (a disconnected seat's
+  byte becomes `PlayerInput.BOT`, plan §5), `step_bytes(seats)`, `take_presses()`, `press()`, `clear_presses()` and
+  `held()`; then give it to `App.input` for versus games. If seats.gd cannot extend it, retype `App.input` and keep
+  those methods and the `pads` member: the app calls `handle_event()` (from `_input()`) and `connection_changed()`
+  (from `Input.joy_connection_changed`), and `tools/smoke.gd` and `tests/test_app.gd` read `app.input.pads.devices`
+  and `app.input.held()`. Reuse `Pads`: `presses_of()` notes each device and `press_bits()` gives its presses,
+  `held_of(device)` its held bits, `Held.to_byte()` the byte.
 - **Join and results screens.** New scenes with `setup(app)`, `frame(steps, delta)` and `on_focus_lost()`, opened with
   `App._switch_to("res://scenes/join.tscn")` (add `show_join()` and `show_results()` next to `show_title()`). The title
   screen's confirm press goes to `app.start_game()` today (`title.gd` `start()`).
@@ -341,18 +402,20 @@ The A1 adversarial verifier passed A1 (no blocker or major findings). The lead f
   player's car in its start lane, the prompt at full brightness and the best score.
 - `02-game.png`: a game in high gear at 260 km/h with cars and trucks spread over the six lanes, the "PASS +50"
   message, and both HUD panels (score 50, stage 1, the goal gauge, speed, gear, fuel 87 and its gauge).
-- `03-pause.png`: the same moment paused: the screen dimmed under the PAUSED panel.
+- `03-pause.png`: paused one tick after 02 (260 → 261 km/h: the Esc sent after 02 reaches the game a frame later),
+  the screen dimmed under the PAUSED panel.
 - `04-game-over.png`: the game-over panel (score, best, retry or title) after the tank was set to 0.1; the fuel number
   is 0 in light red.
 - `05-stage-clear.png`: the STAGE 1 CLEAR panel (fuel bonus +2910, score, next stage) after the car was set just short
   of the goal.
-- `06-skid-low-fuel.png`, staged: the player's 45-degree skid frame over an oil patch with the "OIL! STEER INTO THE
-  SLIDE" message, the light-red fuel number, gauge and "LOW FUEL" warning, the fuel car in its rainbow tint (magenta at
-  that tick), a truck and a yellow car.
+- `06-skid-low-fuel.png`, staged: the player's 45-degree skid frame with an oil patch just behind the car (its top at
+  screen y 320, 4 px below the car's rear), the "OIL! STEER INTO THE SLIDE" message, the light-red fuel number, gauge
+  and "LOW FUEL" warning, the fuel car in its rainbow tint (magenta at that tick), a truck and a yellow car.
 
 All six were looked at, also as 1:1 and enlarged crops: sprites sit on whole pixels with no seams between tiles, no
 blur, the pixel font is sharp, and no text overlaps another (messages are hidden while a panel is up; panels are
-opaque).
+opaque). After the A2 fixes they were made again with `tools/run_tool.sh screenshots`, looked at again, and came out
+byte for byte the same.
 
 ### The view checks of `tests/test_assets.gd` see the view
 
@@ -369,8 +432,16 @@ opaque).
 ### Deviations from the plan, with reasons
 
 - **More files than plan §2 lists**: `scripts/app/{fixed_step,title,game}.gd`, `scripts/input/{held,local_input}.gd`,
-  `scripts/view/{draw,pixel_art,title_view}.gd`, `tools/tool_base.gd`. Each has one job (the accumulator is tested on
-  its own; the three tools share their boot, keys and error count).
+  `scripts/view/{draw,pixel_art,title_view}.gd`, `tools/tool_base.gd`, `tools/run_tool.sh`. Each has one job (the
+  accumulator is tested on its own; the three tools share their boot, keys and error count; the wrapper applies the
+  error filter).
+- **The smoke test's error filter.** Plan §6 has `tools/smoke.gd` apply `tools/test.sh`'s filter. In process it can
+  count errors only until the engine starts shutting down, so the filter on the whole output is applied by
+  `tools/run_tool.sh` around the plan's command, which stays as the plan writes it.
+- **The smoke test's timeline** adds a joypad leg after the plan's keyboard one, so after the first game over the
+  pad's Start and A answer the game overs instead of Enter. It sets the tank to 0.1 twice, as the plan's screenshots
+  do, so the pad's two game overs do not depend on the traffic.
+- **The window fit** (`App.fit_window()`): project.godot's 1920x1080 window is used only where it fits the screen.
 - **`project.godot` main scene**, added: the game cannot start without one (`--selftest`, A3's `--main-pack` run).
 - **Look, where 16:9 or legibility asked for it**: the HUD lives in two side panels (Phaser had a top bar and two
   small panels); panels at 85 % black (Phaser 75 %) and opaque overlay boxes (Phaser 92 %), so the grass and cars do
@@ -387,11 +458,41 @@ opaque).
 ### Known gaps, not verified here
 
 - No physical joypad: per-device reading, the stick threshold and A/B/Start were checked with synthetic
-  `InputEventJoypad*` events only. A real focus change was not tested either: the smoke test and the tests send
-  `NOTIFICATION_APPLICATION_FOCUS_OUT`/`IN` through the SceneTree, as the OS layer does.
+  `InputEventJoypad*` events only, in the tests and, through the engine to `App._input()`, in the smoke test.
+- Focus: the smoke test and the tests send `NOTIFICATION_APPLICATION_FOCUS_OUT`/`IN` through the SceneTree, as the OS
+  layer does. A real X11 focus change was tested by the A2 verifier, not here: the game paused about 250 ms after the
+  focus went out, provided the window had focus first.
+- The window fit was checked under Xvfb without a window manager, where the usable area is the whole screen and windows
+  have no decorations. Decorations are not counted (their size is not known when the game starts), so a title bar can
+  push a fitted window's bottom edge under a taskbar. A 1920x1080 desktop with a taskbar gets a 1280x720 window; 3x
+  then needs fullscreen, which the game has no key or option for (and fullscreen could not be tried here: without a
+  window manager, Xvfb ignores `--fullscreen`). `--resolution 1920x1080` on a smaller screen looks like the default
+  and is shrunk too.
 - Pictures were checked on Mesa llvmpipe (OpenGL 4.5) under xvfb only; not on a GPU, Windows, or above 1920x1080.
 - `NOTIFICATION_APPLICATION_PAUSED` (mobile) pauses the game like a focus loss but was not exercised.
 - A mouse click or touch on START works through `title.gd` `_unhandled_input()`; tested by calling it with a
   synthetic click, not with a real pointer.
 - The road draws about 1 000 tiles a frame with `draw_texture_rect()`. That is cheap on any GPU, and the whole
-  screenshot run took about 10 s on llvmpipe, but frame times were not measured.
+  screenshot command takes about 16 s on llvmpipe, but frame times were not measured.
+
+## Lead notes after A2 (verified, committed)
+
+The A2 adversarial verify passed in round 2. Its remaining minor findings are hand-offs:
+
+**For A3**
+- Run the tools through `tools/run_tool.sh` (it imports, applies the error filter and maps exit codes). `scalecheck`
+  without `-- --window=WxH` checks the window the game picks for the screen, so `--resolution` alone fails on purpose.
+- When an error is logged after a tool printed `smoke: PASS`, `_finalize()` prints `FAIL` and exits 1. The exit code is
+  right; the earlier PASS line is misleading. Print PASS from `_finalize()` instead, if cheap.
+
+**For B2**
+- `game.gd` `new_game()` builds `World.new(cfg, app.next_seed(), 1, app.high_score)`. The versus game must build a
+  multi-seat World there (or in a new versus screen) from the join screen's seats.
+- The view reads these World fields: `phase`, `stage`, `stage_ticks`, `goal`, `high_score`, `events`, `traffic`,
+  `player()`/`players`, and the camera (`camera_y`, anchor). New multiplayer fields the HUD needs must be added to
+  `to_array()` too.
+- There is no fullscreen toggle yet (see A2 known gaps). Add one (F11 / Alt+Enter, and a title option) with the
+  6-player HUD, since 3x on a 1080p desktop needs it.
+- New games use the previous seed + 1 (`App.next_seed()`), a deviation from Phaser's random seed per game. Keep it:
+  it makes a session reproducible from its first seed.
+- The smoke test never reaches the stage-clear branch in 10 800 frames; the screenshot tool covers that panel.

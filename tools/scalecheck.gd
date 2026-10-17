@@ -1,17 +1,21 @@
 extends "res://tools/tool_base.gd"
 ## Checks that the window shows the 640x360 viewport scaled by a whole number with Nearest filtering and nothing
 ## else: every window pixel equals its viewport pixel, and the bars around the picture are black (docs/GODOT_PLAN.md
-## §6). Needs a display and a renderer; run it once per window size:
+## §6). Needs a display and a renderer; tools/run_tool.sh scalecheck runs it in five windows, each like this:
 ##
-##   for r in 1280x800 1920x1080 1366x768; do
-##     xvfb-run -a -s "-screen 0 1920x1080x24" godot --rendering-driver opengl3 --fixed-fps 60 --resolution $r \
-##         --path . -s res://tools/scalecheck.gd
-##   done
+##   xvfb-run -a -s "-screen 0 1920x1080x24" godot --rendering-driver opengl3 --fixed-fps 60 --resolution 1366x768 \
+##       --path . -s res://tools/scalecheck.gd -- --window=1366x768
+##
+## --window=WxH, after "--", is the size the window must have: Godot keeps --resolution to itself, so the tool cannot
+## read it. Without --window the game picks the window itself (App.fit_window()): project.godot's 1920x1080 if it fits
+## on the screen's usable area, or else the largest whole multiple of 640x360 that fits, centred; tools/run_tool.sh
+## checks that on a 1366x768 and a 1280x800 screen.
 ##
 ## It compares two still pictures: the title screen, and a game paused after a few seconds of driving (so cars, road,
 ## HUD and the pause panel are all on screen). The window's image is read back from the screen
-## (DisplayServer.screen_get_image()) at the window's position. Prints one line per picture and exits 0 when every
-## pixel matches at the expected scale: floor(min(width / 640, height / 360)), which must be at least 2.
+## (DisplayServer.screen_get_image()) at the window's position. Prints a line about the window, one line per picture,
+## and exits 0 when every pixel matches at the expected scale: floor(min(width / 640, height / 360)), which must be at
+## least 2.
 ##
 ## Inside the viewport it also checks the Nearest filtering of sprites: on the title, every opaque pixel of the
 ## player's car must be its atlas pixel, exactly, as a 2x2 block.
@@ -84,9 +88,8 @@ func _fail(what: String) -> void:
 func _check(name: String) -> void:
 	var size := DisplayServer.window_get_size()
 	var pos := DisplayServer.window_get_position()
-	var asked := _resolution_argument()
-	if asked != Vector2i.ZERO and asked != size:
-		_fail("the window is %s, not the %s asked for" % [size, asked])
+	if name == "title":
+		_check_window(size, pos)
 	var expected_scale := mini(floori(size.x / float(VIEW.x)), floori(size.y / float(VIEW.y)))
 	var xform := root.get_final_transform()
 	var s := roundi(xform.x.x)
@@ -120,6 +123,33 @@ func _check(name: String) -> void:
 	])
 	if differing != 0:
 		_fail("%s: %d pixels differ" % [name, differing])
+
+
+## The window's size: the one --resolution asked for, or else the one the game should pick on this screen, inside the
+## screen's usable area.
+func _check_window(size: Vector2i, pos: Vector2i) -> void:
+	var screen := DisplayServer.window_get_current_screen()
+	var usable := DisplayServer.screen_get_usable_rect(screen)
+	var asked := _window_argument()
+	var by := "asked with --resolution"
+	if asked != Vector2i.ZERO:
+		if asked != size:
+			_fail("the window is %s, not the %s asked for" % [size, asked])
+	else:
+		by = "picked by the game"
+		var project := Vector2i(
+			ProjectSettings.get_setting("display/window/size/window_width_override"),
+			ProjectSettings.get_setting("display/window/size/window_height_override")
+		)
+		var wanted := App.fitted_window_size(project, usable.size, VIEW)
+		if size != wanted:
+			_fail("the window is %s; on a screen with %s usable it should be %s" % [size, usable.size, wanted])
+		if not usable.encloses(Rect2i(pos, size)):
+			_fail("the window (%s at %s) is not inside the screen's usable area %s" % [size, pos, usable])
+	var screen_size := DisplayServer.screen_get_size(screen)
+	print("scalecheck window: %dx%d at %s on a %dx%d screen, %s" % [
+		size.x, size.y, pos, screen_size.x, screen_size.y, by
+	])
 
 
 ## The title's car against its atlas frame: each opaque texture pixel is a 2x2 block of exactly its colour.
@@ -168,13 +198,13 @@ static func _differing_pixels(a: Image, b: Image) -> int:
 	return count
 
 
-## The size given with --resolution WxH on the command line, or (0, 0).
-static func _resolution_argument() -> Vector2i:
-	var args := OS.get_cmdline_args()
-	var at := args.find("--resolution")
-	if at < 0 or at + 1 >= args.size():
+## The size given with --window=WxH after "--", or (0, 0). A malformed size fails the run.
+func _window_argument() -> Vector2i:
+	var text := user_arg("window", "")
+	if text.is_empty():
 		return Vector2i.ZERO
-	var parts := args[at + 1].split("x")
+	var parts := text.split("x")
 	if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
+		_fail("--window=%s is not a size like 1366x768" % text)
 		return Vector2i.ZERO
 	return Vector2i(parts[0].to_int(), parts[1].to_int())

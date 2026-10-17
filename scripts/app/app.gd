@@ -9,13 +9,16 @@ extends Node
 ##   the current screen runs them (frame()).
 ## - Focus: when the application loses focus (NOTIFICATION_APPLICATION_FOCUS_OUT, or PAUSED on mobile) the current
 ##   screen hears on_focus_lost(); the game screen pauses a running game.
+## - The window: project.godot opens it at 1920x1080 (3x the 640x360 picture); fit_window() shrinks it on a smaller
+##   screen to the largest whole multiple of the picture that fits.
 ## - Screens: show_title() and start_game() swap the current screen, a child of this node. A screen is a scene whose
 ##   root script has setup(app), called before it enters the tree (it builds everything there, not in _ready()),
 ##   frame(steps, delta) and on_focus_lost().
 ## - The session: the best score and the seeds of new games.
 ## - --selftest (after the "--" of the command line): boots, drives SELFTEST_TICKS steps through the real screens and
-##   checks the result, then draws SELFTEST_FRAMES frames of a driven game, and quits with 0 (pass) or 1 (fail, or an
-##   error logged on the way). Its first game's seed is SELFTEST_SEED. --seed=N fixes the first game's seed.
+##   checks the result (selftest_problems(): among others, a pause press pauses the game and a second one resumes
+##   it), then draws SELFTEST_FRAMES frames of a driven game, and quits with 0 (pass) or 1 (fail, or an error logged on
+##   the way). Its first game's seed is SELFTEST_SEED. --seed=N fixes the first game's seed.
 
 const Atlas := preload("res://scripts/view/atlas.gd")
 const LocalInput := preload("res://scripts/input/local_input.gd")
@@ -29,6 +32,9 @@ const GAME_SCENE := "res://scenes/game.tscn"
 const SELFTEST_TICKS := 600
 const SELFTEST_FRAMES := 120
 const SELFTEST_SEED := 1
+## The ticks of the self test's two pause presses: the first pauses the game, the second resumes it.
+const SELFTEST_PAUSE_TICK := 300
+const SELFTEST_RESUME_TICK := 310
 
 
 ## Collects the errors logged while the self test runs (warnings do not count), as tests/run_tests.gd does.
@@ -93,6 +99,7 @@ func start() -> void:
 		return
 	_started = true
 	var selftest := _read_arguments()
+	fit_window()
 	boot()
 	if not Input.joy_connection_changed.is_connected(_on_joy_connection_changed):
 		Input.joy_connection_changed.connect(_on_joy_connection_changed)
@@ -111,6 +118,46 @@ func _read_arguments() -> bool:
 		elif argument.begins_with("--seed=") and argument.trim_prefix("--seed=").is_valid_int():
 			seed_override = argument.trim_prefix("--seed=").to_int()
 	return selftest
+
+
+## Makes the window fit the screen it opens on. project.godot asks for 1920x1080; on a screen whose usable area is
+## smaller, that window would hang off the edges, so it becomes the largest whole multiple of the 640x360 picture that
+## fits (fitted_window_size(); 1280x720 on a 1366x768 or 1280x800 screen, or on a 1920x1080 one whose taskbar leaves
+## 1040 rows), centred on the usable area. Nothing changes headless, when the window fits, when it is not a plain
+## window (fullscreen, maximized), or when it does not have project.godot's size: then a size was asked for (Godot
+## keeps --resolution to itself, so that is how it shows). Window decorations are not counted: their size is not known
+## yet when the game starts.
+func fit_window() -> void:
+	if DisplayServer.get_name() == "headless" or not is_inside_tree():
+		return
+	var window := get_window()
+	var project := Vector2i(
+		ProjectSettings.get_setting("display/window/size/window_width_override"),
+		ProjectSettings.get_setting("display/window/size/window_height_override")
+	)
+	if window.mode != Window.MODE_WINDOWED or window.size != project:
+		return
+	var usable := DisplayServer.screen_get_usable_rect(window.current_screen)
+	var view := Vector2i(
+		ProjectSettings.get_setting("display/window/size/viewport_width"),
+		ProjectSettings.get_setting("display/window/size/viewport_height")
+	)
+	var fitted := fitted_window_size(window.size, usable.size, view)
+	if fitted == window.size:
+		return
+	window.size = fitted
+	window.position = usable.position + Vector2i(
+		floori((usable.size.x - fitted.x) / 2.0), floori((usable.size.y - fitted.y) / 2.0)
+	)
+
+
+## The window size for a screen whose usable area is `usable`: `window` itself if it fits, or else the largest whole
+## multiple of `view` that fits (at least 1x).
+static func fitted_window_size(window: Vector2i, usable: Vector2i, view: Vector2i) -> Vector2i:
+	if window.x <= usable.x and window.y <= usable.y:
+		return window
+	var multiple := maxi(1, mini(floori(usable.x / float(view.x)), floori(usable.y / float(view.y))))
+	return view * multiple
 
 
 ## Loads the art and the font and builds the input map. Returns `booted`.
@@ -182,7 +229,7 @@ func _notification(what: int) -> void:
 
 func _on_joy_connection_changed(device: int, connected: bool) -> void:
 	if input != null:
-		input.pads.connection_changed(device, connected)
+		input.connection_changed(device, connected)
 
 
 # --- Self test -------------------------------------------------------------------------------------------------------
@@ -225,17 +272,20 @@ func _end_selftest() -> int:
 
 
 ## The scripted input of the self test at a tick: high gear and throttle, steering left, none, right, none, each for
-## two seconds, and a pause press at two ticks.
+## two seconds, and a pause press at SELFTEST_PAUSE_TICK and at SELFTEST_RESUME_TICK.
 static func selftest_byte(tick: int) -> int:
 	var steer: int = [-1, 0, 1, 0][floori(tick / 120.0) % 4]
 	var byte := PlayerInput.encode(true, false, steer, true)
-	if tick == 300 or tick == 310:
+	if tick == SELFTEST_PAUSE_TICK or tick == SELFTEST_RESUME_TICK:
 		byte |= PlayerInput.PAUSE
 	return byte
 
 
-## Boots through the title into a game, drives it, and returns what went wrong ([] if nothing).
-func selftest_problems() -> PackedStringArray:
+## Boots through the title into a game, drives it SELFTEST_TICKS steps with the bytes of `byte_at(tick)`
+## (selftest_byte(), unless a test gives another script), and returns what went wrong ([] if nothing): the screens
+## opened; the press at SELFTEST_PAUSE_TICK paused the game and nothing moved until the press at SELFTEST_RESUME_TICK
+## resumed it, after which the car drove on; the steps all ran; and a replay of the same bytes gives the same world.
+func selftest_problems(byte_at: Callable = selftest_byte) -> PackedStringArray:
 	var problems := PackedStringArray()
 	if not booted:
 		problems.append("boot: the atlas, a frame or the font did not load")
@@ -251,17 +301,33 @@ func selftest_problems() -> PackedStringArray:
 	var start_high := world.high_score
 	var bytes: Array[int] = []
 	var paused := false
+	var still := true
+	var resumed := false
+	var y_resumed := 0.0
 	for tick in SELFTEST_TICKS:
 		if world.phase == World.GAME_OVER:
 			break
-		var byte := selftest_byte(tick)
+		var byte: int = byte_at.call(tick)
 		bytes.append(byte)
+		var y_before := world.player().y_world
 		game.step_once(PackedByteArray([byte]))
-		paused = paused or world.phase == World.PAUSED
+		if tick == SELFTEST_PAUSE_TICK:
+			paused = world.phase == World.PAUSED
+		elif tick > SELFTEST_PAUSE_TICK and tick < SELFTEST_RESUME_TICK:
+			still = still and world.phase == World.PAUSED and world.player().y_world == y_before
+		elif tick == SELFTEST_RESUME_TICK:
+			resumed = world.phase == World.RUNNING
+			y_resumed = world.player().y_world
 		if tick % 60 == 0:
 			game.render()
 	if not paused:
-		problems.append("the pause press did not pause the game")
+		problems.append("the pause press at tick %d did not pause the game" % SELFTEST_PAUSE_TICK)
+	elif not still:
+		problems.append("the game did not stay paused, or the car moved, before tick %d" % SELFTEST_RESUME_TICK)
+	elif not resumed:
+		problems.append("the pause press at tick %d did not resume the game" % SELFTEST_RESUME_TICK)
+	elif not (world.player().y_world > y_resumed):
+		problems.append("the car did not drive on after the game resumed")
 	if world.tick != bytes.size() or bytes.size() < 200:
 		problems.append("ran %d ticks of %d" % [world.tick, bytes.size()])
 	if world.player().y_world <= 0.0 and world.stage == 1:

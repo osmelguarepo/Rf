@@ -178,10 +178,11 @@ func test_every_pad_and_the_keyboard_drive_the_single_player() -> void:
 	assert_true(PlayerInput.high_gear(byte) and PlayerInput.accel(byte))
 
 
+## LocalInput.connection_changed() (the app forwards Input.joy_connection_changed there) keeps the polled devices.
 func test_a_disconnected_pad_is_no_longer_polled() -> void:
-	router.pads.connection_changed(7, true)
+	router.connection_changed(7, true)
 	assert_true(router.pads.devices.has(7))
-	router.pads.connection_changed(7, false)
+	router.connection_changed(7, false)
 	assert_false(router.pads.devices.has(7))
 
 

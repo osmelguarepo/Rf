@@ -6,8 +6,10 @@ extends RefCounted
 ## - Presses (pause, confirm) are latched when their event arrives and kept until a step (step_byte()) or a menu
 ##   (take_presses()) takes them, so a press on a frame with no fixed step is not lost.
 ##
-## app.gd forwards every input event to handle_event(). Phase B swaps this object for seats.gd (B2), which hands out
-## one byte per seat with the same calls: step_bytes(), take_presses(), press() and clear_presses().
+## app.gd forwards every input event to handle_event(), and Input.joy_connection_changed to connection_changed().
+## Phase B swaps this object for seats.gd (B2), which hands out one byte per seat with the same calls: handle_event(),
+## connection_changed(), step_bytes(), take_presses(), press() and clear_presses(). App.input is typed with this
+## script, so seats.gd extends it.
 
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const Held := preload("res://scripts/input/held.gd")
@@ -29,6 +31,11 @@ func handle_event(event: InputEvent) -> bool:
 	var bits := Keyboard.presses_of(event) | pads.presses_of(event)
 	pending = PlayerInput.latch(pending, bits)
 	return bits != 0
+
+
+## A joypad connected or disconnected (Input.joy_connection_changed, forwarded by the app).
+func connection_changed(device: int, connected: bool) -> void:
+	pads.connection_changed(device, connected)
 
 
 ## Held controls of the keyboard and every pad, as Held bits.

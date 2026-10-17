@@ -1,5 +1,7 @@
 extends "res://tools/tool_base.gd"
-## Screenshots of the game for docs/screenshots/ (docs/GODOT_PLAN.md §6). Needs a display and a renderer:
+## Screenshots of the game for docs/screenshots/ (docs/GODOT_PLAN.md §6). Needs a display and a renderer.
+## tools/run_tool.sh screenshots [--out=DIR --seed=N] imports the project and runs this command, then fails on any
+## ERROR line of the output, as tools/test.sh does:
 ##
 ##   xvfb-run -a -s "-screen 0 1920x1080x24" godot --rendering-driver opengl3 --fixed-fps 60 --path . \
 ##       -s res://tools/screenshots.gd [-- --out=DIR --seed=N]
@@ -8,14 +10,14 @@ extends "res://tools/tool_base.gd"
 ## keys) and saves:
 ##   01-title.png        the title screen;
 ##   02-game.png         a game in high gear, once several cars are on screen;
-##   03-pause.png        the pause panel;
+##   03-pause.png        the pause panel, one tick after 02 (the Esc sent after 02 reaches the game a frame later);
 ##   04-game-over.png    the game-over panel (the tank set to 0.1, so it runs dry within 6 ticks);
 ##   05-stage-clear.png  the stage-clear panel (the car set just short of the goal);
 ##   06-skid-low-fuel.png  staged: a skid (the 45-degree frame) with its message, the low-fuel warning, a rainbow fuel
 ##                       car, a truck and an oil patch, all at once.
 ## Each PNG is the 640x360 viewport scaled 2x with Nearest, so its pixels are the game's pixels (tools/scalecheck.gd
-## checks that the window shows exactly the viewport). Exit code 0 when every shot was saved and nothing logged an
-## error.
+## checks that the window shows exactly the viewport). Exit code 0 when every shot was saved and no error was logged
+## until the game's nodes were freed (tools/tool_base.gd).
 
 const Hud := preload("res://scripts/view/hud.gd")
 const ViewConfig := preload("res://scripts/view/view_config.gd")

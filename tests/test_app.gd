@@ -8,10 +8,14 @@ const App := preload("res://scripts/app/app.gd")
 const FixedStep := preload("res://scripts/app/fixed_step.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
+const Config := preload("res://scripts/sim/config.gd")
+const Car := preload("res://scripts/sim/car.gd")
 const ViewConfig := preload("res://scripts/view/view_config.gd")
 
 const BOOT := "res://scenes/boot.tscn"
 const DT := 1.0 / 60.0
+## The joypad device the tests use.
+const PAD := 2
 
 var app: App
 
@@ -21,6 +25,11 @@ func after_each() -> void:
 		app.get_parent().remove_child(app)
 		app.free()
 		app = null
+	# Let go of the pad, since Input's state outlives the test.
+	for button: JoyButton in [JOY_BUTTON_A, JOY_BUTTON_START]:
+		Input.parse_input_event(_pad_button(button, false))
+	Input.parse_input_event(_pad_axis(JOY_AXIS_LEFT_X, 0.0))
+	Input.flush_buffered_events()
 
 
 func test_the_main_scene_is_the_boot_scene_with_the_app() -> void:
@@ -92,6 +101,39 @@ func test_input_events_reach_the_app() -> void:
 	enter.pressed = true
 	app._input(enter)
 	assert_eq(app.input.pending, PlayerInput.CONFIRM)
+
+
+## Joypad events take the keys' road: Input's state, and App._input(), which the engine calls with every event (here
+## the test calls it, as the runner's tree delivers no events; tools/smoke.gd sends pad events through the engine). A
+## on the title starts a game, A held is high gear and throttle, the stick steers, and Start pauses.
+func test_pad_events_drive_the_game() -> void:
+	_boot()
+	_pad_event(_pad_button(JOY_BUTTON_A, true))
+	app.current_screen().frame(0, DT)
+	assert_eq(_screen_name(), "Game", "A on the title starts a game")
+	var game := app.current_screen()
+	var world: World = game.world
+	game.frame(60, DT * 60.0)
+	assert_eq(world.player().gear, Car.GEAR_HIGH, "A held: high gear")
+	assert_gt(world.player().speed, 0.0, "A held: throttle")
+	var x := world.player().x
+	_pad_event(_pad_axis(JOY_AXIS_LEFT_X, -0.9))
+	game.frame(10, DT * 10.0)
+	assert_lt(world.player().x, x, "the stick steers left")
+	_pad_event(_pad_axis(JOY_AXIS_LEFT_X, 0.0))
+	_pad_event(_pad_button(JOY_BUTTON_START, true))
+	game.frame(1, DT)
+	assert_eq(world.phase, World.PAUSED, "Start pauses")
+	assert_true(app.input.pads.devices.has(PAD), "the pad is known from its events")
+
+
+## The app forwards Input.joy_connection_changed to its input: a pad that connects is polled, one that goes is not.
+func test_pad_connections_reach_the_input() -> void:
+	_boot()
+	Input.joy_connection_changed.emit(PAD + 4, true)
+	assert_true(app.input.pads.devices.has(PAD + 4))
+	Input.joy_connection_changed.emit(PAD + 4, false)
+	assert_false(app.input.pads.devices.has(PAD + 4))
 
 
 ## The game screen steps the world once per fixed step, with the latched presses on the first step only.
@@ -216,12 +258,56 @@ func test_the_self_test_passes() -> void:
 	assert_eq(_screen_name(), "Title", "it ends on the title")
 
 
+## The self test's input, run on a world: the first pause press pauses it, nothing moves until the second press, which
+## resumes it, and the car drives on.
 func test_the_selftest_input_pauses_and_resumes() -> void:
-	var pauses := 0
-	for tick in App.SELFTEST_TICKS:
-		if PlayerInput.pause(App.selftest_byte(tick)):
-			pauses += 1
-	assert_eq(pauses, 2)
+	var world := World.new(Config.standard(), App.SELFTEST_SEED)
+	var phases: Array[int] = []
+	var ys: Array[float] = []
+	for tick in App.SELFTEST_RESUME_TICK + 60:
+		world.step(PackedByteArray([App.selftest_byte(tick)]))
+		phases.append(world.phase)
+		ys.append(world.player().y_world)
+	var pause_at := App.SELFTEST_PAUSE_TICK
+	var resume_at := App.SELFTEST_RESUME_TICK
+	assert_eq(phases.slice(0, pause_at).count(World.RUNNING), pause_at, "running until the first press")
+	assert_eq(phases.slice(pause_at, resume_at).count(World.PAUSED), resume_at - pause_at, "paused until the second")
+	assert_eq(ys[resume_at - 1], ys[pause_at], "nothing moves while paused")
+	assert_eq(phases.slice(resume_at).count(World.RUNNING), 60, "running again from the second press")
+	assert_gt(ys[resume_at + 59], ys[resume_at], "the car drives on")
+
+
+## The self test fails when the game does not pause, or stays paused (a script without one of its pause presses).
+func test_the_self_test_fails_without_its_pause_or_resume() -> void:
+	_boot()
+	var no_resume := func(tick: int) -> int:
+		return App.selftest_byte(tick) & ~PlayerInput.PAUSE if tick == App.SELFTEST_RESUME_TICK else App.selftest_byte(tick)
+	assert_eq(app.selftest_problems(no_resume), PackedStringArray([
+		"the pause press at tick %d did not resume the game" % App.SELFTEST_RESUME_TICK
+	]))
+	var no_pause := func(tick: int) -> int:
+		return App.selftest_byte(tick) & ~PlayerInput.PAUSE
+	assert_eq(app.selftest_problems(no_pause), PackedStringArray([
+		"the pause press at tick %d did not pause the game" % App.SELFTEST_PAUSE_TICK
+	]))
+
+
+## On a screen smaller than the 1920x1080 window of project.godot, the window becomes the largest whole multiple of
+## the 640x360 picture that fits the usable area (App.fit_window() applies it at start).
+func test_the_window_fits_the_screen() -> void:
+	var view := Vector2i(
+		ProjectSettings.get_setting("display/window/size/viewport_width"),
+		ProjectSettings.get_setting("display/window/size/viewport_height")
+	)
+	assert_eq(view, Vector2i(640, 360))
+	var window := Vector2i(1920, 1080)
+	assert_eq(App.fitted_window_size(window, Vector2i(1920, 1080), view), window, "it fits")
+	assert_eq(App.fitted_window_size(window, Vector2i(2560, 1440), view), window, "a bigger screen keeps it")
+	assert_eq(App.fitted_window_size(window, Vector2i(1366, 768), view), Vector2i(1280, 720))
+	assert_eq(App.fitted_window_size(window, Vector2i(1280, 800), view), Vector2i(1280, 720))
+	assert_eq(App.fitted_window_size(window, Vector2i(1920, 1040), view), Vector2i(1280, 720), "1080 less a taskbar")
+	assert_eq(App.fitted_window_size(window, Vector2i(1280, 680), view), Vector2i(640, 360))
+	assert_eq(App.fitted_window_size(window, Vector2i(320, 200), view), Vector2i(640, 360), "never below 1x")
 
 
 # --- helpers ---------------------------------------------------------------------------------------------------------
@@ -242,3 +328,26 @@ func _screen_name() -> String:
 func _start_game() -> Node:
 	_boot()
 	return app.start_game()
+
+
+## Delivers a pad event as the engine would: Input's state, then App._input().
+func _pad_event(event: InputEvent) -> void:
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	app._input(event)
+
+
+static func _pad_button(button: JoyButton, pressed: bool) -> InputEventJoypadButton:
+	var event := InputEventJoypadButton.new()
+	event.device = PAD
+	event.button_index = button
+	event.pressed = pressed
+	return event
+
+
+static func _pad_axis(axis: JoyAxis, value: float) -> InputEventJoypadMotion:
+	var event := InputEventJoypadMotion.new()
+	event.device = PAD
+	event.axis = axis
+	event.axis_value = value
+	return event
