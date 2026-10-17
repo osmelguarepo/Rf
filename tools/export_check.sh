@@ -21,7 +21,7 @@
 # On success the last line is "export_check: PASS". The pack stays in build/ (ignored by git).
 # Exit codes: 0 passed; 1 the export failed, the pack's file list is wrong or the self test failed; 2 an ERROR line
 # while everything else passed; 3 the import failed twice; 64 bad usage; 124 a run took more than 300 s; 127 Godot
-# not found.
+# not found; any other code is Godot's own (for example 134 or 139 when it crashes).
 
 set -u -o pipefail
 
@@ -29,6 +29,7 @@ GODOT="${GODOT:-godot}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ERROR_LINE='^(SCRIPT ERROR|ERROR):'
 TIMEOUT=300
+QUIT_AFTER=3000
 PRESET="Linux"
 PACK="build/fuel_rivals.pck"
 # "GDPC" read as a little-endian u32, and the pack format this script reads.
@@ -163,7 +164,10 @@ if [ -s "$PACK" ]; then
 	fi
 
 	# 4. The game from the pack alone, shown as it runs.
-	(cd "$run_dir" && timeout "$TIMEOUT" "$GODOT" --headless --main-pack "$ROOT/$PACK" -- --selftest) 2>&1 | tee "$run_log"
+	# --quit-after is a backstop: the self test quits by itself within a few hundred frames, and a pack whose main
+	# scene never starts then ends in seconds (and fails for the missing "selftest: ok") instead of at the timeout.
+	(cd "$run_dir" && timeout "$TIMEOUT" "$GODOT" --headless --quit-after "$QUIT_AFTER" --main-pack "$ROOT/$PACK" \
+		-- --selftest) 2>&1 | tee "$run_log"
 	code="${PIPESTATUS[0]}"
 	if [ "$code" -ne 0 ]; then
 		fail "$code" "the self test from $PACK failed (exit $code)"

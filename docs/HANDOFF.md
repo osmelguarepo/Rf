@@ -511,9 +511,12 @@ The A2 adversarial verify passed in round 2. Its remaining minor findings are ha
     `<tool>: FAIL: errors logged at the end of the run` as before. `finish(code)` alone works as before.
   - `tools/smoke.gd` (A2): `_report()` prints `smoke: FAIL` at once when the run fails and gives `smoke: PASS` to
     `finish()`.
-  - No automated test: `_finalize()` runs only when the tool's own Godot process shuts down, which a test inside the
-    runner's process cannot reach. It was checked by runs instead (below), and
-    `tests/test_scripts.gd::test_all_scripts_compile` compiles both files.
+  - `tools/screenshots.gd` (A2, lead after the A3 review): its "screenshots: saved ..." line is the pass line too.
+  - Tested by `tests/test_tools.gd` (lead after the A3 review): `_finalize()` runs only when a tool's own process
+    shuts down, so the test runs `tests/fixtures/pass_line_tool.gd` in a child Godot (`OS.execute`) and checks the
+    pass line and exit 0, then, with an error logged right after `finish()`, exit 1, the FAIL line and no pass line.
+    Printing the pass line in `finish()` again makes the second test fail. The exit code, not the line, is still the
+    verdict: what the engine prints while it shuts down only `tools/run_tool.sh` catches.
 - Nothing under `scripts/` changed: the game runs from the pack as it is.
 
 ### Verify
@@ -644,10 +647,10 @@ The pack holds 66 files: the scripts as `.gdc` (compressed binary tokens, `scrip
 
 ### Known gaps, not verified here
 
-- **The workflow has not run on GitHub**; Actions cannot be run from here. What only GitHub can show: the hosted
-  runner image, `actions/cache` restore and save, the artifact upload, and the download without this sandbox's
-  proxy. The first real run should end with the three steps green and a `fuel_rivals-pck` artifact; its second run
-  should restore the editor from the cache.
+- **The workflow ran on GitHub** (lead's push of 52d9594, run 39012173681 on ubuntu-24.04): every step green, the
+  editor saved in the cache under `godot-4.7.2-stable-linux-x86_64`, `173 passed, 0 failed`, `smoke: PASS`,
+  `export_check: PASS`, and the `fuel_rivals-pck` artifact uploaded. Not seen yet: a run that restores the editor from
+  the cache (the next push shows it).
 - No binary was exported: the export templates are B3's. The presets were loaded and used only for packs.
 - The pack ran on the editor binary (`--main-pack`), not on an export template.
 - The licence travels inside the pack, where a player cannot read it. For the Steam build (B3), put

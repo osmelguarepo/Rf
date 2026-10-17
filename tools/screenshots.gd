@@ -100,8 +100,12 @@ func _process(_delta: float) -> bool:
 				_shot("06-skid-low-fuel")
 				_next()
 		7:
-			print("screenshots: saved %s in %s" % [", ".join(_saved), out_dir])
-			finish(0 if _saved.size() == SHOTS else 1)
+			var saved_line := "screenshots: saved %s in %s" % [", ".join(_saved), out_dir]
+			if _saved.size() == SHOTS:
+				finish(0, saved_line)
+			else:
+				print(saved_line)
+				finish(1)
 	if frame > 20000:
 		printerr("screenshots: stuck at step %d" % _stage)
 		finish(1)

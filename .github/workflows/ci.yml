@@ -59,7 +59,8 @@ jobs:
           fi
           sha512sum --check --strict "$zip.sha512"
 
-      # Saved as soon as it is checked, so a failing test later does not throw the download away.
+      # Saved as soon as it is checked, so a failing test later does not throw the download away. The key never
+      # changes: if a saved zip ever fails the check above, delete the cache entry (Actions > Caches) to download again.
       - name: Save the Godot editor in the cache
         if: steps.godot-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
