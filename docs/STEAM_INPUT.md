@@ -231,6 +231,10 @@ line. The pack holds 92 files: the 90 of the `Linux` pack plus the `.gdextension
   page.
 - Guests on a phone or tablet would need a touch layout (`controller_mobile_touch`), which the manifest does not list:
   Steam would offer no layout of the game's for them.
+- **Controller types without a layout of the game's** (not verified): the manifest ships layouts for eight types
+  (`tools/gen_steam_input.py`). For others Steam lists, such as the Xbox Elite, the DualSense Edge, the DualShock 3,
+  Joy-Cons and the Switch 2 Pro, Steam may fall back to a related type's layout or offer none; then the player binds the
+  game's actions in Steam's configurator once. Try them before naming them on the store page.
 - Steam's Remote Play Together API (invites, the guest's session) is not used: guests are invited from the Steam
   overlay.
 
@@ -258,7 +262,7 @@ line. The pack holds 92 files: the 90 of the `Linux` pack plus the `.gdextension
   ignored as soon as Steam reports one controller.
 - Steam's handles are 64-bit numbers; GDScript keeps them as signed integers, which GodotSteam turns back into the same
   number when they are passed back.
-- **The first import of a fresh clone crashes with the addon** (Godot 4.7.2 editor, every time here): the import
+- **The first import of a fresh clone crashes with the addon** (Godot 4.7.2 editor, usually: most fresh imports here; the untrimmed release addon does the same): the import
   finishes, then the editor crashes while it shuts down (a SIGSEGV in the main thread under gdb, exit 134, no `ERROR:`
   line and no crash message). The second import works and later runs never crash. Without the addon the first import
   does not crash. `tools/test.sh`, `tools/run_tool.sh` and `tools/export_check.sh` already retry a failed import once

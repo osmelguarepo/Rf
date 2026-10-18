@@ -1905,7 +1905,7 @@ Each change below was made in a scratch copy, with the tests run and the file re
   everything ran against `tests/fake_steam.gd` only; the manifest and the eight layouts were never loaded by Steam; no
   physical gamepad (six or any); no Remote Play Together; no Windows; the Steam Deck and the Steam Controller layouts;
   when Steam applies an action set switch, and what it reports while the game is not focused.
-- **The first import of a fresh clone with the addon crashes** (the Godot 4.7.2 editor, every time here): the import
+- **The first import of a fresh clone with the addon crashes** (the Godot 4.7.2 editor, usually: most fresh imports here; the untrimmed release addon does the same): the import
   finishes, then a SIGSEGV in the main thread while the editor shuts down (gdb), exit 134, no `ERROR:` line and no
   crash message. The second import and every later run are fine; without the addon it does not happen. CI and the
   three scripts pass through the retry, printing `the first import failed; importing again`. A first import that fails

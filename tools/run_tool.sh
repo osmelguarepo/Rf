@@ -4,6 +4,7 @@
 #   tools/run_tool.sh smoke [ARGUMENT...]         the smoke test, headless (CI runs this one)
 #   tools/run_tool.sh screenshots [ARGUMENT...]   the pictures in docs/screenshots/, under xvfb-run
 #   tools/run_tool.sh scalecheck                  the whole-number scale, in five windows, under xvfb-run
+#   tools/run_tool.sh versus_qa [ARGUMENT...]     the versus QA scenarios of plan §8 B3, headless (B3)
 #   GODOT=/path/to/Godot_v4.7.2-stable_linux.x86_64 tools/run_tool.sh smoke
 #
 # 1. Imports the project as tools/test.sh does (a failed import is retried once), so a fresh clone works too.
@@ -16,14 +17,17 @@
 #                   on a 1920x1080 screen (with -- --window=WxH, the size the tool must find); then, with neither, on a
 #                   1366x768 and a 1280x800 screen, where the game shrinks its 1920x1080 window to fit
 #                   (scripts/app/app.gd fit_window()).
+#      versus_qa    timeout 1800 godot --headless --fixed-fps 60 --path . -s res://tools/versus_qa.gd -- ARGUMENT...
+#                   (with no ARGUMENT: --scenario=lone, then --scenario=six: one person and five bots, then six
+#                   people's seats driven by bot.gd over 20 seeds, about 15 minutes in all)
 # 3. Fails if the import or the tool printed a line starting with "ERROR:" or "SCRIPT ERROR:", as tools/test.sh does.
 #    That includes what Godot prints after the tool has quit, while it shuts down (leaked RIDs, resources still in use
 #    at exit), which the tool's own count of logged errors (tools/tool_base.gd) cannot see. WARNING lines do not count.
 #
-# On success the last line is the tool's verdict: "smoke: PASS", "screenshots: saved ..." or
-# "scalecheck: 5 windows passed".
+# On success the last line is the tool's verdict: "smoke: PASS", "screenshots: saved ...",
+# "scalecheck: 5 windows passed" or "versus_qa: PASS".
 # Exit codes: 0 passed; 1 the tool failed; 2 an ERROR line while the tool passed; 3 the import failed twice;
-# 64 bad usage; 124 a run took more than 300 s; 127 Godot or xvfb-run not found.
+# 64 bad usage; 124 a run took more than 300 s (versus_qa: 1800 s); 127 Godot or xvfb-run not found.
 
 set -u -o pipefail
 
@@ -33,7 +37,7 @@ ERROR_LINE='^(SCRIPT ERROR|ERROR):'
 TIMEOUT=300
 
 usage() {
-	echo "usage: tools/run_tool.sh smoke|screenshots|scalecheck [ARGUMENT...]" >&2
+	echo "usage: tools/run_tool.sh smoke|screenshots|scalecheck|versus_qa [ARGUMENT...]" >&2
 	exit 64
 }
 
@@ -41,7 +45,7 @@ usage() {
 tool="$1"
 shift
 case "$tool" in
-	smoke | screenshots) ;;
+	smoke | screenshots | versus_qa) ;;
 	scalecheck) [ $# -eq 0 ] || usage ;;
 	*) usage ;;
 esac
@@ -50,7 +54,7 @@ if ! command -v "$GODOT" >/dev/null 2>&1; then
 	echo "run_tool.sh: Godot not found: $GODOT (set GODOT to the Godot 4.7.2 binary)" >&2
 	exit 127
 fi
-if [ "$tool" != smoke ] && ! command -v xvfb-run >/dev/null 2>&1; then
+if [ "$tool" != smoke ] && [ "$tool" != versus_qa ] && ! command -v xvfb-run >/dev/null 2>&1; then
 	echo "run_tool.sh: $tool needs a display: install xvfb-run (Debian and Ubuntu package xvfb)" >&2
 	exit 127
 fi
@@ -98,6 +102,14 @@ case "$tool" in
 			run timeout "$TIMEOUT" "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/smoke.gd -- --scenario=versus
 		else
 			run timeout "$TIMEOUT" "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/smoke.gd -- "$@"
+		fi
+		;;
+	versus_qa)
+		if [ $# -eq 0 ]; then
+			run timeout 1800 "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/versus_qa.gd -- --scenario=lone
+			run timeout 1800 "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/versus_qa.gd -- --scenario=six
+		else
+			run timeout 1800 "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/versus_qa.gd -- "$@"
 		fi
 		;;
 	screenshots)

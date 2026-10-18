@@ -100,3 +100,20 @@ jobs:
           path: build/fuel_rivals.pck
           if-no-files-found: error
           retention-days: 14
+
+      - name: Versus QA, one person against five bots (tools/run_tool.sh versus_qa --scenario=lone)
+        if: ${{ !cancelled() && steps.godot.outcome == 'success' }}
+        run: tools/run_tool.sh versus_qa --scenario=lone
+
+      # The four template files the builds need (tools/fetch_templates.py), about 175 MB, kept between runs.
+      - name: Restore the export templates from the cache
+        id: templates-cache
+        if: ${{ !cancelled() && steps.godot.outcome == 'success' }}
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/godot/export_templates/4.7.2.stable
+          key: godot-templates-${{ env.GODOT_VERSION }}-linux-windows-release-v1
+
+      - name: Release builds, with and without Steam (tools/export_builds.sh)
+        if: ${{ !cancelled() && steps.godot.outcome == 'success' }}
+        run: tools/export_builds.sh

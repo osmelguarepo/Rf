@@ -151,6 +151,9 @@ tools/run_tool.sh smoke         # 10 800 frames with keyboard and gamepad events
 tools/run_tool.sh screenshots   # the pictures in docs/screenshots/, the versus race checked by its pixels (xvfb-run)
 tools/run_tool.sh scalecheck    # whole-number scaling, in five windows (needs xvfb-run)
 tools/export_check.sh           # exports build/fuel_rivals.pck and runs its self test; ends with "export_check: PASS"
+tools/run_tool.sh versus_qa     # versus QA through the real screens: one person and five bots, then six people's
+                                # seats driven by bots over 20 seeds (about 20 minutes); ends with "versus_qa: PASS"
+tools/export_builds.sh          # the four release builds in build/, checked; ends with "export_builds: PASS"
 ```
 
 - `--selftest` (after `--`, also in an exported game) boots, plays 600 steps through the real screens with a
@@ -165,7 +168,9 @@ tools/export_check.sh           # exports build/fuel_rivals.pck and runs its sel
   dropped.
 - **CI** (`.github/workflows/ci.yml`) runs on every push and pull request: it downloads the official Godot 4.7.2
   editor, checks it against the release's `SHA512-SUMS.txt`, caches it, runs `tools/test.sh`,
-  `tools/run_tool.sh smoke` and `tools/export_check.sh`, and keeps the pack as an artifact.
+  `tools/run_tool.sh smoke` and `tools/export_check.sh`, and keeps the pack as an artifact; then the versus QA with one
+  person and five bots (`tools/run_tool.sh versus_qa --scenario=lone`) and the four release builds
+  (`tools/export_builds.sh`, with the export templates cached).
 
 ## Export
 
@@ -186,8 +191,20 @@ mkdir -p build
 ```
 
 `--export-pack` does not create a missing folder, hence the `mkdir`. `tools/export_check.sh` does both, checks what
-the pack holds and runs its self test. Binaries need Godot's 4.7.2 export templates, which this repository does not
-set up yet: real Linux and Windows exports come in phase B3.
+the pack holds and runs its self test.
+
+Binaries need Godot's 4.7.2 export templates. `tools/fetch_templates.py` installs the four files the builds use (about
+175 MB, read out of the official 1.28 GB templates file with HTTP range requests and checked by CRC-32), and
+`tools/export_builds.sh` builds all four presets into `build/` (installing the templates first if needed):
+
+```bash
+tools/export_builds.sh   # build/linux, build/windows, build/linux_steam, build/windows_steam
+```
+
+Next to each executable it copies `OFL.txt` and `ASSETS.md`; next to the Steam builds also `steam_input/` and
+`godotsteam_license.md` (GodotSteam copies its libraries there itself). It then runs each Linux build's self test from
+an empty folder and checks that the Windows files are PE32+ x86-64 (they are not run here). A Steam depot must never
+hold a `steam_appid.txt`.
 
 ## Layout
 
@@ -210,7 +227,8 @@ scripts/
                      join and versus (versus)
 tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, screen_helpers.gd, race_picture.gd,
                      fake_steam.gd, PARITY.md, golden/
-tools/               test.sh, run_tool.sh, export_check.sh; smoke.gd, screenshots.gd, scalecheck.gd, tool_base.gd;
+tools/               test.sh, run_tool.sh, export_check.sh, export_builds.sh, fetch_templates.py; smoke.gd,
+                     screenshots.gd, scalecheck.gd, versus_qa.gd, bot_stats.gd, versus_golden.gd, tool_base.gd;
                      slice-sheet.py and fetch_assets.py (the atlas); gen_golden/ (the TypeScript golden traces);
                      gen_steam_input.py (the files in steam_input/)
 docs/                GODOT_PLAN.md, DECISIONES_MULTIJUGADOR.md, HANDOFF.md, STEAM_INPUT.md, PLAN.md and ART_PLAN.md
