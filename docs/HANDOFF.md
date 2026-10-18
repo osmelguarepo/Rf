@@ -1916,26 +1916,22 @@ Each change below was made in a scratch copy, with the tests run and the file re
   as soon as Steam reports one controller of its own.
 - On a PC with Steam, `tools/test.sh` starts Steam once as Spacewar (480) in the test process.
 
-## Lead notes after B2 and B4 (weekly usage limit reached on 18 Oct)
+## Lead notes after B2 and B4 (updated 18 Oct, after the weekly limit)
 
-B1, B2 and B4 are merged in `feat/road-fighter-mvp` (337 tests, smoke 1p and versus, export_check). B4 passed its
-adversarial review (pass, minor findings only); B2's two verifiers passed the look and failed the flow on two missing
-tests, which its fixer added (keyboard drives no car; every pad gone) with the `set_bots()` fix, the car look, the HUD
-marks (EDGE and LOW FUEL, PRESS A on an orphan seat). The agents stopped at the weekly limit (resets 22 Oct, 23:00 UTC)
-before a re-review. Still open, all minor:
+B1, B2 and B4 are merged in `feat/road-fighter-mvp`. B4 passed its adversarial review (minor findings only). B2's
+look verifier passed and its flow verifier failed on two missing tests; the fixes were finished by the lead (no
+re-review): keyboard drives no car, every pad gone, `set_bots()`, car look, HUD marks, a gapped line-up race test
+(`test_a_gapped_line_up_keeps_each_seats_colour`, mutation-checked), `test_player_shades_of_any_rank_are_far_from_each_other`
+(floor `MIN_ANY_TO_ANY` 8), and P5's colour changed from PURPLE to BROWN (`#886000`; dark `#4a3200`, light `#9c863c`): under
+deuteranopia the purple was 2.0 CIEDE2000 from the blue traffic car. The brown is at least 11 from every traffic colour
+and other seat under normal, protan and deutan vision (Machado 2009 simulation; windshield colours, shared by every
+car, excluded), and the pictures 07-11 were re-shot. The weakest pairs left under simulation are RUBY/TEAL/PINK
+bodies at about 10 under protanopia and some dark and light shades at 2 to 5: six colours that are also five away
+from the traffic's cannot all be far apart for every colour-vision type, so the seats' names and the P1 to P6 labels
+stay on screen.
 
-**B2**
-- Colour-vision deficiency: under protan/deutan simulation PURPLE folds towards the blue traffic car and some seats
-  get close to each other. Choose the six with a deficiency simulation in the loop (the verifier suggested a mint near
-  `#00f0a8` instead of PURPLE), keeping the owner's rule (colour only) and the CIEDE2000 floors; re-shoot 07-11.
-- `test_seat_colours.gd` compares shades of the same rank only; extend to any rank with a floor of about 10.
-- A race-screen test with a gapped line-up (slot != seat, e.g. seats [0, 4]) for the cars, the HUD and the results.
-- The fixer's changes (ae0fd73) have not been re-reviewed.
-
-**B4** (fixer's partial work in 8d5f701, tests pass, not re-reviewed)
-- Check which of the review's items 1-7 it finished: take over only when every set and action handle is non-zero;
-  the tools never start Steam; `manifest_path_for()` and device-id tests; hold-over only right after a set switch;
-  docs ("usually" crashes on the first import); a README test; controller types without a layout in STEAM_INPUT.md.
+The B4 fixer's partial work (8d5f701) covers review items 1 to 4 and 6; the lead did items 5 and 7 (docs).
+Nothing from B2's and B4's fixes has had a second adversarial review.
 
 ## B3: QA with six cars and the real Linux and Windows builds (lead, 18 Oct)
 

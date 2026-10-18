@@ -211,7 +211,7 @@ func test_the_race_picture_check_fails_on_spoilt_pictures() -> void:
 	var border := picture.duplicate() as Image
 	var panel := VersusHud.seat_panel_rect(5)
 	border.fill_rect(_on_picture(Rect2i(panel.position, Vector2i(panel.size.x, VersusHud.BORDER))), PlayerColours.colour(4))
-	_assert_caught(RacePicture.check(border, atlas), "seat 5's HUD panel has #c94bf2", "a panel border in another colour")
+	_assert_caught(RacePicture.check(border, atlas), "seat 5's HUD panel has #886000", "a panel border in another colour")
 
 
 # --- helpers -----------------------------------------------------------------------------------------------------------

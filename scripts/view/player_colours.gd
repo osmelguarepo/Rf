@@ -10,9 +10,9 @@ extends RefCounted
 ## their car, and no player colour may be a traffic colour (docs/DECISIONES_MULTIJUGADOR.md §2). The traffic is yellow
 ## and orange (the small car), salmon (car_salmon, the "red" car), sky and royal blue with cyan (car_blue), green,
 ## lime, white and greys (the truck), black (oil), plus the windows, lights and shadow every car shares; the fuel car
-## (car_police, tinted through the rainbow) is the declared exception. That leaves roses, pinks, purples and lilacs,
+## (car_police, tinted through the rainbow) is the declared exception. That leaves roses, pinks, plums, lilacs, a brown
 ## and a band of teal. The six are three hue families at two lightness levels, so any two differ in hue or in
-## lightness: RUBY (a red leaning to rose: a true red is the salmon car's) and PINK, PURPLE and LILAC, TEAL, and PLUM.
+## lightness: RUBY (a red leaning to rose: a true red is the salmon car's) and PINK, BROWN, LILAC, TEAL, and PLUM. BROWN replaced a purple (B2 review): under protan and deutan vision the purple folded onto the blue traffic car (CIEDE2000 2.0), while the brown stays at least 11 from every traffic colour and every other seat under normal, protan and deutan vision.
 ## Distances are CIEDE2000 (delta_e()) between sRGB colours, and tests/test_seat_colours.gd checks them on the pixels
 ## of the frames: every seat colour at least MIN_SHADE_TO_TRAFFIC from every colour of every traffic sprite, each
 ## body at least MIN_BODY_TO_TRAFFIC; any two seats' bodies at least MIN_BODY_TO_BODY apart, and their dark or light
@@ -25,7 +25,7 @@ const Config := preload("res://scripts/sim/config.gd")
 
 const COUNT := 6
 ## What the colours are called, by seat (for people: the screens show P1 to P6 or BOT, and the colour itself).
-const NAMES := ["RUBY", "TEAL", "LILAC", "PLUM", "PURPLE", "PINK"]
+const NAMES := ["RUBY", "TEAL", "LILAC", "PLUM", "BROWN", "PINK"]
 ## car_red's body reds: body, dark, light.
 const SOURCE := [Color("#ae2633"), Color("#611732"), Color("#f26864")]
 ## The ranks of SOURCE and of each seat's SHADES.
@@ -38,7 +38,7 @@ const SHADES := [
 	[Color("#009690"), Color("#00474c"), Color("#64cca8")],
 	[Color("#b7b4fe"), Color("#9184e0"), Color("#dcd4ff")],
 	[Color("#600884"), Color("#32002f"), Color("#a8309a")],
-	[Color("#c94bf2"), Color("#7418a4"), Color("#eca0ff")],
+	[Color("#886000"), Color("#4a3200"), Color("#9c863c")],
 	[Color("#fb99b6"), Color("#d0628f"), Color("#ffcadb")],
 ]
 ## The frames that get a copy per seat: upright and turned 45 degrees each way (cars.gd player_sprite()).
@@ -48,6 +48,8 @@ const MIN_SHADE_TO_TRAFFIC := 15.0
 const MIN_BODY_TO_TRAFFIC := 20.0
 const MIN_BODY_TO_BODY := 20.0
 const MIN_SHADE_TO_SHADE := 15.0
+## Any two seats' colours of any rank, such as one seat's dark shade and another's body (the verifier's finding).
+const MIN_ANY_TO_ANY := 8.0
 ## Text on a seat's colour (a badge) is black on light colours and white on dark ones: black from this relative
 ## luminance up, where black stands out at least as much as white does.
 const INK_LUMINANCE := 0.18

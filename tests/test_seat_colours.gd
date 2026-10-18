@@ -175,6 +175,16 @@ func test_player_colours_are_far_from_each_other() -> void:
 				assert_gt(d, least, "%s and %s, shade %d: %.1f" % [PlayerColours.NAMES[a], PlayerColours.NAMES[b], rank, d])
 
 
+## Shades of different ranks too: any colour of one seat at least MIN_ANY_TO_ANY from any colour of another.
+func test_player_shades_of_any_rank_are_far_from_each_other() -> void:
+	for a in PlayerColours.COUNT:
+		for b in range(a + 1, PlayerColours.COUNT):
+			for ra in PlayerColours.SOURCE.size():
+				for rb in PlayerColours.SOURCE.size():
+					var d := PlayerColours.delta_e(PlayerColours.shade(a, ra), PlayerColours.shade(b, rb))
+					assert_gt(d, PlayerColours.MIN_ANY_TO_ANY, "%s shade %d and %s shade %d: %.1f" % [PlayerColours.NAMES[a], ra, PlayerColours.NAMES[b], rb, d])
+
+
 ## The distance is CIEDE2000: the 34 pairs of its published test data, and sRGB to L*a*b* (D65) for the primaries.
 func test_delta_e_matches_the_published_test_data() -> void:
 	var worst := 0.0

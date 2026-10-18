@@ -15,6 +15,7 @@ const Car := preload("res://scripts/sim/car.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const Held := preload("res://scripts/input/held.gd")
 const VersusHud := preload("res://scripts/view/versus_hud.gd")
+const Cars := preload("res://scripts/view/cars.gd")
 const PlayerColours := preload("res://scripts/view/player_colours.gd")
 const ViewConfig := preload("res://scripts/view/view_config.gd")
 const Draw := preload("res://scripts/view/draw.gd")
@@ -64,6 +65,41 @@ func test_the_race_plays_a_match_of_the_line_up() -> void:
 	assert_eq(app.input, seats)
 	S.frame(app, 3)
 	assert_eq(m.world.tick, 3, "the clock's steps")
+
+
+## Seats keep their colour whatever their world slot: two people on seats 0 and 4 (the ones between them left) race in
+## slots 0 and 1, the cars and panels in the colours of seats 0 and 4, not 0 and 1 (the verifier's finding).
+func test_a_gapped_line_up_keeps_each_seats_colour() -> void:
+	app.show_join()
+	for device: int in [50, 51, 52, 55, 56]:
+		S.tap(app, device, JOY_BUTTON_A)
+	for device: int in [51, 52, 55]:
+		S.tap(app, device, JOY_BUTTON_B)
+	S.frame(app, 0)
+	seats.set_bots(0)
+	S.tap(app, 50, JOY_BUTTON_START)
+	S.frame(app, 0)
+	var race: Node = app.current_screen()
+	assert_eq(S.screen_name(app), "Versus")
+	assert_eq(race.lineup, [0, 4] as Array[int])
+	assert_eq(race.cars.seat_colours, [0, 4] as Array[int])
+	assert_eq(race.hud.lineup, [0, 4] as Array[int])
+	var cars: Array[Car] = race.game_match.world.players
+	assert_eq(cars.size(), 2)
+	var second := Cars.seat_car_sprite(cars[1], race.lineup)
+	assert_eq(second["frame"], PlayerColours.frame_name("car_red", 4), "slot 1 is drawn in seat 4's colour")
+	assert_ne(second["frame"], PlayerColours.frame_name("car_red", 1), "not in seat 1's")
+	var pads: Array[bool] = race.pads_here()
+	var info := VersusHud.seat_info(race.game_match, race.lineup, pads, 1)
+	assert_eq(info["seat"], 4)
+	assert_eq(info["name"], "P5")
+	# A round won by the second slot: the results name seat 4, not seat 1.
+	race.game_match.world.players[0].fuel = 0.01
+	S.frame(app, 3)
+	assert_eq(race.game_match.phase, Match.ROUND_OVER)
+	var titles := _texts(VersusHud.overlay_for(race.game_match, race.lineup))
+	assert_true(" ".join(titles).contains("P5"), "the results show P5: %s" % [titles])
+	assert_false(" ".join(titles).contains("P2"), "and no P2: %s" % [titles])
 
 
 ## Each slot's byte: its pad's held controls with the single-player mapping, and 0xFF for a bot, whose bot drives.
