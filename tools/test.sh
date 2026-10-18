@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # The single entry point for the tests (docs/GODOT_PLAN.md §6).
 #
-#   tools/test.sh [--only=PATTERN[,PATTERN...]]
+#   tools/test.sh [--only=PATTERN[,PATTERN...]] [--no-steam]
 #   GODOT=/path/to/Godot_v4.7.2-stable_linux.x86_64 tools/test.sh
 #
 # 1. Imports the project. The first import of a fresh clone may fail (GodotSteam's GDExtension, phase B), so a
 #    failed import is retried once.
 # 2. Runs tests/run_tests.gd headless, with a 600 s timeout. --only= keeps the tests whose id
-#    (tests/test_x.gd::test_y) contains a pattern.
+#    (tests/test_x.gd::test_y) contains a pattern. --no-steam keeps the real Steam out of the run on a PC where it
+#    runs (B4, docs/STEAM_INPUT.md).
 # 3. Fails if the import or the test output has a line starting with "ERROR:" or "SCRIPT ERROR:".
 #    WARNING lines do not count.
 #

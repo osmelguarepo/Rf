@@ -17,11 +17,15 @@ extends RefCounted
 ##   inputInit(false), then setInputActionManifestFilePath(manifest), then the three signals below are connected and
 ##   enableDeviceCallbacks() is called, which reports every controller already connected.
 ## - Handles. When Steam has loaded a controller's configuration (input_configuration_loaded), the adapter reads the
-##   handles of the manifest's action sets and actions (0 until a configuration is loaded) and takes the controller,
-##   unless its layout is a legacy gamepad one (uses_steam_input_api false: Steam then emulates a pad, which Godot
-##   reads itself). input_device_connected and input_device_disconnected follow controllers coming and going. A
-##   controller keeps its handle when it comes back (ISteamInput: "This handle will consistently identify a
-##   controller, even if it is disconnected and re-connected"), so it keeps its device and its GUID, and its seat.
+##   handles of the manifest's action sets and actions. Steam answers 0 for a name it does not know: before a
+##   configuration has loaded, or when it has not loaded the game's manifest (a wrong path, a file it refused, the App
+##   ID's own configuration). The adapter takes the controller only when no handle is 0 (both sets and all 16
+##   actions); otherwise it pushes one warning (once per session) and the game goes on reading Godot's pads, until a
+##   configuration loads with every handle. It never takes a controller whose layout is a legacy gamepad one
+##   (uses_steam_input_api false: Steam then emulates a pad, which Godot reads itself). input_device_connected and
+##   input_device_disconnected follow controllers coming and going. A controller keeps its handle when it comes back
+##   (ISteamInput: "This handle will consistently identify a controller, even if it is disconnected and re-connected"),
+##   so it keeps its device and its GUID, and its seat.
 ## - One source of pads per session. Until Steam has taken a controller the game reads Godot's pads; from the first
 ##   one on it reads Steam's only (took_over), for the rest of the session: the app forgets Godot's pads and drops
 ##   their events (drops(), drops_device()), since the same controller would otherwise arrive twice, through Steam and
@@ -30,8 +34,8 @@ extends RefCounted
 ##   (while people drive: App.people_drive()) or the menus set (menus, pause, results), then getDigitalActionData() of
 ##   that set's actions. Each action holds down a button of the virtual pad (ACTIONS), and each button that goes down or
 ##   up is an InputEventJoypadButton (pad_event) on the controller's device: DEVICE_BASE for the first controller of the
-##   session, DEVICE_BASE + 1 for the next... A controller that goes away lets go of its buttons first, then
-##   pad_connection(device, false).
+##   session, DEVICE_BASE + 1 for the next, never one of Godot's own joypad devices. A controller that goes away lets go
+##   of its buttons first, then pad_connection(device, false).
 ##
 ## So a Steam controller drives as the gamepad mapping of pads.gd: accelerate holds the pad's D-pad up (throttle),
 ## brake down, steering left and right, high gear the pad's A (high gear and throttle), pause its Start (pause and
@@ -59,6 +63,9 @@ const NO_STEAM := "--no-steam"
 const MANIFEST := "steam_input/steam_input_manifest.vdf"
 ## The virtual devices of Steam's controllers start here, far from Godot's own joypads (0 up).
 const DEVICE_BASE := 1000
+## Frames, counting the one where a controller's requested action set changes, during which a button whose actions
+## all read inactive keeps its state (Steam may apply activateActionSet() at its next frame only). See frame().
+const SWITCH_FRAMES := 2
 
 ## What the adapter is doing.
 const OFF := 0
@@ -115,9 +122,12 @@ var init_result: Dictionary = {}
 var manifest: String = ""
 ## Looks up the engine singleton, or returns null. A test sets its own.
 var lookup: Callable = engine_singleton
-## Action set name -> handle, and action name -> handle, as read on the last configuration loaded (0: unknown).
+## Action set name -> handle, and action name -> handle, as read on the last configuration that loaded with every
+## handle (none 0); empty until one has.
 var set_handles: Dictionary = {}
 var action_handles: Dictionary = {}
+## True once the warning about names Steam knows no handle for has been pushed (once per session).
+var warned_unknown: bool = false
 ## Steam input handle -> virtual device, for each controller this session has taken (a handle keeps its device).
 var devices: Dictionary = {}
 ## Handles of the controllers Steam reports connected now, in the order they came.
@@ -128,6 +138,10 @@ var configured: Array[int] = []
 var announced: Array[int] = []
 ## Virtual device -> the buttons it holds down now (1 << JoyButton each).
 var held: Dictionary = {}
+## Steam input handle -> the action set (RACING or MENUS) frame() asked the controller for last, and the frames left in
+## which a button of inactive actions keeps its state since that changed (SWITCH_FRAMES at a change, then down to 0).
+var requested_set: Dictionary = {}
+var switch_frames: Dictionary = {}
 
 
 ## The engine's GodotSteam singleton, or null without the addon.
@@ -135,12 +149,17 @@ static func engine_singleton() -> Object:
 	return Engine.get_singleton(SINGLETON) if Engine.has_singleton(SINGLETON) else null
 
 
-## Where Steam reads the action manifest: next to the executable, or in the project's folder when the editor runs the
-## game (the editor's executable lives elsewhere).
+## Where Steam reads the action manifest for this run of the game: manifest_path_for() with this executable.
 static func manifest_path() -> String:
-	if OS.has_feature("editor"):
+	return manifest_path_for(OS.has_feature("editor"), OS.get_executable_path())
+
+
+## Where Steam reads the action manifest: next to the executable at exe_path in an exported game, or in the project's
+## folder when the editor runs the game (is_editor; the editor's executable lives elsewhere).
+static func manifest_path_for(is_editor: bool, exe_path: String) -> String:
+	if is_editor:
 		return ProjectSettings.globalize_path("res://" + MANIFEST)
-	return OS.get_executable_path().get_base_dir().path_join(MANIFEST)
+	return exe_path.get_base_dir().path_join(MANIFEST)
 
 
 ## The command line's arguments, before and after "--" (Steam's launch options come before it).
@@ -201,38 +220,44 @@ func state_name() -> String:
 ## Reads every controller of the session for one frame: see the class comment. racing picks the racing action set,
 ## else the menus set. Returns the number of pad events emitted. Nothing, and no call, unless Steam is the source.
 ##
-## A button that actions of the set hold keeps its state while all of those actions read inactive: Steam reports an
-## action inactive while its set is not the controller's active one, which may last until Steam's next frame after
-## activateActionSet(), so a Start held across the switch from the menus to a race stays one press instead of a second
-## one that would pause the race. A button that no action of the set holds goes up.
+## A switch of sets. Steam reports an action inactive while its set is not the controller's active one, which may last
+## until Steam's next frame after activateActionSet(). So for SWITCH_FRAMES frames from the one where the set asked of
+## a controller changes, a button that actions of the new set hold keeps its state while all of those actions read
+## inactive: a Start held across the switch from the menus to a race stays one press instead of a second one that would
+## pause the race. Otherwise an action that reads inactive is not held: after those frames (Steam still has not applied
+## the set, or reports it inactive for another reason) its button goes up, and so does at once a button that no action
+## of the set holds.
 func frame(racing: bool) -> int:
 	if state != ACTIVE:
 		return 0
 	var set_name := RACING if racing else MENUS
-	var set_handle: int = set_handles.get(set_name, 0)
 	var actions: Dictionary = ACTIONS[set_name]
 	var events := 0
 	for handle: int in announced:
-		if set_handle != 0:
-			singleton.call("activateActionSet", handle, set_handle)
+		singleton.call("activateActionSet", handle, set_handles[set_name])
+		if requested_set.get(handle, "") != set_name:
+			requested_set[handle] = set_name
+			switch_frames[handle] = SWITCH_FRAMES
+		var switching: bool = switch_frames.get(handle, 0) > 0
+		if switching:
+			switch_frames[handle] -= 1
 		var device: int = devices[handle]
 		var down := 0
 		var mapped := 0
 		var read := 0
 		for action: String in actions:
-			var action_handle: int = action_handles.get(action, 0)
-			if action_handle == 0:
-				continue
 			var bit := 1 << int(actions[action])
 			mapped |= bit
-			var data: Variant = singleton.call("getDigitalActionData", handle, action_handle)
+			var data: Variant = singleton.call("getDigitalActionData", handle, action_handles[action])
 			if not (data is Dictionary) or (data as Dictionary).get("active", false) != true:
 				continue
 			read |= bit
 			if (data as Dictionary).get("state", false) == true:
 				down |= bit
-		var before: int = held.get(device, 0)
-		events += _hold(device, down | (before & mapped & ~read))
+		var kept := 0
+		if switching:
+			kept = held.get(device, 0) & mapped & ~read
+		events += _hold(device, down | kept)
 	return events
 
 
@@ -273,6 +298,8 @@ func _on_device_disconnected(handle: int) -> void:
 	if not announced.has(handle):
 		return
 	announced.erase(handle)
+	requested_set.erase(handle)
+	switch_frames.erase(handle)
 	var device: int = devices[handle]
 	_hold(device, 0)
 	print_verbose("Steam Input: controller %d (pad %d) went away" % [handle, device])
@@ -280,9 +307,9 @@ func _on_device_disconnected(handle: int) -> void:
 
 
 func _on_configuration_loaded(_app_id: int, handle: int, config: Dictionary) -> void:
-	_read_handles()
-	print_verbose("Steam Input: configuration loaded for controller %d: %s, handles %s %s" % [
-		handle, config, set_handles, action_handles
+	var unknown := _read_handles()
+	print_verbose("Steam Input: configuration loaded for controller %d: %s, handles %s %s, no handle for %s" % [
+		handle, config, set_handles, action_handles, unknown
 	])
 	if config.get("uses_steam_input_api", true) != true:
 		return
@@ -290,14 +317,25 @@ func _on_configuration_loaded(_app_id: int, handle: int, config: Dictionary) -> 
 		configured.append(handle)
 	if not connected.has(handle):
 		connected.append(handle)
-	if state == WAITING:
-		state = ACTIVE
-		print_verbose("Steam Input: Steam's controllers are the game's pads for the rest of the session")
-		took_over.emit()
-		for each: int in connected:
-			_announce(each)
-	else:
+	if state != WAITING:
 		_announce(handle)
+		return
+	if not unknown.is_empty():
+		if not warned_unknown:
+			warned_unknown = true
+			var names := ACTIONS.size()
+			for set_name: String in ACTIONS:
+				names += (ACTIONS[set_name] as Dictionary).size()
+			push_warning("Steam Input: Steam has no handle for %s, so it has not loaded the game's action manifest (%s). %s" % [
+				"any action set or action" if unknown.size() == names else ", ".join(unknown), manifest,
+				"The game reads Godot's pads.",
+			])
+		return
+	state = ACTIVE
+	print_verbose("Steam Input: Steam's controllers are the game's pads for the rest of the session")
+	took_over.emit()
+	for each: int in connected:
+		_announce(each)
 
 
 # --- Inside ----------------------------------------------------------------------------------------------------------
@@ -310,11 +348,26 @@ func _unavailable(reason: String) -> int:
 	return state
 
 
-func _read_handles() -> void:
+## Reads the handles of the manifest's action sets and actions and returns the names Steam answered 0 for (it does not
+## know them). Only a reading with none becomes set_handles and action_handles: Steam's handles name the game's sets and
+## actions whatever the controller, so once read they stay, and a later reading with a 0 changes nothing.
+func _read_handles() -> PackedStringArray:
+	var sets := {}
+	var actions := {}
+	var unknown := PackedStringArray()
 	for set_name: String in ACTIONS:
-		set_handles[set_name] = int(singleton.call("getActionSetHandle", set_name))
+		sets[set_name] = int(singleton.call("getActionSetHandle", set_name))
+		if sets[set_name] == 0:
+			unknown.append(set_name)
+	for set_name: String in ACTIONS:
 		for action: String in ACTIONS[set_name]:
-			action_handles[action] = int(singleton.call("getDigitalActionHandle", action))
+			actions[action] = int(singleton.call("getDigitalActionHandle", action))
+			if actions[action] == 0:
+				unknown.append(action)
+	if unknown.is_empty():
+		set_handles = sets
+		action_handles = actions
+	return unknown
 
 
 ## Gives a connected controller with the game's configuration its virtual pad, once Steam is the source.

@@ -12,6 +12,7 @@ const MANIFEST := "res://steam_input/steam_input_manifest.vdf"
 const ADDON := "res://addons/godotsteam"
 const GDEXTENSION := "res://addons/godotsteam/godotsteam.gdextension"
 const ASSETS_MD := "res://ASSETS.md"
+const README := "res://README.md"
 const PRESETS := "res://export_presets.cfg"
 ## The controller types with a configuration of the game's own: Xbox, PlayStation, Switch Pro, the Steam Controller,
 ## the Steam Deck and generic gamepads (Valve's names, Steamworks "Action Manifest Files").
@@ -282,6 +283,34 @@ func test_the_addon_files_are_listed_with_their_sha256() -> void:
 	assert_eq(wrong, [])
 
 
+## README.md (A3's), where B4 wrote about Steam: Export names the four presets, their folders and the steam_input/
+## folder a Steam build needs; Layout lists the Steam files; the Steam section points to docs/STEAM_INPUT.md and gives
+## the App ID, the one warning, --no-steam for the game and for the tests, and what is not tested yet.
+func test_the_readme_describes_the_steam_builds_and_steam_input() -> void:
+	var readme := FileAccess.get_file_as_string(README)
+	var wanted := {
+		"## Export": [
+			"**Linux Steam**", "**Windows Steam**", "build/linux_steam/", "build/windows_steam/", "addons/godotsteam/",
+			"the `steam_input/` folder", "docs/STEAM_INPUT.md",
+		],
+		"## Layout": [
+			"addons/godotsteam/", "steam_input/ ", "steam_input (Steam's controllers)", "fake_steam.gd",
+			"gen_steam_input.py (the files in steam_input/)", "STEAM_INPUT.md",
+		],
+		"## Steam": [
+			"docs/STEAM_INPUT.md", "GodotSteam 4.23.1", "**480**", "(\"Steam Input is off\")", "`--no-steam`",
+			"`tools/test.sh --no-steam`", "Not tested yet: a real Steam client",
+		],
+	}
+	for heading: String in wanted:
+		var section := markdown_section(readme, heading)
+		assert_gt(section.length(), 200, heading)
+		for piece: String in wanted[heading]:
+			assert_true(section.contains(piece), "README.md %s says %s" % [heading, piece])
+	assert_true(FileAccess.file_exists("res://docs/STEAM_INPUT.md"), "the page the README points to")
+	assert_eq(markdown_section("# A\n## B\nb\n### C\nc\n## D\nd", "## B"), "## B\nb\n### C\nc\n", "the section reader")
+
+
 ## The VDF reader of these tests, on text written for it.
 func test_the_vdf_reader() -> void:
 	var text := "// comment\n\"a\" { \"b\" \"1\"  \"b\" \"2\" \"c\" { } unquoted value }\n\"d\" \"e \\\"q\\\"\""
@@ -422,6 +451,24 @@ static func sources_of(type: String) -> Array:
 		out.append("gyro")
 	if type == "controller_neptune":
 		out.append_array(["left_trackpad", "right_trackpad"])
+	return out
+
+
+## A Markdown section: from its heading line (exactly `heading`) to the next heading of the same or a higher level,
+## or "" if there is no such heading.
+static func markdown_section(markdown: String, heading: String) -> String:
+	var level := heading.get_slice(" ", 0)
+	var out := ""
+	var inside := false
+	for line in markdown.split("\n"):
+		if inside and line.begins_with("#"):
+			var marks := line.get_slice(" ", 0)
+			if marks.length() <= level.length() and marks == "#".repeat(marks.length()):
+				break
+		if line == heading:
+			inside = true
+		if inside:
+			out += line + "\n"
 	return out
 
 

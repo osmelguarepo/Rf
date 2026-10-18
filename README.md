@@ -233,4 +233,6 @@ ASSETS.md            every shipped asset, its source and licence
 - Development uses the Steam App ID **480** (Spacewar, Valve's test app) until the game has its own.
 - Not tested yet: a real Steam client, physical gamepads (six, or any), Remote Play Together, Windows.
   `docs/STEAM_INPUT.md` says how to test with App ID 480 on a PC with Steam.
+- On a PC with Steam, `tools/test.sh` starts it once, as Spacewar (one test checks the real GodotSteam);
+  `tools/test.sh --no-steam` leaves it alone. The tools of `tools/run_tool.sh` never start it.
 - The name "Fuel Rivals" still has to be checked as a trademark before publishing.

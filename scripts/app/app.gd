@@ -24,7 +24,8 @@ extends Node
 ## - Steam Input (B4, scripts/input/steam_input.gd): when GodotSteam is loaded and Steam runs, `steam` turns Steam's
 ##   controllers into virtual pads, read once a frame (poll_steam()) and parsed into Input like a pad driver's events,
 ##   so every screen reads them as pads. Once Steam has a controller, Godot's own pads are left out for the session.
-##   Steam starts in _ready() (start_steam()), so only the game itself talks to Steam: tests boot apps with start().
+##   Steam starts in _ready() (start_steam()), so only the game itself talks to Steam: tests boot apps with start(),
+##   and the tools (tools/tool_base.gd) set no_steam.
 ## - --selftest (after the "--" of the command line): boots, drives SELFTEST_TICKS steps through the real screens and
 ##   checks the result (selftest_problems(): among others, a pause press pauses the game and a second one resumes
 ##   it), then a versus race of SELFTEST_TICKS steps through the join and race screens (selftest_versus_problems(),
@@ -104,6 +105,9 @@ var seats: Seats
 var nav := Nav.new()
 ## Steam's controllers as pads (B4). Made by boot(), started by start_steam(); off until then.
 var steam: SteamInput
+## True keeps Steam Input off, as --no-steam does (set before the node enters the tree, as seed_override is). The tools
+## set it (tools/tool_base.gd): they drive synthetic pads, which Steam would drop once it took over on a PC with Steam.
+var no_steam: bool = false
 ## The title's last choice (title.gd CHOICE_SINGLE or CHOICE_VERSUS), shown again when it opens.
 var title_choice: int = 0
 ## The window that F11 and Alt+Enter switch: the game's own when null. Tests give another, since a headless window
@@ -360,10 +364,13 @@ func use_steam(adapter: SteamInput) -> void:
 	adapter.took_over.connect(_on_steam_took_over)
 
 
-## Starts Steam Input once (_ready() calls it): nothing with --no-steam, one warning without GodotSteam or without a
-## Steam client (Godot's pads are read then). Returns the adapter's state.
-func start_steam() -> int:
-	return steam.start_engine() if steam != null else SteamInput.OFF
+## Starts Steam Input once (_ready() calls it): nothing with --no-steam among `args` (the command line) or with
+## no_steam, one warning without GodotSteam or without a Steam client (Godot's pads are read then). Returns the
+## adapter's state.
+func start_steam(args: PackedStringArray = SteamInput.command_line()) -> int:
+	if steam == null:
+		return SteamInput.OFF
+	return steam.start_engine(PackedStringArray([SteamInput.NO_STEAM]) if no_steam else args)
 
 
 ## Reads Steam's controllers for this frame, before the screen runs: the racing action set while people drive, the

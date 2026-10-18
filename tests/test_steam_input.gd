@@ -1,11 +1,13 @@
 extends "res://tests/test_case.gd"
 ## Steam Input (B4, scripts/input/steam_input.gd; docs/GODOT_PLAN.md §5 and §8 B4, docs/STEAM_INPUT.md): the start
-## in the plan's order, one warning and no other call when Steam does not start, --no-steam, the handles read when a
-## configuration loads, one source of pads per session, Steam's actions as the buttons of a virtual pad (each action
-## name in one set only, buttons held across a set switch), and through a real App: a Steam controller that joins a
-## seat, drives it, goes away (0xFF) and comes back to its own seat, single player, the menus and the results panels.
-## The Steam singleton is tests/fake_steam.gd, except in test_the_real_godotsteam_singleton. Warnings are counted by a
-## Logger of this file; errors fail a test as everywhere (tests/run_tests.gd).
+## in the plan's order with the manifest next to the executable, one warning and no other call when Steam does not
+## start, --no-steam (also for the tools and the tests), the handles read when a configuration loads, one source of
+## pads per session and only once Steam knows every name, Steam's actions as the buttons of a virtual pad of its own
+## device (each action name in one set only, buttons held across a set switch for its first frames only), and through a
+## real App: a Steam controller that joins a seat, drives it, goes away (0xFF) and comes back to its own seat, single
+## player, the menus and the results panels. The Steam singleton is tests/fake_steam.gd, except in
+## test_the_real_godotsteam_singleton. Warnings are counted by a Logger of this file; errors fail a test as everywhere
+## (tests/run_tests.gd).
 
 const SteamInput := preload("res://scripts/input/steam_input.gd")
 const FakeSteam := preload("res://tests/fake_steam.gd")
@@ -24,7 +26,11 @@ const H1 := 0x1234567890
 const H2 := 77
 ## A Godot joypad device of these tests (other files use other numbers).
 const PAD := 31
+## Godot's first joypad device, the one a single pad gets (the smoke test's).
+const PAD_0 := 0
 const FIRST := SteamInput.DEVICE_BASE
+## A tool run in a child Godot by test_the_tools_never_start_steam().
+const STEAM_OFF_TOOL := "res://tests/fixtures/steam_off_tool.gd"
 
 
 ## Collects the warnings logged while a test runs.
@@ -89,27 +95,46 @@ func after_each() -> void:
 		app = null
 	adapter = null
 	fake = null
-	S.release([PAD, FIRST, FIRST + 1])
+	S.release([PAD, PAD_0, FIRST, FIRST + 1])
 
 
 # --- The adapter ------------------------------------------------------------------------------------------------------
 
 
 ## Plan §5: steamInitEx(480, true), then inputInit(false), setInputActionManifestFilePath(<the manifest>) and
-## enableDeviceCallbacks(), in that order, with Steam's three signals connected before the last one.
+## enableDeviceCallbacks(), in that order, with Steam's three signals connected before the last one. start_engine(),
+## which the app calls, hands Steam manifest_path(): run by the editor, as here, the project's own manifest.
 func test_steam_starts_in_the_plans_order() -> void:
-	assert_eq(_start(), SteamInput.WAITING)
+	adapter.lookup = func() -> Object: return fake
+	assert_eq(adapter.start_engine(PackedStringArray()), SteamInput.WAITING)
 	assert_eq(fake.names(), ["steamInitEx", "inputInit", "setInputActionManifestFilePath", "enableDeviceCallbacks"])
 	assert_eq(fake.calls_of("steamInitEx"), [[480, true]])
 	assert_eq(fake.calls_of("inputInit"), [[false]])
 	assert_eq(fake.calls_of("setInputActionManifestFilePath"), [[SteamInput.manifest_path()]])
-	assert_true(SteamInput.manifest_path().ends_with("/steam_input/steam_input_manifest.vdf"))
-	assert_true(FileAccess.file_exists(SteamInput.manifest_path()), "run from the editor, the project's manifest")
+	assert_eq(adapter.manifest, SteamInput.manifest_path())
+	assert_eq(SteamInput.manifest_path(), ProjectSettings.globalize_path("res://steam_input/steam_input_manifest.vdf"),
+		"run from the editor, the project's manifest")
+	assert_true(FileAccess.file_exists(SteamInput.manifest_path()))
 	assert_eq(fake.connected_at_enable, 3, "connected before Steam reports the controllers already there")
 	assert_eq(warnings.taken(), PackedStringArray())
 	assert_eq(adapter.start(fake, "elsewhere.vdf"), SteamInput.WAITING, "a second start does nothing")
 	assert_eq(fake.names().size(), 4)
 	assert_eq(adapter.state_name(), "waiting")
+	adapter.lookup = Callable()
+
+
+## Where Steam reads the manifest (plan §5): <folder of the executable>/steam_input/steam_input_manifest.vdf in an
+## exported game, on Linux as on Windows (Godot's paths use "/" there too), and the project's folder when the editor
+## runs the game, wherever the editor's executable is; manifest_path() is that for this run.
+func test_the_manifest_is_next_to_the_executable_of_an_exported_game() -> void:
+	assert_eq(SteamInput.manifest_path_for(false, "/home/player/games/fuel_rivals/fuel_rivals.x86_64"),
+		"/home/player/games/fuel_rivals/steam_input/steam_input_manifest.vdf")
+	assert_eq(SteamInput.manifest_path_for(false, "C:/Program Files (x86)/Steam/steamapps/common/Fuel Rivals/fuel_rivals.exe"),
+		"C:/Program Files (x86)/Steam/steamapps/common/Fuel Rivals/steam_input/steam_input_manifest.vdf")
+	var project := ProjectSettings.globalize_path("res://steam_input/steam_input_manifest.vdf")
+	assert_eq(SteamInput.manifest_path_for(true, "/opt/godot/Godot_v4.7.2-stable_linux.x86_64"), project)
+	assert_eq(SteamInput.manifest_path_for(true, "C:/Godot/Godot_v4.7.2-stable_win64.exe"), project)
+	assert_eq(SteamInput.manifest_path(), SteamInput.manifest_path_for(OS.has_feature("editor"), OS.get_executable_path()))
 
 
 ## Plan §5 and §8 B4: a status other than 0 (1 without a Steam client) gives exactly one warning, and Steam is never
@@ -311,6 +336,34 @@ func test_an_action_set_switch_keeps_shared_buttons_held() -> void:
 	assert_eq(_frame(false), [[FIRST, JOY_BUTTON_DPAD_UP, false]], "menu_up is not held")
 
 
+## The hold-over is for the switch only: SWITCH_FRAMES frames from a change of the set asked of the controller. If Steam
+## still reports the new set's actions inactive after them (it never applies the set), the button held over goes up,
+## once, and stays up however long that lasts, until the set is active and its action holds the button again. Without
+## a change of the set asked for, an action that reads inactive lets go of its button at once.
+func test_the_hold_over_ends_after_the_switch_frames() -> void:
+	_start()
+	_configure(H1)
+	assert_eq(SteamInput.SWITCH_FRAMES, 2, "the frame of the switch and the next")
+	fake.hold(H1, "menu_start")
+	fake.hold(H1, "pause")
+	assert_eq(_frame(false), [[FIRST, JOY_BUTTON_START, true]])
+	fake.activation_lag = true
+	for i in SteamInput.SWITCH_FRAMES:
+		assert_eq(_frame(true), [], "switch frame %d: Start held over" % i)
+	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_START, false]], "the racing set still reads inactive: Start goes up")
+	var later: Array = []
+	for i in 300:
+		later.append_array(_frame(true))
+	assert_eq(later, [], "and stays up through 300 frames of inactive actions")
+	fake.run_frame()
+	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_START, true]], "the racing set is active at last: pause holds Start")
+	# The same set asked for, but Steam reports it inactive (another set is the active one): no hold-over.
+	fake.active_set[H1] = fake.set_handles["menus"]
+	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_START, false]], "no switch: an inactive action is not held")
+	fake.run_frame()
+	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_START, true]])
+
+
 ## ISteamInput's getDigitalActionHandle() takes no set, so a name used in two sets is one handle, the first set's
 ## action, and Steam ignores the other (Steamworks docs; tests/fake_steam.gd does the same): every name of the adapter's
 ## ACTIONS is in one set only, and the menus set's own start with "menu_".
@@ -384,13 +437,20 @@ func test_the_adapter_never_names_the_steam_class() -> void:
 	assert_eq(name.search_all(code_only("var x = Steam.steamInit() # Steam\nvar s = \"Steam\"")).size(), 1)
 
 
-## Plan §8 B4 with the real GodotSteam: without a Steam client (this sandbox, CI) steamInitEx(480) returns status 1,
-## one warning, the singleton is never called again and Godot's pads are read. Without the addon (a build without
-## Steam): one warning too. With a Steam client running (a developer's PC): status 0, the adapter waits for
-## controllers.
+## Plan §8 B4 with the real GodotSteam, the one test that starts it: without a Steam client (this sandbox, CI)
+## steamInitEx(480) returns status 1, one warning, the singleton is never called again and Godot's pads are read.
+## Without the addon (a build without Steam): one warning too. With a Steam client running (a developer's PC): status 0,
+## the adapter waits for controllers. With --no-steam on the test run's command line (tools/test.sh --no-steam):
+## nothing is started, no warning.
 func test_the_real_godotsteam_singleton() -> void:
 	var real := SteamInput.new()
-	var state := real.start_engine(PackedStringArray())
+	var state := real.start_engine()
+	if SteamInput.command_line().has(SteamInput.NO_STEAM):
+		assert_eq(state, SteamInput.DISABLED)
+		assert_eq(real.init_result, {}, "steamInitEx() was not called")
+		assert_eq(warnings.taken(), PackedStringArray())
+		print("steam_input: --no-steam: Steam is not started")
+		return
 	if not Engine.has_singleton("Steam"):
 		assert_eq(state, SteamInput.UNAVAILABLE)
 		assert_eq(warnings.taken().size(), 1)
@@ -409,6 +469,41 @@ func test_the_real_godotsteam_singleton() -> void:
 	assert_eq(warnings.taken().size(), 1)
 	assert_eq(real.frame(true), 0)
 	assert_false(real.drops(_pad_button(PAD, JOY_BUTTON_A)))
+
+
+# --- The tools and the tests on a PC with Steam -----------------------------------------------------------------------
+
+
+## The tools (tools/smoke.gd, screenshots.gd, scalecheck.gd) never start Steam: they drive synthetic pads, which Steam
+## would drop as soon as it took over on a PC where it runs with a controller of its own. tools/tool_base.gd's
+## start_app() sets App.no_steam, so the game's _ready() leaves the adapter disabled: no call to GodotSteam, no
+## warning, none of Steam's own lines. Only a running tree calls _ready(), so tests/fixtures/steam_off_tool.gd, a tool
+## that boots the game with start_app() as the others do, runs in a child Godot.
+func test_the_tools_never_start_steam() -> void:
+	var result := _run_godot(PackedStringArray(["-s", STEAM_OFF_TOOL]))
+	var text: String = result[1]
+	assert_eq(result[0], 0, text)
+	assert_true(text.contains("steam_off_tool: steam disabled, no_steam true"), text)
+	assert_true(text.contains("steam_off_tool: PASS"), text)
+	assert_false(text.contains("Steam Input is off"), "no warning: " + text)
+	assert_false(text.contains("[S_API]"), "Steam's library was not started: " + text)
+
+
+## tools/test.sh --no-steam: the runner lets the argument through (any other unknown one fails the run) and the one
+## test that starts the real GodotSteam starts nothing then. Runs that test in a child runner.
+func test_the_tests_run_with_no_steam() -> void:
+	var result := _run_godot(PackedStringArray([
+		"-s", "res://tests/run_tests.gd", "--", SteamInput.NO_STEAM,
+		"--only=tests/test_steam_input.gd::test_the_real_godotsteam_singleton",
+	]))
+	var text: String = result[1]
+	assert_eq(result[0], 0, text)
+	assert_true(text.contains("steam_input: --no-steam: Steam is not started"), text)
+	assert_true(text.contains("\n1 passed, 0 failed"), text)
+	assert_false(text.contains("[S_API]"), "Steam's library was not started: " + text)
+	var other := _run_godot(PackedStringArray(["-s", "res://tests/run_tests.gd", "--", "--no-stem"]))
+	assert_eq(other[0], 1, "a misspelt argument still fails the run")
+	assert_true((other[1] as String).contains("unknown argument --no-stem"), other[1])
 
 
 # --- Through the app --------------------------------------------------------------------------------------------------
@@ -630,6 +725,100 @@ func test_godot_pads_leave_when_steam_takes_over() -> void:
 	assert_eq(app.seats.seat_of(FIRST), 0, "Steam's controller takes the seat")
 
 
+## Plan §5, "Steam if it has handles": a configuration of the game's actions that loads while Steam has no handle for
+## the manifest's names (getActionSetHandle() and getDigitalActionHandle() answer 0: Steam has not loaded the game's
+## action manifest) takes nothing over. Godot's pads stay the source, one warning says so for the whole session, and
+## no controller is read; one name unknown is enough. The first configuration that loads with every handle takes over,
+## with every connected controller of the game's configuration.
+func test_no_takeover_while_steam_has_no_handle_for_a_name() -> void:
+	fake.set_handles = {}
+	fake.action_handles = {}
+	fake.action_set_of = {}
+	_boot_app()
+	app.show_join()
+	S.tap(app, PAD, JOY_BUTTON_A)
+	S.frame(app)
+	assert_eq(app.seats.seat_of(PAD), 0, "a Godot pad joins")
+	fake.input_device_connected.emit(H1)
+	_configure(H1)
+	assert_eq(adapter.state, SteamInput.WAITING, "no takeover")
+	assert_eq([takeovers, connections], [0, []], "no virtual pad")
+	assert_eq(app.seats.seat_of(PAD), 0, "the Godot pad keeps its seat")
+	assert_false(adapter.drops_device(PAD))
+	var logged := warnings.taken()
+	assert_eq(logged.size(), 1, "one warning")
+	if logged.size() == 1:
+		assert_true(logged[0].begins_with("Steam Input: Steam has no handle for any action set or action, so"), logged[0])
+		assert_true(logged[0].contains(SteamInput.manifest_path()), "it names the manifest: " + logged[0])
+	fake.forget_calls()
+	app.poll_steam()
+	assert_eq(fake.calls, [], "no controller is read")
+	S.tap(app, PAD, JOY_BUTTON_B)
+	S.frame(app)
+	assert_eq(app.seats.seat_of(PAD), -1, "the Godot pad is still read: B leaves the seat")
+	S.tap(app, PAD, JOY_BUTTON_A)
+	S.frame(app)
+	# A second controller, then Steam knowing every name but one: still no takeover, and no second warning.
+	_configure(H2)
+	fake.name_handles(SteamInput.ACTIONS)
+	var quit_handle: int = fake.action_handles["menu_quit"]
+	fake.action_handles.erase("menu_quit")
+	_configure(H1)
+	assert_eq(adapter.state, SteamInput.WAITING, "one name without a handle is enough")
+	assert_eq(adapter.set_handles, {}, "no handle kept")
+	assert_eq(app.seats.seat_of(PAD), 0)
+	assert_eq(warnings.taken().size(), 1, "one warning for the session")
+	# Every name: the next configuration takes over, with both controllers; the Godot pad leaves.
+	fake.action_handles["menu_quit"] = quit_handle
+	_configure(H2)
+	assert_eq(adapter.state, SteamInput.ACTIVE)
+	assert_eq(takeovers, 1)
+	assert_eq(connections, [[FIRST, true], [FIRST + 1, true]])
+	assert_eq(adapter.action_handles["menu_quit"], quit_handle)
+	assert_eq(app.seats.seat_of(PAD), -1, "Steam is the source now")
+	_press(H1, "menu_confirm")
+	assert_eq(app.seats.seat_of(FIRST), 0, "the first controller joins")
+	assert_eq(warnings.taken().size(), 1)
+	# Another session, where Steam knows every name but one: its warning names it.
+	var steam := FakeSteam.new()
+	steam.name_handles(SteamInput.ACTIONS)
+	steam.action_handles.erase("menu_quit")
+	var other := SteamInput.new()
+	assert_eq(other.start(steam, SteamInput.manifest_path()), SteamInput.WAITING)
+	steam.input_configuration_loaded.emit(SteamInput.APP_ID, H1, {"uses_steam_input_api": true})
+	assert_eq(other.state, SteamInput.WAITING)
+	logged = warnings.taken()
+	assert_eq(logged.size(), 2)
+	if logged.size() == 2:
+		assert_true(logged[1].begins_with("Steam Input: Steam has no handle for menu_quit, so"), logged[1])
+
+
+## Steam's virtual pads are devices of their own (DEVICE_BASE up), never one of Godot's joypads (0 up): with a Godot
+## pad on device 0 seated when Steam takes over, the Steam controller gets another device and its own GUID, device 0
+## leaves its seat and is dropped from then on, and the controller joins on its own device.
+func test_steam_devices_never_collide_with_godot_pads() -> void:
+	_boot_app()
+	app.show_join()
+	S.tap(app, PAD_0, JOY_BUTTON_A)
+	S.frame(app)
+	assert_eq(app.seats.seat_of(PAD_0), 0, "a Godot pad on device 0 joins before Steam takes over")
+	_configure(H1)
+	var device: int = adapter.devices.get(H1, -1)
+	assert_ne(device, PAD_0, "the Steam controller is not device 0")
+	assert_true(device >= SteamInput.DEVICE_BASE, "a device of its own: %d" % device)
+	assert_false(adapter.owns(PAD_0))
+	assert_true(adapter.drops_device(PAD_0), "Godot's device 0 is dropped")
+	assert_eq(app.seats.seat_of(PAD_0), -1, "and leaves its seat")
+	assert_eq(app.guid_of(PAD_0), "", "device 0 keeps the engine's GUID (none for a synthetic pad)")
+	assert_eq(app.guid_of(device), "steam:%d" % H1)
+	S.tap(app, PAD_0, JOY_BUTTON_A)
+	S.frame(app)
+	assert_eq(app.seats.seat_of(PAD_0), -1, "device 0's presses are dropped")
+	_press(H1, "menu_confirm")
+	assert_eq(app.seats.seat_of(device), 0, "the Steam controller joins on its own device")
+	assert_eq(app.seats.seat_guid[0], "steam:%d" % H1)
+
+
 ## Without a controller of Steam's own, or when Steam did not start, the app reads Godot's pads and Steam is not
 ## read.
 func test_without_steam_controllers_the_app_reads_godot_pads() -> void:
@@ -655,7 +844,7 @@ func test_without_steam_controllers_the_app_reads_godot_pads() -> void:
 
 
 ## The app activates the racing set while people drive and the menus set elsewhere (paused, between rounds, at the
-## end, and on the title and join screens); its seats take Steam's GUIDs; start_steam() goes through start_engine().
+## end, and on the title and join screens); its seats take Steam's GUIDs.
 func test_the_app_reads_the_racing_set_where_people_drive() -> void:
 	_boot_app()
 	assert_false(app.people_drive(), "the title")
@@ -680,8 +869,33 @@ func test_the_app_reads_the_racing_set_where_people_drive() -> void:
 	assert_eq(app.seats.guid_of.call(PAD), "", "a pad the engine does not know")
 	_configure(H1)
 	assert_eq(app.seats.guid_of.call(FIRST), "steam:%d" % H1)
+
+
+## start_steam() starts the adapter with the command line (here given): --no-steam among the arguments, or App.no_steam
+## (which the tools set), starts nothing at all; otherwise Steam starts (here the fake). Only the game's _ready() calls
+## it: tests boot apps with start().
+func test_start_steam_honours_no_steam() -> void:
+	app = S.boot(SEED)
+	var cases: Array = [
+		[PackedStringArray(["--path", ".", SteamInput.NO_STEAM]), false, SteamInput.DISABLED],
+		[PackedStringArray(["--seed=3"]), true, SteamInput.DISABLED],
+		[PackedStringArray(["--seed=3"]), false, SteamInput.WAITING],
+	]
+	for each: Array in cases:
+		var steam := FakeSteam.new()
+		var other := SteamInput.new()
+		other.lookup = func() -> Object: return steam
+		app.use_steam(other)
+		app.no_steam = each[1]
+		assert_eq(app.start_steam(each[0]), each[2], str(each))
+		assert_eq(steam.names(), [] if each[2] == SteamInput.DISABLED else [
+			"steamInitEx", "inputInit", "setInputActionManifestFilePath", "enableDeviceCallbacks"
+		], str(each))
+		other.lookup = Callable()
+	assert_eq(warnings.taken(), PackedStringArray())
+	app.steam = null
+	assert_eq(app.start_steam(), SteamInput.OFF, "no adapter")
 	var app_source := FileAccess.get_file_as_string("res://scripts/app/app.gd")
-	assert_true(app_source.contains("steam.start_engine()"), "start_steam() honours --no-steam")
 	assert_true(app_source.contains("func _ready() -> void:\n\tstart()\n\tstart_steam()"), "only the game starts Steam")
 
 
@@ -695,6 +909,18 @@ static func code_only(source: String) -> String:
 	for line in strings.sub(source, "\"\"", true).split("\n"):
 		out.append(line.get_slice("#", 0))
 	return "\n".join(out)
+
+
+## Runs this Godot headless on this project, as a child process, with these arguments; returns [exit code, output].
+static func _run_godot(args: PackedStringArray) -> Array:
+	var all := PackedStringArray(["--headless", "--path", ProjectSettings.globalize_path("res://")])
+	all.append_array(args)
+	var output: Array = []
+	var code := OS.execute(OS.get_executable_path(), all, output, true)
+	var text := ""
+	for chunk: Variant in output:
+		text += str(chunk)
+	return [code, text]
 
 
 func _start() -> int:
