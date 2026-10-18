@@ -38,11 +38,35 @@ extends "res://tools/tool_base.gd"
 ## went from a game over to the title; A started a game from the title and retried after a game over; and no error
 ## was logged from the start until the game's nodes were freed (tools/tool_base.gd). The exit code does not cover what
 ## the engine prints after that, while it shuts down (leaked RIDs or resources): tools/run_tool.sh checks those lines.
-## Phase B adds scenarios (B3).
+##
+## Scenario versus (B2; tools/run_tool.sh smoke runs it after 1p): a versus match from the title, played with synthetic
+## pads (VS_PADS and more) whose events go through Input.parse_input_event() as above. The engine has no GUID for a
+## synthetic pad, so the tool gives the seats a GUID source (VS_GUIDS), as the tests do. Step by step (vs_steps()), each
+## waiting at most VS_STEP_FRAMES frames for what it expects:
+##   title       Down chooses VERSUS and Enter opens the join screen.
+##   join        three pads press A: P1, P2 and P3 in that order.
+##   bots        Right three times on P1's pad (three bots, as many as fit), once more (still three), Left twice (one).
+##   leave       a fourth pad joins (P4) and leaves with B; the bot stays chosen.
+##   start       Start on P2's pad: a race of four cars, three of them people's.
+##   race        the pads drive (tool_base.gd pad_autopilot()) from here on.
+##   pause       Start on P1's pad pauses the round and no car moves for 30 frames; P3's Start resumes it.
+##   focus       losing focus pauses it, getting focus back does not resume it, P2's Start does.
+##   unplug      P2's pad goes away: its seat is orphaned (NO PAD), the round goes on and its bot drives the car on.
+##   replug      the same pad comes back under another device number (the same GUID) and takes its seat back.
+##   claim       P3's pad goes away, a new pad connects (another GUID; it takes nothing) and takes the seat with A.
+##   round over  P1's tank is emptied, so P1 goes out and the round ends; an A on the round's panel before
+##               Config.MATCH_CONFIRM_TICKS steps is ignored, one after them starts round 2.
+##   match over  each later round runs 240 steps before P1's tank is emptied, until the match is decided; then A plays
+##               a rematch (the next seed, the same seats).
+##   title       in the rematch, Start pauses and Back (Select) goes to the title, where every pad leaves its seat.
+## It passes when every step saw what it expected and no error was logged. B3 adds the long scenarios of plan §8.
 
-const Car := preload("res://scripts/sim/car.gd")
 const Held := preload("res://scripts/input/held.gd")
 const Keyboard := preload("res://scripts/input/keyboard.gd")
+const Seats := preload("res://scripts/input/seats.gd")
+const Match := preload("res://scripts/sim/match.gd")
+const PlayerInput := preload("res://scripts/sim/player_input.gd")
+const VersusHud := preload("res://scripts/view/versus_hud.gd")
 
 const SEED := 1
 const ENTER_AT := 30
@@ -92,6 +116,23 @@ const A_RETRY := [[0, "tap a"], [SETTLE, "check retry by A"]]
 ## Actions that wait for a running game.
 const NEEDS_RUNNING := ["esc pause", "focus out", "keys up", "start pause", "empty tank"]
 
+## Scenario versus: P1's, P2's and P3's pads; a pad that joins and leaves; a pad that comes along later; and P2's pad
+## again under another device number, as a pad that reconnects may get.
+const VS_PADS: Array[int] = [20, 21, 22]
+const VS_LEAVER := 23
+const VS_NEWCOMER := 24
+const VS_P2_AGAIN := 31
+## The GUIDs the tool's source gives (the engine knows no synthetic pad): P2's pad keeps its GUID under its new number.
+const VS_GUIDS := {20: "guid-p1", 21: "guid-p2", 22: "guid-p3", 23: "guid-p4", 24: "guid-new", 31: "guid-p2"}
+## Each pad shifts to high gear at its own speed (km/h), so the cars do not drive as one.
+const VS_SHIFT_KMH := {20: 160.0, 21: 170.0, 22: 180.0, 24: 175.0, 31: 170.0}
+## The most frames a step may wait for what it expects.
+const VS_STEP_FRAMES := 900
+## Steps of a round before the tool empties P1's tank (rounds after the first).
+const VS_ROUND_STEPS := 240
+## The default cap on the scenario's frames (--frames).
+const VS_FRAMES := 9000
+
 var frames: int = 10800
 var scenario: String = "1p"
 
@@ -132,15 +173,27 @@ var _last_world: World = null
 var _last_x := 0.0
 var _last_skidding := true
 
+# Scenario versus: what was seen (_vs_report() prints it), and where the script is.
+var vs_seen := {}
+var vs_rounds_ended := 0
+var _vs_step := 0
+var _vs_since := 0
+var _vs_mark := {}
+var _vs_stuck := false
+
 
 func _initialize() -> void:
 	if not begin():
 		finish(1)
 		return
-	frames = user_arg("frames", str(frames)).to_int()
 	scenario = user_arg("scenario", scenario)
+	if scenario == "versus":
+		frames = user_arg("frames", str(VS_FRAMES)).to_int()
+		start_app(SEED)
+		return
+	frames = user_arg("frames", str(frames)).to_int()
 	if scenario != "1p":
-		printerr("smoke: unknown scenario %s (only 1p in phase A)" % scenario)
+		printerr("smoke: unknown scenario %s (1p or versus)" % scenario)
 		finish(1)
 		return
 	start_app(SEED)
@@ -151,6 +204,9 @@ func _initialize() -> void:
 
 func _process(_delta: float) -> bool:
 	frame += 1
+	if scenario == "versus":
+		_vs_frame()
+		return false
 	_run_sequences()
 	if frame >= STEER_EVERY and frame % STEER_EVERY == 0:
 		_steer_segment(floori(frame / float(STEER_EVERY)))
@@ -438,4 +494,283 @@ func _report() -> void:
 	if not ok:
 		print("smoke: FAIL")
 	# "smoke: PASS" comes from _finalize() at the very end, and only if no error was logged until then.
+	finish(0 if ok else 1, "smoke: PASS")
+
+
+# --- Scenario versus (B2) ----------------------------------------------------------------------------------------------
+
+
+## The versus scenario's steps, in order: each is a method that takes the frames since the step began and returns
+## true once it is done (see the comment at the top).
+static func vs_steps() -> Array[String]:
+	return [
+		"_vs_title", "_vs_join", "_vs_bots", "_vs_leave", "_vs_start", "_vs_pause", "_vs_focus", "_vs_unplug",
+		"_vs_replug", "_vs_claim", "_vs_round_over", "_vs_match_over", "_vs_rematch", "_vs_to_title",
+	]
+
+
+func _vs_frame() -> void:
+	if frame == 1:
+		# The app booted on the tree's first frame (its _ready()); its seats exist from here on.
+		app.seats.guid_of = func(device: int) -> String: return VS_GUIDS.get(device, "")
+	var steps := vs_steps()
+	if _vs_step < steps.size() and not _vs_stuck:
+		_vs_drive()
+		var waited := frame - _vs_since
+		if call(steps[_vs_step], waited):
+			_vs_step += 1
+			_vs_since = frame
+			_vs_mark = {}
+		elif waited > VS_STEP_FRAMES:
+			_fail("versus: step %s did not finish within %d frames" % [steps[_vs_step], VS_STEP_FRAMES])
+			_vs_stuck = true
+	if _vs_step >= steps.size() or _vs_stuck or frame >= frames:
+		_vs_report()
+
+
+## While a race is on, every seated pad drives its car.
+func _vs_drive() -> void:
+	if versus() == null:
+		return
+	for device: int in VS_SHIFT_KMH:
+		if app.seats.seat_of(device) >= 0:
+			pad_autopilot(device, VS_SHIFT_KMH[device])
+
+
+## Records what a step saw; a check that fails is a failure of the run.
+func _vs_check(name: String, ok: bool, what: String) -> bool:
+	vs_seen[name] = ok
+	if not ok:
+		_fail("versus: %s (frame %d)" % [what, frame])
+	return ok
+
+
+func _vs_match() -> Match:
+	var screen := versus()
+	return screen.game_match if screen != null else null
+
+
+func _vs_world() -> World:
+	var m := _vs_match()
+	return m.world if m != null else null
+
+
+func _vs_title(waited: int) -> bool:
+	if waited == 20:
+		_vs_check("title", on_title(), "the title did not open")
+		tap(KEY_DOWN)
+	elif waited == 24:
+		tap(KEY_ENTER)
+	elif waited > 24 and join_screen() != null:
+		return _vs_check("join screen", app.input == app.seats, "the join screen did not take the seats' input")
+	return false
+
+
+func _vs_join(waited: int) -> bool:
+	for i in VS_PADS.size():
+		if waited == 1 + 3 * i:
+			pad_tap(VS_PADS[i], JOY_BUTTON_A)
+	if waited == 12:
+		var seated := [app.seats.seat_of(VS_PADS[0]), app.seats.seat_of(VS_PADS[1]), app.seats.seat_of(VS_PADS[2])]
+		return _vs_check("joined", seated == [0, 1, 2] and app.seats.bots == 0, "three pads did not take seats 0 to 2: %s" % [seated])
+	return false
+
+
+func _vs_bots(waited: int) -> bool:
+	var p1 := VS_PADS[0]
+	if waited in [1, 3, 5]:
+		pad_tap(p1, JOY_BUTTON_DPAD_RIGHT)
+	elif waited == 7:
+		_vs_mark["most"] = app.seats.bots
+		pad_tap(p1, JOY_BUTTON_DPAD_RIGHT)
+	elif waited == 9:
+		_vs_mark["capped"] = app.seats.bots
+		pad_tap(p1, JOY_BUTTON_DPAD_LEFT)
+	elif waited == 11:
+		pad_tap(p1, JOY_BUTTON_DPAD_LEFT)
+	elif waited == 13:
+		var counts := [_vs_mark["most"], _vs_mark["capped"], app.seats.bots]
+		return _vs_check("bots", counts == [3, 3, 1], "Right and Left did not give 3, 3 (the cap), then 1 bot: %s" % [counts])
+	return false
+
+
+func _vs_leave(waited: int) -> bool:
+	if waited == 1:
+		pad_tap(VS_LEAVER, JOY_BUTTON_A)
+	elif waited == 3:
+		_vs_mark["joined"] = app.seats.seat_of(VS_LEAVER)
+		pad_tap(VS_LEAVER, JOY_BUTTON_B)
+	elif waited == 5:
+		var ok: bool = _vs_mark["joined"] == 3 and app.seats.seat_of(VS_LEAVER) == -1 and app.seats.bots == 1
+		return _vs_check("leave", ok and app.seats.kind_of(3) == Seats.BOT, "a fourth pad did not join and leave with B")
+	return false
+
+
+func _vs_start(waited: int) -> bool:
+	if waited == 1:
+		pad_tap(VS_PADS[1], JOY_BUTTON_START)
+	elif waited == 3:
+		var lineup: Array = app.seats.lineup
+		var ok := versus() != null and lineup == [0, 1, 2, 3] and app.seats.humans_mask() == 0b0111
+		return _vs_check("race", ok, "Start did not begin a race of three pads and a bot")
+	return false
+
+
+func _vs_pause(waited: int) -> bool:
+	var w := _vs_world()
+	if waited == 240:
+		pad_tap(VS_PADS[0], JOY_BUTTON_START)
+	elif waited == 243:
+		_vs_check("paused by Start", w.phase == World.PAUSED, "Start on P1's pad did not pause")
+		_vs_mark["ys"] = _vs_positions(w)
+	elif waited == 273:
+		_vs_check("still while paused", w.phase == World.PAUSED and _vs_positions(w) == _vs_mark["ys"], "a car moved while paused")
+		pad_tap(VS_PADS[2], JOY_BUTTON_START)
+	elif waited == 276:
+		return _vs_check("resumed by Start", w.phase == World.RUNNING, "another person's Start did not resume")
+	return false
+
+
+func _vs_focus(waited: int) -> bool:
+	var w := _vs_world()
+	if waited == 60:
+		notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	elif waited == 63:
+		_vs_check("focus pause", w.phase == World.PAUSED, "losing focus did not pause the round")
+		notification(NOTIFICATION_APPLICATION_FOCUS_IN)
+	elif waited == 73:
+		_vs_check("stays paused", w.phase == World.PAUSED, "getting focus back resumed the round by itself")
+		pad_tap(VS_PADS[1], JOY_BUTTON_START)
+	elif waited == 76:
+		return _vs_check("resumed after focus", w.phase == World.RUNNING, "Start did not resume after the focus pause")
+	return false
+
+
+func _vs_unplug(waited: int) -> bool:
+	var w := _vs_world()
+	if waited == 30:
+		Input.joy_connection_changed.emit(VS_PADS[1], false)
+		_vs_mark["y"] = w.players[1].y_world
+	elif waited == 31:
+		var screen := versus()
+		var info := VersusHud.seat_info(screen.game_match, screen.lineup, screen.pads_here(), 1)
+		_vs_check("orphaned", app.seats.is_orphan(1) and app.seats.seat_byte(1) == PlayerInput.BOT and info["no_pad"],
+			"P2's seat was not orphaned (0xFF, NO PAD) when its pad went away")
+	elif waited == 91:
+		var ok := w.phase == World.RUNNING and _vs_match().phase == Match.PLAYING and w.players[1].y_world > float(_vs_mark["y"]) + 100.0
+		return _vs_check("bot drives", ok, "the round stopped, or nothing drove P2's car, after its pad went away")
+	return false
+
+
+func _vs_replug(waited: int) -> bool:
+	if waited == 30:
+		Input.joy_connection_changed.emit(VS_P2_AGAIN, true)
+	elif waited == 31:
+		var ok := app.seats.seat_of(VS_P2_AGAIN) == 1 and not app.seats.is_orphan(1)
+		return _vs_check("same GUID back", ok, "P2's pad, back under another number, did not take its seat back")
+	return false
+
+
+func _vs_claim(waited: int) -> bool:
+	if waited == 30:
+		Input.joy_connection_changed.emit(VS_PADS[2], false)
+		Input.joy_connection_changed.emit(VS_NEWCOMER, true)
+	elif waited == 31:
+		_vs_check("connecting takes nothing", app.seats.is_orphan(2) and app.seats.seat_of(VS_NEWCOMER) == -1,
+			"a pad of another GUID took the orphan seat by connecting")
+		pad_tap(VS_NEWCOMER, JOY_BUTTON_A)
+	elif waited == 33:
+		return _vs_check("claimed with A", app.seats.seat_of(VS_NEWCOMER) == 2 and not app.seats.is_orphan(2),
+			"A on a new pad did not take the orphan seat")
+	return false
+
+
+## Round 1 ends with P1's tank emptied; A before MATCH_CONFIRM_TICKS steps does nothing, A after it starts round 2.
+func _vs_round_over(waited: int) -> bool:
+	var m := _vs_match()
+	if waited == 30:
+		m.world.players[0].fuel = 0.01
+	elif waited == 32:
+		vs_rounds_ended = m.rounds_played()
+		_vs_check("round over", m.phase == Match.ROUND_OVER and m.round_number == 1, "emptying P1's tank did not end round 1")
+	elif waited == 62:
+		pad_press_a(VS_P2_AGAIN)
+	elif waited == 64:
+		_vs_check("early A ignored", m.phase == Match.ROUND_OVER, "A on the round's panel counted before the delay")
+	elif waited == 32 + Config.MATCH_CONFIRM_TICKS + 4:
+		pad_press_a(VS_P2_AGAIN)
+	elif waited == 32 + Config.MATCH_CONFIRM_TICKS + 6:
+		var ok := m.phase == Match.PLAYING and m.round_number == 2 and m.world.phase == World.RUNNING
+		return _vs_check("next round", ok, "A after the delay did not start round 2")
+	return false
+
+
+## Later rounds run VS_ROUND_STEPS steps, then P1's tank is emptied; P2 confirms each; until the match is decided.
+func _vs_match_over(_waited: int) -> bool:
+	var m := _vs_match()
+	if m.phase == Match.PLAYING and m.world.phase == World.RUNNING and m.world.stage_ticks == VS_ROUND_STEPS:
+		m.world.players[0].fuel = 0.01
+	elif m.phase == Match.ROUND_OVER and m.phase_ticks == Config.MATCH_CONFIRM_TICKS + 2:
+		pad_press_a(VS_P2_AGAIN)
+	elif m.phase == Match.MATCH_OVER:
+		vs_rounds_ended = m.rounds_played()
+		return _vs_check("match over", m.rounds_played() >= 2, "the match ended after fewer than two rounds")
+	return false
+
+
+## At the match's end, A (from MATCH_CONFIRM_TICKS steps on) plays a rematch on the same seats with the next seed.
+func _vs_rematch(_waited: int) -> bool:
+	var m := _vs_match()
+	if not _vs_mark.has("match"):
+		_vs_mark["match"] = m
+		_vs_mark["seed"] = m.world.game_seed
+	var first: Match = _vs_mark["match"]
+	if m == first and m.phase_ticks == Config.MATCH_CONFIRM_TICKS + 2:
+		pad_press_a(VS_NEWCOMER)
+	elif m != first:
+		var lineup: Array = versus().lineup
+		var ok := m.world.game_seed == int(_vs_mark["seed"]) + 1 and lineup == [0, 1, 2, 3]
+		return _vs_check("rematch", ok and m.phase == Match.PLAYING, "A at the match's end did not play a rematch on the same seats")
+	return false
+
+
+## In the rematch, Start pauses and Back goes to the title, where every pad leaves its seat.
+func _vs_to_title(waited: int) -> bool:
+	if waited == 60:
+		pad_tap(VS_PADS[0], JOY_BUTTON_START)
+	elif waited == 63:
+		_vs_check("rematch paused", _vs_world().phase == World.PAUSED, "Start did not pause the rematch")
+		pad_tap(VS_PADS[0], JOY_BUTTON_BACK)
+	elif waited == 66:
+		for device: int in VS_SHIFT_KMH:
+			pad_let_go(device)
+		return _vs_check("back to title", on_title() and app.seats.people() == 0 and app.input == app.solo, "Back while paused did not go to the title")
+	return false
+
+
+## Every live car's y_world, to see that nothing moves.
+static func _vs_positions(w: World) -> Array[float]:
+	var out: Array[float] = []
+	for p: Car in w.players:
+		out.append(p.y_world)
+	return out
+
+
+func _vs_report() -> void:
+	var steps := vs_steps()
+	if _vs_step < steps.size():
+		_fail("versus: stopped at step %s after %d frames" % [steps[_vs_step], frame])
+	app.seats.guid_of = Seats.engine_guid
+	var names: Array[String] = []
+	for name: String in vs_seen:
+		if vs_seen[name]:
+			names.append(name)
+	var logged := errors()
+	print("smoke versus: %s" % ", ".join(names))
+	print("smoke versus: %d frames, %d of %d steps, rounds in the first match %d, errors %d" % [
+		frame, _vs_step, steps.size(), vs_rounds_ended, logged.size()
+	])
+	var ok := _failures.is_empty() and logged.is_empty()
+	if not ok:
+		print("smoke: FAIL")
 	finish(0 if ok else 1, "smoke: PASS")

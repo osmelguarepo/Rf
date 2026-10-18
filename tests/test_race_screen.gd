@@ -314,35 +314,51 @@ func test_the_hud_shows_every_seat_in_its_place() -> void:
 	assert_eq(infos[1]["wins"], 1)
 
 
-## The results panels: a row per seat in its colour, aligned; they fit the screen and each line fits its panel.
+## The results panels: a row per seat, in seat order, each with its seat's badge; the table and every line fit their
+## panel, which fits the screen and stays clear of the seat panels.
 func test_the_results_panels_list_every_seat_in_its_colour() -> void:
 	var m := Match.create(Config.standard(), 3, 6, 0b111111)
 	var lineup: Array[int] = [0, 1, 2, 3, 4, 5]
 	m.world.players[3].score = 999999
 	m.world.players[3].distance = 999999.0
+	m.world.players[2].alive = 0
+	m.wins[4] = 1
 	m.phase = Match.ROUND_OVER
 	m.round_number = 5
 	m.phase_ticks = Config.MATCH_CONFIRM_TICKS
 	var font := app.atlas.font
+	var table_w: int = VersusHud.COLUMN_X.back() + VersusHud.COLUMN_W.back()
 	for overlay: Dictionary in [VersusHud.overlay_for(m, lineup), _match_over(m, lineup)]:
-		var lines: Array = overlay["lines"]
 		var width: int = overlay["width"]
-		var rows := 0
-		var length := -1
-		for line: Array in lines:
-			var text: String = line[0]
-			assert_lt(Draw.text_width(font, text, ViewConfig.TEXT_SMALL), width - 2 * ViewConfig.OVERLAY_PADDING, text)
-			for seat in 6:
-				if text.begins_with("P%d " % (seat + 1)) and not text.contains("WINS"):
-					rows += 1
-					assert_eq(line[1], PlayerColours.text_colour(seat), text)
-					if length < 0:
-						length = text.length()
-					assert_eq(text.length(), length, "rows line up")
-		assert_eq(rows, 6, overlay["title"])
-		var r := Hud.overlay_rect(lines.size(), width)
+		var inner := width - 2 * ViewConfig.OVERLAY_PADDING
+		assert_lt(table_w, inner + 1, "the table fits")
+		var seats: Array[int] = []
+		for line: Dictionary in overlay["lines"]:
+			var text := VersusHud.line_text(line)
+			match int(line["kind"]):
+				VersusHud.ROW:
+					seats.append(line["seat"])
+					assert_eq(line["name"], PlayerColours.label(line["seat"], true), text)
+					for i in (line["cells"] as Array).size():
+						var cell: String = line["cells"][i]
+						assert_lt(Draw.text_width(font, cell, ViewConfig.TEXT_SMALL), VersusHud.COLUMN_W[i] + 1, cell)
+				VersusHud.WINNER:
+					assert_lt(VersusHud.BADGE_W + Draw.text_width(font, " " + str(line["text"]), ViewConfig.TEXT_SMALL), inner + 1, text)
+				_:
+					assert_lt(Draw.text_width(font, text, ViewConfig.TEXT_SMALL), inner + 1, text)
+		assert_eq(seats, lineup, "%s: a row per seat, in seat order" % overlay["title"])
+		var r := VersusHud.panel_rect(overlay)
 		assert_true(Rect2i(0, 0, ViewConfig.VIEW_W, ViewConfig.VIEW_H).encloses(r))
 		assert_false(r.intersects(ViewConfig.PANEL_LEFT) or r.intersects(ViewConfig.PANEL_RIGHT), "clear of the HUD")
+	var round_rows := VersusHud.texts(VersusHud.overlay_for(m, lineup))
+	assert_has(round_rows, "P3 000000 000000 OUT", "the round's points, distance and OUT")
+	assert_has(round_rows, "P4 999999 999999", "six digits each")
+	for name: String in ["P1", "P2", "P3", "P4", "P5", "P6"]:
+		var count := 0
+		for text: String in round_rows:
+			if text.begins_with(name + " "):
+				count += 1
+		assert_eq(count, 1, "one row for %s" % name)
 
 
 ## The self test's versus leg (App.selftest_versus_problems(), which --selftest and tools/export_check.sh run) passes
@@ -391,10 +407,7 @@ func _play_to_match_over(race: Node) -> Match:
 
 ## The texts of an overlay's lines.
 static func _texts(overlay: Dictionary) -> Array:
-	var out: Array = []
-	for line: Array in overlay["lines"]:
-		out.append(line[0])
-	return out
+	return VersusHud.texts(overlay)
 
 
 static func _match_over(m: Match, lineup: Array[int]) -> Dictionary:

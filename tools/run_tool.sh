@@ -9,7 +9,7 @@
 # 1. Imports the project as tools/test.sh does (a failed import is retried once), so a fresh clone works too.
 # 2. Runs the tool with the command of plan §6, showing its output as it runs. ARGUMENTs go to the tool after "--".
 #      smoke        timeout 300 godot --headless --fixed-fps 60 --path . -s res://tools/smoke.gd -- ARGUMENT...
-#                   (with no ARGUMENT: --scenario=1p --frames=10800)
+#                   (with no ARGUMENT: --scenario=1p --frames=10800, then a second run with --scenario=versus)
 #      screenshots  xvfb-run -a -s "-screen 0 1920x1080x24" timeout 300 godot --rendering-driver opengl3 \
 #                       --fixed-fps 60 --path . -s res://tools/screenshots.gd -- ARGUMENT...
 #      scalecheck   the same with tools/scalecheck.gd, once per window: --resolution 1280x800, 1920x1080 and 1366x768
@@ -94,9 +94,11 @@ on_screen() {
 case "$tool" in
 	smoke)
 		if [ $# -eq 0 ]; then
-			set -- --scenario=1p --frames=10800
+			run timeout "$TIMEOUT" "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/smoke.gd -- --scenario=1p --frames=10800
+			run timeout "$TIMEOUT" "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/smoke.gd -- --scenario=versus
+		else
+			run timeout "$TIMEOUT" "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/smoke.gd -- "$@"
 		fi
-		run timeout "$TIMEOUT" "$GODOT" --headless --fixed-fps 60 --path . -s res://tools/smoke.gd -- "$@"
 		;;
 	screenshots)
 		on_screen 1920x1080 --path . -s res://tools/screenshots.gd -- "$@"

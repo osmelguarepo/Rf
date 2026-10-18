@@ -17,6 +17,7 @@ const App := preload("res://scripts/app/app.gd")
 const World := preload("res://scripts/sim/world.gd")
 const Config := preload("res://scripts/sim/config.gd")
 const Traffic := preload("res://scripts/sim/traffic.gd")
+const Car := preload("res://scripts/sim/car.gd")
 
 const BOOT_SCENE := "res://scenes/boot.tscn"
 ## The autopilot keeps to a lane while it has this much room ahead (px).
@@ -34,6 +35,9 @@ var _reported := 0
 var _pass_line := ""
 ## The steering key the autopilot holds, or KEY_NONE.
 var _steer_key: Key = KEY_NONE
+## Per pad: the D-pad direction and the gear button (A or B) pad_autopilot() holds (JOY_BUTTON_INVALID for none).
+var _pad_steer_held := {}
+var _pad_gear_held := {}
 
 
 ## Starts counting errors. Call first in _initialize(). Returns false (after saying why) if the project has not
@@ -209,17 +213,7 @@ func autopilot() -> void:
 
 ## World px from the player's front to the nearest object ahead of (or beside) it whose hitbox reaches into a lane.
 static func room_ahead(w: World, lane: int) -> float:
-	var p := w.player()
-	var left := w.cfg.road_left + w.cfg.lane_width * lane
-	var right := left + w.cfg.lane_width
-	var room := INF
-	for c: Traffic in w.traffic:
-		if c.x + c.w <= left or c.x >= right:
-			continue
-		var rear := c.y_world - c.h
-		if c.y_world > p.y_world - p.h:
-			room = minf(room, maxf(0.0, rear - p.y_world))
-	return room
+	return room_ahead_of(w, w.player(), lane)
 
 
 ## Holds one steering key (KEY_LEFT, KEY_RIGHT or KEY_NONE), releasing the other.
@@ -231,6 +225,110 @@ func hold_steer(code: Key) -> void:
 	if code != KEY_NONE:
 		key(code, true)
 	_steer_key = code
+
+
+# --- Versus (B2) -------------------------------------------------------------------------------------------------------
+
+
+## The versus race screen (scripts/app/versus.gd), or null while another screen is showing.
+func versus() -> Node:
+	var screen := app.current_screen() if app != null else null
+	return screen if screen != null and screen.name == "Versus" else null
+
+
+## The join screen, or null.
+func join_screen() -> Node:
+	var screen := app.current_screen() if app != null else null
+	return screen if screen != null and screen.name == "Join" else null
+
+
+## Drives the car of a pad's seat with the pad, as a player would: B (throttle, low gear) until the car reaches
+## `shift_kmh`, then A (high gear and throttle); the D-pad steers towards the lane with the most room ahead, as
+## autopilot() does with the keys, and into a skid. While no round runs, or the seat has no car, the D-pad is let go
+## (A or B stays as it was). Call once a frame per pad.
+func pad_autopilot(device: int, shift_kmh: float = 160.0) -> void:
+	var screen := versus()
+	var seat: int = app.seats.seat_of(device) if screen != null else -1
+	var slot: int = (screen.lineup as Array).find(seat) if seat >= 0 else -1
+	var w: World = screen.world if screen != null else null
+	if slot < 0 or w.phase != World.RUNNING or w.players[slot].alive == 0:
+		pad_hold_steer(device, JOY_BUTTON_INVALID)
+		return
+	var p: Car = w.players[slot]
+	pad_hold_gear(device, JOY_BUTTON_A if p.speed >= shift_kmh else JOY_BUTTON_B)
+	var current := Traffic.lane_of(w.cfg, p.x, p.w)
+	var best := current
+	var best_room := room_ahead_of(w, p, current)
+	if best_room < ROOM_ENOUGH:
+		for offset: int in [-1, 1, -2, 2]:
+			var lane := current + offset
+			if lane >= 0 and lane < w.cfg.lane_count and room_ahead_of(w, p, lane) > best_room + 8.0:
+				best = lane
+				best_room = room_ahead_of(w, p, lane)
+	var target := Traffic.lane_x(w.cfg, best, p.w)
+	if p.is_skidding():
+		pad_hold_steer(device, JOY_BUTTON_DPAD_RIGHT if p.slide_vx > 0.0 else JOY_BUTTON_DPAD_LEFT)
+	elif p.x < target - 1.0:
+		pad_hold_steer(device, JOY_BUTTON_DPAD_RIGHT)
+	elif p.x > target + 1.0:
+		pad_hold_steer(device, JOY_BUTTON_DPAD_LEFT)
+	else:
+		pad_hold_steer(device, JOY_BUTTON_INVALID)
+
+
+## Holds A (high gear and throttle) or B (throttle) on a pad, letting go of the other; JOY_BUTTON_INVALID lets go of
+## both.
+func pad_hold_gear(device: int, button: JoyButton) -> void:
+	var held: JoyButton = _pad_gear_held.get(device, JOY_BUTTON_INVALID)
+	if button == held:
+		return
+	if held != JOY_BUTTON_INVALID:
+		pad_button(device, held, false)
+	if button != JOY_BUTTON_INVALID:
+		pad_button(device, button, true)
+	_pad_gear_held[device] = button
+
+
+## A press of A on a pad (a confirm): down and up, or, while A is held for high gear, up and down again.
+func pad_press_a(device: int) -> void:
+	if _pad_gear_held.get(device, JOY_BUTTON_INVALID) == JOY_BUTTON_A:
+		pad_button(device, JOY_BUTTON_A, false)
+		pad_button(device, JOY_BUTTON_A, true)
+	else:
+		pad_tap(device, JOY_BUTTON_A)
+
+
+## Lets go of every button pad_autopilot() holds on a pad.
+func pad_let_go(device: int) -> void:
+	pad_hold_steer(device, JOY_BUTTON_INVALID)
+	pad_hold_gear(device, JOY_BUTTON_INVALID)
+
+
+## Holds one D-pad direction on a pad (JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT or JOY_BUTTON_INVALID for none),
+## letting go of the other.
+func pad_hold_steer(device: int, button: JoyButton) -> void:
+	var held: JoyButton = _pad_steer_held.get(device, JOY_BUTTON_INVALID)
+	if button == held:
+		return
+	if held != JOY_BUTTON_INVALID:
+		pad_button(device, held, false)
+	if button != JOY_BUTTON_INVALID:
+		pad_button(device, button, true)
+	_pad_steer_held[device] = button
+
+
+## World px from a car's front to the nearest object ahead of (or beside) it whose hitbox reaches into a lane.
+static func room_ahead_of(w: World, p: Car, lane: int) -> float:
+	var left := w.cfg.road_left + w.cfg.lane_width * lane
+	var right := left + w.cfg.lane_width
+	var room := INF
+	for c: Traffic in w.traffic:
+		if c.x + c.w <= left or c.x >= right:
+			continue
+		var rear := c.y_world - c.h
+		if c.y_world > p.y_world - p.h:
+			room = minf(room, maxf(0.0, rear - p.y_world))
+	return room
 
 
 ## The window's image as the game drew it, before scaling: the root viewport, 640x360.
