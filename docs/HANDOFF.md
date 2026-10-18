@@ -1678,3 +1678,237 @@ pad leaves its seat. It passes when every step saw what it expected and no error
 #### Requests for B1
 
 None: part 2 changed nothing in the simulation and needs nothing new from it.
+
+## B4: Steam Input (GodotSteam), the action manifest and the Steam builds
+
+Steam Input through GodotSteam, as `docs/DECISIONES_MULTIJUGADOR.md` §1 and plan §5 ask: under Steam every controller
+(up to 16, of any make, Remote Play Together guests' too) becomes a pad of the game; without Steam the game reads
+Godot's pads with one warning. `docs/STEAM_INPUT.md` is the full description (how it works, the builds, testing with
+App ID 480 on a PC with Steam, Remote Play Together, what is not verified). Two agents: B4a did most of it and was
+stopped by a usage limit (the lead's WIP commit 5c97b7c); B4b checked it and finished it. What B4b changed on the WIP:
+
+- **Action names unique across the sets.** The WIP's manifest had `confirm` and `back` in both action sets. Steam's
+  `getDigitalActionHandle()` takes no set ("if you use an action called "up" in two different action sets, this
+  function will only ever return one of them and the other will be ignored", ISteamInput docs), so on Steam the
+  menus' A and B would never have read as held: no join, no leaving a seat. The menus set's actions are now
+  `menu_confirm`, `menu_back`, `menu_start`, `menu_quit`; `tests/fake_steam.gd` now behaves as Steam (one handle per
+  name, and an action reads as held only while its set is the controller's active one). With the WIP's adapter and
+  files back, `test_actions_hold_the_buttons_of_a_virtual_pad`, which goes through the adapter's own `ACTIONS`, fails
+  on the menus set's `confirm` and `back` (never held), and 11 more tests fail.
+- **The menus set on the panels.** The racing set is read only while people drive (`App.people_drive()`); paused,
+  between rounds and after a game or a match the menus set is read, so B on the match-over panel goes back to the join
+  screen as with a pad (in the racing set B accelerates).
+- **Set switches keep shared buttons held.** Steam may apply `activateActionSet()` only at its next frame; a button
+  held across the switch (Start from the join screen into the race) no longer makes a second press, which would have
+  paused the race it started.
+- New tests: a Steam controller back on its own seat by its GUID with two controllers away; single player; the
+  results panels; the set switch; the names; GodotSteam's own start-up left off in `project.godot`.
+- `tools/gen_steam_input.py` (B4a's throwaway generator of the nine VDF files, now in the repository), the runs without
+  the addon, the Steam pack check, the descriptions of the actions in the manifest, `docs/STEAM_INPUT.md` corrected,
+  this section.
+
+### Files
+
+- **New (B4's):**
+  - `addons/godotsteam/`: GodotSteam 4.23.1, GDExtension for Godot 4.4 and up (Steamworks SDK 1.65), from the release
+    asset of Codeberg (URL, SHA-256 and licences in `ASSETS.md`): `godotsteam.gdextension` (the release's, with the
+    lines of the platforms not shipped removed) and its `.uid`, `license.md`, `linux64/` (`libgodotsteam` debug and
+    release, `libsteam_api.so`) and `win64/` (the two `.dll` and `steam_api64.dll`). Every other file is byte for byte
+    the release's (compared with the extracted archive). Left out: the other platforms, the readme and the updater
+    editor plugin.
+  - `scripts/input/steam_input.gd`: the adapter.
+  - `steam_input/steam_input_manifest.vdf` and `steam_input/controller_{xbox360,xboxone,ps4,ps5,switch_pro,generic,
+    steamcontroller_gordon,neptune}.vdf` (the default layouts), written by `tools/gen_steam_input.py` (new, Python 3,
+    standard library only, like `tools/fetch_assets.py`).
+  - `docs/STEAM_INPUT.md`.
+  - Tests (33 new, 316 in all): `tests/test_steam_input.gd` (22), `tests/test_steam_manifest.gd` (11) and
+    `tests/fake_steam.gd` (the fake GodotSteam singleton, not a test file).
+- **Files of other agents edited**, each with tests (below): `scripts/app/app.gd` (A2's, edited by B2),
+  `export_presets.cfg` (A3's), `ASSETS.md` (A1's), `README.md` (A3's). `scripts/input/seats.gd` (B2's) is unchanged:
+  a Steam controller reaches it as a pad.
+
+### Verify
+
+| Command | Last line | Exit |
+|---|---|---|
+| `rm -rf .godot && GODOT=/tmp/claude-0/godot/Godot_v4.7.2-stable_linux.x86_64 tools/test.sh` | `316 passed, 0 failed` | 0 |
+| `tools/test.sh --only=test_steam` | `33 passed, 0 failed` | 0 |
+| `tools/run_tool.sh smoke` | `smoke: PASS` | 0 |
+| `tools/export_check.sh` | `export_check: PASS` | 0 |
+| `$GODOT --headless --path . --no-steam -- --selftest` | `selftest: ok (...)`, and no warning | 0 |
+| The first four in a copy of `git ls-files -co --exclude-standard` **without** `addons/godotsteam/` (a tree without Steam) | the same | 0 |
+
+- **With the addon** (no Steam client here): `steamInitEx(480)` returns **status 1**, verbal `Failed to load module
+  '/root/.steam/sdk64/steamclient.so'`. The smoke test and the game print Steam's own lines, which are not error lines,
+  then the one warning:
+
+  ```
+  [S_API] SteamAPI_Init(): SteamAPI_IsSteamRunning() did not locate a running instance of Steam.
+  dlopen failed trying to load:
+  /root/.steam/sdk64/steamclient.so
+  with error:
+  /root/.steam/sdk64/steamclient.so: cannot open shared object file: No such file or directory
+  [S_API] SteamAPI_Init(): Failed to load module '/root/.steam/sdk64/steamclient.so'
+  WARNING: Steam Input is off: steamInitEx(480) returned status 1 (Failed to load module '/root/.steam/sdk64/steamclient.so'). The game reads Godot's pads.
+  ```
+
+  `tools/test.sh` prints `steam_input: GodotSteam 4.23.1, steamInitEx(480) returned status 1 (...)` from
+  `test_the_real_godotsteam_singleton`. On a fresh clone the three scripts first print `the first import failed;
+  importing again`: the first import with the addon crashes after it has finished (Known gaps); the retry the plan
+  asks for (§6) passes, and neither import prints an `ERROR:` line, so the error filter needs no narrowing (A1's note).
+- **Without the addon**: the warning is `Steam Input is off: GodotSteam (addons/godotsteam/) is not loaded. The game
+  reads Godot's pads.`; no Steam lines; the first import does not crash; `test_the_real_godotsteam_singleton` prints
+  `steam_input: no GodotSteam: one warning, Godot's pads`.
+- **Warnings**: one in the smoke test's output and one in `tools/export_check.sh`'s, in both trees (the `Linux` pack
+  never holds GodotSteam, so its warning is always "not loaded"). `tools/test.sh` prints 8, all from tests that drive
+  the failure paths on purpose: four statuses from the fake, no singleton, a singleton without GodotSteam's methods, a
+  failed start inside an app, and the real singleton (status 1 with the addon, "not loaded" without). No `ERROR:` or
+  `SCRIPT ERROR:` line anywhere.
+- **Single player is unchanged**: the smoke test's `smoke ...` lines are line for line those of 93577c0 (a pristine
+  `git archive`), with and without the addon; the only new lines are Steam's and the warning above.
+- **The path inside a running tree** (not covered by the test runner, which calls `App._input()` directly because it
+  never enters the tree): a scratch SceneTree script (not committed) booted the game, gave the app an adapter on the
+  fake singleton and drove a controller frame by frame: each virtual pad event reached `App._input()` once, through
+  `Input.flush_buffered_events()` and the viewport; the controller joined, one `menu_right` added exactly one bot,
+  `menu_start` opened the race with the racing set, and `accelerate` drove; no error logged.
+
+### How it fits together
+
+- **Start.** `App._ready()` calls `start()` and then `start_steam()` (only the game itself: tests boot apps with
+  `start()`). `SteamInput.start_engine()`: `--no-steam` (before or after `--`) does nothing at all; else the singleton
+  is looked up by name (`Engine.has_singleton("Steam")`, `Engine.get_singleton()`), every call goes through `call()`,
+  and `call("steamInitEx", 480, true)` must return status 0, or one `push_warning` and no further call. Then
+  `inputInit(false)`, `setInputActionManifestFilePath(<exe dir>/steam_input/steam_input_manifest.vdf)` (the project's
+  folder when the editor runs the game), the three Steam Input signals, `enableDeviceCallbacks()`.
+- **Handles.** On `input_configuration_loaded` the adapter reads the action set and action handles and takes the
+  controller (unless its layout is a legacy gamepad template). The first one taken makes Steam the session's only
+  source of pads (`took_over`): the app lets Godot's pads go (`_on_steam_took_over()`) and drops their events and
+  connection changes from then on (`steam.drops()`, `steam.drops_device()`).
+- **Each frame**, before the screen runs, `App.poll_steam()` calls `steam.frame(people_drive())`: for each controller,
+  `activateActionSet()` (racing while people drive, menus elsewhere) and `getDigitalActionData()` for the set's actions.
+  Each action holds a button of a virtual pad on device 1000, 1001, ... (`SteamInput.ACTIONS`: the gamepad mapping of
+  `pads.gd` and `nav.gd`), and each button that changes is an `InputEventJoypadButton` that the app parses into
+  `Input` (`Input.parse_input_event()`, `flush_buffered_events()`) and so into `_input()`.
+- **Seats.** `seats.gd` sees a pad: `join()` from the join screen's A, bytes from `Pads.held_of(device)` on `Input`'s
+  state and presses from the events, `connection_changed(device, false)` when the controller goes away (its seat's
+  byte 0xFF, its bot drives), and `connection_changed(device, true)` when it comes back with the same handle, so the
+  same device and the same GUID: `App.guid_of()` gives `steam:<handle>` for Steam's devices (`seats.guid_of` is set to
+  it in `boot()`), and the seat whose pad had that GUID is its own again.
+
+### Public API
+
+- `scripts/input/steam_input.gd` (`SteamInput`, a `RefCounted`):
+  - `start_engine(args := command_line()) -> int`, `start(singleton: Object, manifest: String) -> int` (the seam: a
+    test passes its fake), `frame(racing: bool) -> int` (pad events emitted), `owns(device) -> bool`,
+    `guid_of(device) -> String`, `drops(event) -> bool`, `drops_device(device) -> bool`, `state_name()`; static
+    `engine_singleton()`, `manifest_path()`, `command_line()`.
+  - Signals `pad_event(event: InputEventJoypadButton)`, `pad_connection(device: int, connected: bool)`, `took_over`.
+  - `state`: `OFF`, `DISABLED` (`--no-steam`), `UNAVAILABLE` (no GodotSteam, or a status other than 0), `WAITING`
+    (Steam started, no controller of its own yet: Godot's pads), `ACTIVE` (Steam is the source). Also `init_result`
+    (`{"status", "verbal"}`), `singleton` (null unless Steam started), `lookup` (a Callable returning the singleton),
+    `devices` (handle -> virtual device), `set_handles`, `action_handles`, `held`.
+  - Constants `APP_ID` (480), `NO_STEAM`, `MANIFEST`, `DEVICE_BASE` (1000), `RACING`, `MENUS`, `ACTIONS`, `METHODS`,
+    `SIGNALS`.
+- `App` (B4's part): `steam`, `use_steam(adapter)`, `start_steam()`, `poll_steam()`, `people_drive()`,
+  `guid_of(device)`.
+- `tests/fake_steam.gd` (for tests): GodotSteam's eight methods the adapter calls, recording each call (`calls`,
+  `names()`, `calls_of()`, `forget_calls()`), and its three signals, which a test emits as Steam would; what Steam
+  answers: `init_result`, `manifest_taken`, `name_handles(sets)`, `hold(handle, action, pressed)`, `let_go()`,
+  `active_set`, and `activation_lag` with `run_frame()` for a set switch that takes a frame.
+
+### Edits of other agents' files, with tests
+
+- `scripts/app/app.gd` (A2's, edited by B2): `SteamInput`, `steam`; `_ready()` calls `start_steam()` after `start()`;
+  `boot()` sets `seats.guid_of = guid_of` and `use_steam(SteamInput.new())`; `_input()` drops Godot's pad events once
+  Steam is the source; `_process()` calls `poll_steam()` first; `_on_joy_connection_changed()` filters, then
+  `_pad_connection()` does what it did; and the B4 block (`use_steam()`, `start_steam()`, `poll_steam()`,
+  `people_drive()`, `guid_of()`, `_on_steam_pad_event()`, `_on_steam_took_over()`). Tests: the "Through the app" tests
+  of `tests/test_steam_input.gd` (9) and `test_the_adapter_never_names_the_steam_class` (neither file names the class
+  outside strings and comments); every A2 and B2 test passes unchanged, and so does the smoke test (above).
+- `export_presets.cfg` (A3's): the `exclude_filter` of `Linux` and `Windows Desktop` adds `addons/godotsteam/*` (plan
+  §5: the builds without Steam); presets 2 and 3, `Linux Steam` and `Windows Steam`, are the same presets with the
+  addon in, written to `build/linux_steam/fuel_rivals.x86_64` and `build/windows_steam/fuel_rivals.exe`. The file is
+  in the 4.7.2 editor's format: B4a loaded it in the headless editor in a scratch copy and the editor saved it byte for
+  byte the same. Tests: `tests/test_steam_manifest.gd::test_the_export_presets_with_and_without_steam` (the four
+  names, the filters, every other key of each Steam preset equal to its plain one, the runnable presets still A3's);
+  `tools/export_check.sh` passes and its pack holds no file of the addon and no `.godot/extension_list.cfg`.
+- `ASSETS.md` (A1's): the GodotSteam section, with a table of the eight shipped files (SHA-256, source, licence).
+  Tests: `tests/test_steam_manifest.gd::test_the_addon_files_are_listed_with_their_sha256` (every file under
+  `addons/godotsteam/` but the `.uid` has a row with its SHA-256, no row names a missing file); `tests/test_assets.gd`
+  passes unchanged.
+- `README.md` (A3's): State (the B4 line), Export (the four presets), Layout (`addons/godotsteam/`, `steam_input/`,
+  `steam_input` in `scripts/input/`, `fake_steam.gd`, `STEAM_INPUT.md`, `gen_steam_input.py`) and Steam.
+
+### For B3: the Steam and non-Steam builds
+
+- `Linux` and `Windows Desktop` are now the **builds without Steam**: their `exclude_filter` is `tests/*, tools/*,
+  docs/*, addons/godotsteam/*` (plan §6 lists the first three). The **Steam builds** are `Linux Steam` and `Windows
+  Steam`: create `build/linux_steam` and `build/windows_steam` too, then `--export-release "Linux Steam"
+  build/linux_steam/fuel_rivals.x86_64` and `--export-release "Windows Steam" build/windows_steam/fuel_rivals.exe`.
+- After a Steam export: check that `libgodotsteam.linux.template_release.x86_64.so` and `libsteam_api.so` (Windows:
+  `libgodotsteam.windows.template_release.x86_64.dll` and `steam_api64.dll`) are next to the binary (Godot copies them;
+  plan §0 saw it for Linux; Windows not checked); copy `steam_input/` next to the binary; copy
+  `addons/godotsteam/license.md` there (as `godotsteam_license.md`, say) with the font's `OFL.txt` (MIT asks for its
+  notice in every copy, and the pack does not hold it); never put `steam_appid.txt` in a depot (the game needs none:
+  GodotSteam's `steamInitEx(480)` sets `SteamAppId` itself).
+- Run a Steam binary with the error filter of `tools/export_check.sh`. Without its libraries it logs three `ERROR:`
+  lines (`Can't open dynamic library ...`, `GDExtension dynamic library not found ...`, `Error loading extension ...`)
+  and then runs without Steam, so a check must read the output, not only the exit code. Here (no Steam client) expect
+  the `[S_API]` lines and one warning with status 1; on a PC with Steam, no warning.
+- `tools/export_check.sh` checks the `Linux` pack only, which has no GodotSteam. A check of a `Linux Steam` pack without
+  templates is in `docs/STEAM_INPUT.md` ("Builds with and without Steam"): here it gave one warning, `selftest: ok` and
+  no `ERROR:` line, 92 files (the `Linux` pack's 90, the `.gdextension` and `.godot/extension_list.cfg`).
+- A Windows Steam build is the one that needs Steam Input most (XInput reads 4 Xbox pads): test it on Windows with
+  Steam, with `docs/STEAM_INPUT.md` "Testing locally".
+
+### Deviations from the plan, with reasons
+
+- **Virtual pads.** The adapter turns Steam's actions into `InputEventJoypadButton`s on devices 1000 and up, instead of
+  writing the seats' held bits itself: `seats.gd`, `nav.gd` and `local_input.gd` needed no change (the smallest change
+  the task asks for), and a Steam controller gets the pads' tested paths for free (held bits and presses, menu
+  commands, the GUID that brings a seat back, 0xFF on a disconnect). The price: an action counts as its button (a
+  `confirm` bound apart from `high_gear` also holds high gear, as a pad's A does).
+- **When Steam is the source.** Plan §5: "Steam if it has handles". Steam becomes the source when a controller's
+  configuration with the game's actions has loaded (the handles are read then), not when a controller merely
+  connects: a controller on a legacy gamepad template is emulated by Steam as a pad that Godot reads, and stays
+  Godot's.
+- **Two action sets**, `racing` (while people drive) and `menus` (everything else, pause and results included), with
+  unique action names; the menus set has its own `menu_back` and `menu_quit` for "back". Shared buttons stay held
+  across a set switch.
+- **`--no-steam` before `--` too** (Steam's launch options come before it).
+- **A second warning is possible with a Steam client**: when the manifest file is missing or Steam refuses it.
+- **The first import with the addon crashes** (exit 134); the plan's retry (§6) covers it and it prints no `ERROR:`
+  line, so the scripts' filter is unchanged.
+- **`tools/gen_steam_input.py`** is new (not in plan §2): one table writes the manifest and the eight layouts, so they
+  cannot drift apart.
+
+### Checked to fail
+
+Each change below was made in a scratch copy, with the tests run and the file restored:
+
+| Change | Tests that fail |
+|---|---|
+| The WIP's adapter and VDF files (`confirm`, `back` in both sets) | 12 of the 33: `test_actions_hold_the_buttons_of_a_virtual_pad` (the menus set's `confirm` and `back` never held), `test_every_action_name_is_in_one_set_only`, `test_the_manifest_sets_are_the_adapters`, and the app tests that press the menus actions |
+| `App.guid_of()` ignores Steam's GUID | `test_a_steam_controller_joins_drives_leaves_and_comes_back`, `test_steam_controllers_come_back_to_their_own_seats`, `test_the_app_reads_the_racing_set_where_people_drive` |
+| `seats.gd`: a reconnecting pad takes the lowest orphan seat whatever its GUID | `test_steam_controllers_come_back_to_their_own_seats` |
+| No hold-over at a set switch (the WIP's `frame()`) | `test_an_action_set_switch_keeps_shared_buttons_held`, `test_start_held_into_the_race_does_not_pause_it` |
+| Hold-over of every button, held by the new set or not | `test_an_action_set_switch_keeps_shared_buttons_held` |
+| The racing set on the whole race screen (the WIP's `on_race_screen()`) | `test_a_steam_controller_plays_single_player`, `test_menus_and_race_commands_through_steam`, `test_the_app_reads_the_racing_set_where_people_drive`, `test_the_results_panels_through_steam` |
+| `project.godot` with GodotSteam's `initialize_on_startup=true` | `test_godotsteam_does_not_start_steam_by_itself` |
+
+### Known gaps
+
+- Everything under "What is not verified here" in `docs/STEAM_INPUT.md`: no Steam client, so after `steamInitEx()`
+  everything ran against `tests/fake_steam.gd` only; the manifest and the eight layouts were never loaded by Steam; no
+  physical gamepad (six or any); no Remote Play Together; no Windows; the Steam Deck and the Steam Controller layouts;
+  when Steam applies an action set switch, and what it reports while the game is not focused.
+- **The first import of a fresh clone with the addon crashes** (the Godot 4.7.2 editor, every time here): the import
+  finishes, then a SIGSEGV in the main thread while the editor shuts down (gdb), exit 134, no `ERROR:` line and no
+  crash message. The second import and every later run are fine; without the addon it does not happen. CI and the
+  three scripts pass through the retry, printing `the first import failed; importing again`. A first import that fails
+  for another reason is retried the same way, and only the second import's output is checked for error lines (A1's
+  design).
+- `tools/export_check.sh` does not check a Steam pack or binary (B3's exports).
+- One source per session: with Steam Input on for some controller types and off for others, Godot's pads are dropped
+  as soon as Steam reports one controller of its own.
+- On a PC with Steam, `tools/test.sh` starts Steam once as Spacewar (480) in the test process.

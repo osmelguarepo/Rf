@@ -1,11 +1,13 @@
 extends SceneTree
 ## The test runner (docs/GODOT_PLAN.md §6). tools/test.sh runs it; it also runs on its own:
 ##
-##   godot --headless --path . -s res://tests/run_tests.gd [-- --only=PATTERN[,PATTERN...]]
+##   godot --headless --path . -s res://tests/run_tests.gd [-- [--only=PATTERN[,PATTERN...]] [--no-steam]]
 ##
 ## It finds tests/test_*.gd (every one but test_case.gd, the base class) and their test_* methods, both sorted by
 ## name, and runs them synchronously inside _initialize(). --only= keeps the tests whose id,
-## "tests/test_x.gd::test_y", contains one of the patterns; it may be given more than once.
+## "tests/test_x.gd::test_y", contains one of the patterns; it may be given more than once. --no-steam (B4) keeps
+## the real Steam out of the run on a PC where it runs: scripts/input/steam_input.gd reads it from the command line,
+## and the one test that starts the real GodotSteam then checks that --no-steam starts nothing (docs/STEAM_INPUT.md).
 ##
 ## Each test prints "PASS <id>" or "FAIL <id>" followed by the reasons. The last line is "N passed, M failed".
 ## A test fails when an assert fails, when any error is logged while it runs (ErrorCounter below, registered with
@@ -19,6 +21,8 @@ const TEST_DIR := "res://tests"
 const BASE_PATH := "res://tests/test_case.gd"
 const EXIT_ABORTED := 70
 const ONLY_PREFIX := "--only="
+## Read by scripts/input/steam_input.gd (B4), not by the runner.
+const NO_STEAM := "--no-steam"
 
 
 ## Collects every error logged by the engine or by scripts, so the runner can pin it on the test that ran.
@@ -104,15 +108,18 @@ func _run() -> void:
 	_finished = true
 
 
-## Reads --only= patterns. Any other argument is a mistake and fails the run.
+## Reads --only= patterns and lets --no-steam through (the Steam Input adapter reads it). Any other argument is a
+## mistake and fails the run.
 func _read_arguments() -> bool:
 	var ok := true
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with(ONLY_PREFIX):
 			for pattern in argument.trim_prefix(ONLY_PREFIX).split(",", false):
 				_patterns.append(pattern.strip_edges())
-		else:
-			_record("arguments", false, PackedStringArray(["unknown argument %s (only --only=PATTERN)" % argument]), 0, 0)
+		elif argument != NO_STEAM:
+			_record("arguments", false, PackedStringArray([
+				"unknown argument %s (only --only=PATTERN and %s)" % [argument, NO_STEAM]
+			]), 0, 0)
 			ok = false
 	return ok
 

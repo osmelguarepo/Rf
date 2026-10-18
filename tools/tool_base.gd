@@ -67,10 +67,13 @@ static func imported() -> bool:
 	return not path.is_empty() and FileAccess.file_exists(path)
 
 
-## Boots the game: an App with a fixed first seed, added to the root, which opens the title screen.
+## Boots the game: an App with a fixed first seed, added to the root, which opens the title screen. Steam Input stays
+## off (App.no_steam, as --no-steam; B4): the tools drive synthetic pads, which Steam would drop as soon as it took over
+## on a PC where it runs with a controller of its own.
 func start_app(seed_value: int) -> App:
 	app = (load(BOOT_SCENE) as PackedScene).instantiate() as App
 	app.seed_override = seed_value
+	app.no_steam = true
 	root.add_child(app)
 	return app
 

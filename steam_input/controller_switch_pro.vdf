@@ -1,0 +1,510 @@
+"controller_mappings"
+{
+	"version"		"3"
+	"revision"		"1"
+	"title"		"#Title_Default"
+	"description"		"#Description_Default"
+	"controller_type"		"controller_switch_pro"
+	"major_revision"		"0"
+	"minor_revision"		"0"
+	"actions"
+	{
+		"racing"
+		{
+			"title"		"#Set_Racing"
+			"legacy_set"		"0"
+			"StickPadGyro"
+			{
+			}
+			"AnalogTrigger"
+			{
+			}
+			"Button"
+			{
+				"accelerate"		"#Action_Accelerate"
+				"brake"		"#Action_Brake"
+				"steer_left"		"#Action_SteerLeft"
+				"steer_right"		"#Action_SteerRight"
+				"high_gear"		"#Action_HighGear"
+				"confirm"		"#Action_Confirm"
+				"pause"		"#Action_Pause"
+				"back"		"#Action_Back"
+			}
+		}
+		"menus"
+		{
+			"title"		"#Set_Menus"
+			"legacy_set"		"0"
+			"StickPadGyro"
+			{
+			}
+			"AnalogTrigger"
+			{
+			}
+			"Button"
+			{
+				"menu_up"		"#Menu_Up"
+				"menu_down"		"#Menu_Down"
+				"menu_left"		"#Menu_Left"
+				"menu_right"		"#Menu_Right"
+				"menu_confirm"		"#Menu_Confirm"
+				"menu_back"		"#Menu_Back"
+				"menu_start"		"#Menu_Start"
+				"menu_quit"		"#Menu_Quit"
+			}
+		}
+	}
+	"localization"
+	{
+		"english"
+		{
+			"Set_Racing"		"Racing"
+			"Set_Menus"		"Menus"
+			"Action_Accelerate"		"Accelerate"
+			"Action_Brake"		"Brake"
+			"Action_SteerLeft"		"Steer left"
+			"Action_SteerRight"		"Steer right"
+			"Action_HighGear"		"High gear (also accelerates)"
+			"Action_Confirm"		"Confirm (a new controller takes a free car)"
+			"Action_Pause"		"Pause"
+			"Action_Back"		"Back (as a gamepad's Back)"
+			"Menu_Up"		"Up"
+			"Menu_Down"		"Down"
+			"Menu_Left"		"Left (one bot less)"
+			"Menu_Right"		"Right (one bot more)"
+			"Menu_Confirm"		"Confirm (join, choose, next round, rematch, retry)"
+			"Menu_Back"		"Back (leave your seat or the results)"
+			"Menu_Start"		"Start the race, resume"
+			"Menu_Quit"		"Back to the title, or to the join screen"
+			"Title_Default"		"Fuel Rivals"
+			"Description_Default"		"The game's own controls: the same buttons as a gamepad without Steam."
+		}
+		"spanish"
+		{
+			"Set_Racing"		"Carrera"
+			"Set_Menus"		"Menús"
+			"Action_Accelerate"		"Acelerar"
+			"Action_Brake"		"Frenar"
+			"Action_SteerLeft"		"Girar a la izquierda"
+			"Action_SteerRight"		"Girar a la derecha"
+			"Action_HighGear"		"Marcha alta (también acelera)"
+			"Action_Confirm"		"Confirmar (un mando nuevo toma un auto libre)"
+			"Action_Pause"		"Pausa"
+			"Action_Back"		"Atrás (como el Back de un mando)"
+			"Menu_Up"		"Arriba"
+			"Menu_Down"		"Abajo"
+			"Menu_Left"		"Izquierda (un bot menos)"
+			"Menu_Right"		"Derecha (un bot más)"
+			"Menu_Confirm"		"Confirmar (unirse, elegir, siguiente ronda, revancha, reintentar)"
+			"Menu_Back"		"Atrás (dejar tu plaza o los resultados)"
+			"Menu_Start"		"Empezar la carrera, reanudar"
+			"Menu_Quit"		"Volver al título, o a la pantalla de unión"
+			"Title_Default"		"Fuel Rivals"
+			"Description_Default"		"Los controles del juego: los mismos botones que un mando sin Steam."
+		}
+	}
+	"group"
+	{
+		"id"		"0"
+		"mode"		"four_buttons"
+		"inputs"
+		{
+			"button_A"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing high_gear, High gear"
+							"binding"		"game_action racing confirm, Confirm"
+						}
+					}
+				}
+			}
+			"button_B"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing accelerate, Accelerate"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"1"
+		"mode"		"dpad"
+		"inputs"
+		{
+			"dpad_north"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing accelerate, Accelerate"
+						}
+					}
+				}
+			}
+			"dpad_south"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing brake, Brake"
+						}
+					}
+				}
+			}
+			"dpad_west"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing steer_left, Steer left"
+						}
+					}
+				}
+			}
+			"dpad_east"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing steer_right, Steer right"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"2"
+		"mode"		"dpad"
+		"inputs"
+		{
+			"dpad_north"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing accelerate, Accelerate"
+						}
+					}
+				}
+			}
+			"dpad_south"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing brake, Brake"
+						}
+					}
+				}
+			}
+			"dpad_west"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing steer_left, Steer left"
+						}
+					}
+				}
+			}
+			"dpad_east"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing steer_right, Steer right"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"3"
+		"mode"		"switches"
+		"inputs"
+		{
+			"button_escape"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing pause, Pause"
+						}
+					}
+				}
+			}
+			"button_menu"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action racing back, Back"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"4"
+		"mode"		"four_buttons"
+		"inputs"
+		{
+			"button_A"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_confirm, Confirm"
+						}
+					}
+				}
+			}
+			"button_B"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_back, Back"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"5"
+		"mode"		"dpad"
+		"inputs"
+		{
+			"dpad_north"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_up, Up"
+						}
+					}
+				}
+			}
+			"dpad_south"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_down, Down"
+						}
+					}
+				}
+			}
+			"dpad_west"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_left, Left"
+						}
+					}
+				}
+			}
+			"dpad_east"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_right, Right"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"6"
+		"mode"		"dpad"
+		"inputs"
+		{
+			"dpad_north"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_up, Up"
+						}
+					}
+				}
+			}
+			"dpad_south"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_down, Down"
+						}
+					}
+				}
+			}
+			"dpad_west"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_left, Left"
+						}
+					}
+				}
+			}
+			"dpad_east"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_right, Right"
+						}
+					}
+				}
+			}
+		}
+	}
+	"group"
+	{
+		"id"		"7"
+		"mode"		"switches"
+		"inputs"
+		{
+			"button_escape"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_start, Start"
+						}
+					}
+				}
+			}
+			"button_menu"
+			{
+				"activators"
+				{
+					"Full_Press"
+					{
+						"bindings"
+						{
+							"binding"		"game_action menus menu_quit, Title"
+						}
+					}
+				}
+			}
+		}
+	}
+	"preset"
+	{
+		"id"		"0"
+		"name"		"racing"
+		"group_source_bindings"
+		{
+			"0"		"button_diamond active"
+			"1"		"dpad active"
+			"2"		"joystick active"
+			"3"		"switch active"
+		}
+	}
+	"preset"
+	{
+		"id"		"1"
+		"name"		"menus"
+		"group_source_bindings"
+		{
+			"4"		"button_diamond active"
+			"5"		"dpad active"
+			"6"		"joystick active"
+			"7"		"switch active"
+		}
+	}
+	"settings"
+	{
+	}
+}
