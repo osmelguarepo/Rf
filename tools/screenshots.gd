@@ -27,9 +27,11 @@ extends "res://tools/tool_base.gd"
 ##   09-versus-pause.png the pause panel, Start on P2's pad;
 ##   10-round-over.png   round 1's panel once A counts (PRESS A), P1 out;
 ##   11-match-over.png   the match's panel once its keys count.
-## The race picture is checked by sampling its pixels (check_race_colours()): each seat's car shows its colours where
-## the view drew it, and no colour on a traffic sprite there (the fuel car excepted) is a player colour. The run fails
-## otherwise.
+## The race picture is checked by sampling its pixels, twice, and the run fails unless both pass: as drawn, against the
+## world it shows (check_race_colours(): each seat's car shows its colours where the view drew it, and no colour on a
+## traffic sprite there, the fuel car excepted, is a player colour); and as saved, by its pixels alone
+## (tests/race_picture.gd, which tests/test_versus_look.gd also runs on the committed picture: six cars in six
+## colours, the traffic's colours sampled on the same picture, none of them a player colour or near one).
 ## Each PNG is the 640x360 viewport scaled 2x with Nearest, so its pixels are the game's pixels (tools/scalecheck.gd
 ## checks that the window shows exactly the viewport). Exit code 0 when every shot was saved and no error was logged
 ## until the game's nodes were freed (tools/tool_base.gd).
@@ -42,6 +44,7 @@ const Draw := preload("res://scripts/view/draw.gd")
 const PlayerColours := preload("res://scripts/view/player_colours.gd")
 const JoinView := preload("res://scripts/view/join_view.gd")
 const Match := preload("res://scripts/sim/match.gd")
+const RacePicture := preload("res://tests/race_picture.gd")
 
 const OUT_DEFAULT := "res://docs/screenshots"
 const SEED_DEFAULT := 20261015
@@ -190,18 +193,25 @@ func _process(_delta: float) -> bool:
 					_stage_race(versus())
 					_next()
 			_expect(m.phase != Match.MATCH_OVER, "the match ended before the race picture")
-		13:
+		13:  # The race picture, checked by its pixels twice: as drawn, against the world it shows
+			# (check_race_colours()), and as saved, alone (tests/race_picture.gd).
 			_drive_pads()
 			if waited == 2:
-				var image := viewport_image()
-				var check := check_race_colours(image, versus())
+				var check := check_race_colours(viewport_image(), versus())
 				var problems: PackedStringArray = check["problems"]
+				_shot("08-versus-race")
+				var saved := RacePicture.check(RacePicture.load_png(out_dir.path_join("08-versus-race.png")), app.atlas)
+				for problem: String in saved["problems"]:
+					problems.append("the saved file: " + problem)
 				for problem: String in problems:
 					printerr("screenshots: 08-versus-race: ", problem)
-				_shot("08-versus-race")
 				if problems.is_empty():
 					print("screenshots: 08-versus-race colour check: %d cars in their seats' colours, %d traffic sprites without a player colour" % [
 						check["cars"], check["traffic"]
+					])
+					var sprites: int = (saved["traffic"] as Dictionary).values().reduce(func(sum: int, n: int) -> int: return sum + n, 0)
+					print("screenshots: 08-versus-race.png by its pixels: %d cars in %d colours, %d traffic cars; the nearest traffic colour %.1f away (bodies %.1f, CIEDE2000)" % [
+						saved["cars"], (saved["colours"] as Array).size(), sprites, saved["nearest_shade"], saved["nearest_body"]
 					])
 				if _expect(problems.is_empty(), "the race picture failed its colour check"):
 					pad_tap(VERSUS_PADS[1], JOY_BUTTON_START)

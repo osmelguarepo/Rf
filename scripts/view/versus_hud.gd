@@ -62,9 +62,12 @@ const RESULTS_W := 336
 ## A seat's badge in a table: its name in small type on its colour.
 const BADGE_W := 32
 const BADGE_H := 12
-## Table columns: x from the panel's inner left edge, and each cell's width (cells are right-aligned in it).
+## Table columns: x from the table's left edge, and each cell's width (cells are right-aligned in it, but for the
+## wins column's heading, centred over its pips).
 const COLUMN_X := [48, 112, 176, 216]
 const COLUMN_W := [48, 48, 24, 20]
+## The wins column: rows draw their win pips in it (Config.MATCH_WINS of them, as wide as the column).
+const WINS_COLUMN := 3
 ## Kinds of line in a panel over the road (lines of overlay_for()).
 const TEXT := 0
 const HEAD := 1
@@ -165,7 +168,7 @@ static func winner_line(seat: int, text: String) -> Dictionary:
 
 ## Round over: a row per seat (points, distance, OUT, wins), the winner, and PRESS A once it counts.
 static func round_lines(m: Match, p_lineup: Array[int]) -> Array:
-	var lines: Array = [{"kind": HEAD, "cells": ["POINTS", "DIST", "", "W"]}]
+	var lines: Array = [{"kind": HEAD, "cells": ["POINTS", "DIST", "", "WINS"]}]
 	for slot in p_lineup.size():
 		var car: Car = m.world.players[slot]
 		lines.append(seat_row(m, p_lineup, slot, ["%06d" % car.score, "%06d" % floori(car.distance), "OUT" if car.alive == 0 else ""]))
@@ -191,7 +194,7 @@ static func match_lines(m: Match, p_lineup: Array[int]) -> Array:
 	else:
 		lines.append(text_line("YOU LOSE", ViewConfig.LIGHT_RED))
 	lines.append(text_line(""))
-	lines.append({"kind": HEAD, "cells": ["TOTAL", "DIST", "", "W"]})
+	lines.append({"kind": HEAD, "cells": ["TOTAL", "DIST", "", "WINS"]})
 	for slot in p_lineup.size():
 		lines.append(seat_row(m, p_lineup, slot, ["%06d" % m.totals[slot], "%06d" % floori(m.distances[slot]), ""]))
 	lines.append(text_line(""))
@@ -339,7 +342,7 @@ func draw_overlay(overlay: Dictionary) -> void:
 				draw_badge(Vector2i(left, y - ((BADGE_H - ViewConfig.TEXT_SMALL) >> 1)), line["seat"], line["name"])
 				_draw_cells(left, y, line["cells"], ViewConfig.WHITE)
 				if line["person"]:
-					_draw_pips(Vector2i(left + COLUMN_X[3] + COLUMN_W[3], y), line["wins"])
+					_draw_pips(Vector2i(left + COLUMN_X[WINS_COLUMN] + COLUMN_W[WINS_COLUMN], y), line["wins"])
 			WINNER:
 				var text := " " + str(line["text"])
 				var width := BADGE_W + Draw.text_width(font, text, ViewConfig.TEXT_SMALL)
@@ -357,12 +360,20 @@ func draw_badge(at: Vector2i, seat: int, name: String) -> void:
 	Draw.text_centred(self, font, at.x + (BADGE_W >> 1), top, name, ViewConfig.TEXT_SMALL, ink)
 
 
-## Cells of a table line, each right-aligned in its column (the wins column only has a heading).
+## Cells of a table line, each where cell_x() puts it (the wins column only has a heading).
 func _draw_cells(left: int, top: int, cells: Array, colour: Color) -> void:
 	for i in cells.size():
 		var text: String = cells[i]
 		if text.is_empty():
 			continue
-		var right: int = left + COLUMN_X[i] + COLUMN_W[i]
 		var ink := ViewConfig.LIGHT_RED if text == "OUT" else colour
-		Draw.text(self, font, right - Draw.text_width(font, text, ViewConfig.TEXT_SMALL), top, text, ViewConfig.TEXT_SMALL, ink)
+		var x := cell_x(left, i, Draw.text_width(font, text, ViewConfig.TEXT_SMALL))
+		Draw.text(self, font, x, top, text, ViewConfig.TEXT_SMALL, ink)
+
+
+## The left x of a table cell `width` px wide in a column, for a table whose left edge is `left`: right-aligned in the
+## column; the wins column's heading centred over its pips, so it may stick out of the column on both sides.
+static func cell_x(left: int, column: int, width: int) -> int:
+	if column == WINS_COLUMN:
+		return left + COLUMN_X[column] + ((COLUMN_W[column] - width) >> 1)
+	return left + COLUMN_X[column] + COLUMN_W[column] - width

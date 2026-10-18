@@ -1207,7 +1207,8 @@ The versus mode from the title to the rematch, built on B1's `Match`: the title'
 per pad, the number of bots), the race screen with one input byte per seat, pause and quit, the round-over and
 match-over panels with the confirm delay, rematch and back to the join screen, pads that disconnect and come back,
 the fullscreen toggle, and a versus leg in `--selftest`. The drawing is a first, legible version: the six colours are
-placeholders and the HUD and panels are plain. B2b gives them their final form (see "For B2b").
+placeholders and the HUD and panels are plain. B2b gives them their final form (see "For B2b"). **Superseded by
+part 2** for the colours, the HUD, the panels, the pictures and the smoke test.
 
 #### Files
 
@@ -1403,12 +1404,15 @@ only its `selftest: ok` start. The A2 and A3 sections above quote the old line.
   is untried. With XInput on Windows every Xbox pad may report the same GUID; pads that share a GUID come back in seat
   order, whichever is which.
 - **Fullscreen** was not seen on a real desktop (above).
-- **The colours are placeholders**: RED is car_red itself, PURPLE, PINK, TEAL, WHITE, BLACK. WHITE (#d9d6d2) is close
-  to the white the truck's container and every sprite's details use (#f0eeec); BLACK (#3a3a40) is close to the
-  traffic's dark grey (#383838) and hard to see on the road. Nothing measures their distance yet.
-- **The HUD and panels are plain**: a seat panel uses a third of a side panel, mostly empty at the bottom; no event
-  messages (PASS +50, OIL...) per seat in versus; the round panel's table is small type.
-- **No versus smoke scenario** (B3's) and no versus pictures in `docs/screenshots/` (B2b's, plan §8).
+- **The colours are placeholders** (superseded by part 2: the final six, measured): RED is car_red itself, PURPLE,
+  PINK, TEAL, WHITE, BLACK. WHITE (#d9d6d2) is close to the white the truck's container and every sprite's details use
+  (#f0eeec); BLACK (#3a3a40) is close to the traffic's dark grey (#383838) and hard to see on the road. Nothing
+  measures their distance yet.
+- **The HUD and panels are plain** (superseded by part 2, but for the event messages): a seat panel uses a third of a
+  side panel, mostly empty at the bottom; no event messages (PASS +50, OIL...) per seat in versus; the round panel's
+  table is small type.
+- **No versus smoke scenario** (B3's) and no versus pictures in `docs/screenshots/` (B2b's, plan §8). Superseded by
+  part 2: a short versus scenario and the pictures 07 to 11.
 - A pad pressing A to claim an orphan seat does not also confirm (its first press only claims).
 - When every person's pad is gone, a paused round stays paused until a pad takes a seat (0xFF never resumes), and the
   results wait (B1: 0xFF never confirms); Esc still quits while paused.
@@ -1444,3 +1448,233 @@ B1's review fixes keep it:
   press on an orphan seat; `tests/test_join_seats.gd::test_a_press_on_an_orphan_seat_pauses_without_moving`); `Car`
   fields `human`, `alive`, `score`, `distance`, `fuel`, `touching_edge`, `slot`.
 - If B1's review changes any of these, the tests above say where.
+
+### Part 2 (agent B2b): the look
+
+The versus mode's final look: the six player colours, chosen with a measured distance from the traffic's and from
+each other; the six-seat HUD; the final join screen, pause panel and result panels; the versus pictures of plan §8
+(`docs/screenshots/07` to `11`), the race picture checked by its pixels; a short versus scenario of the smoke test.
+Two agents did it. The first was stopped by a usage limit after most of the work (the lead committed it as WIP
+`6ac5fc0`). The second reviewed it, looked at every picture again, added the check of the saved and the committed
+race picture (`tests/race_picture.gd`) with tests that it fails on spoilt pictures, centred a WINS heading over the
+result tables' pips, ran the whole verification and wrote this section and the README changes.
+
+#### Files
+
+- **New:** `tests/race_picture.gd` (the race picture checked by its pixels alone; a helper, not a test file),
+  `tests/test_versus_look.gd` (6 tests), `docs/screenshots/07-versus-join.png` to `11-match-over.png`.
+- **Changed, B2's own:** `scripts/view/player_colours.gd` (the final six, CIEDE2000, the badge ink, the traffic's
+  colours read from its frames), `scripts/view/versus_hud.gd` (seat panels, result tables),
+  `scripts/view/join_view.gd` (cards, the bots' line), `tests/test_seat_colours.gd` (4 tests to 9),
+  `tests/test_race_screen.gd` (its results-panel test, for rows with badges).
+- **Files of other agents edited**, each with a run or tests (details below): `tools/screenshots.gd`,
+  `tools/smoke.gd`, `tools/tool_base.gd`, `tools/run_tool.sh` (A2's); `README.md` (A3's).
+- Nothing under `scripts/sim/`, `scripts/app/`, `scripts/input/` or `scenes/` changed in part 2.
+
+#### Verify
+
+| Command | Last line | Exit |
+|---|---|---|
+| `GODOT=/tmp/claude-0/godot/Godot_v4.7.2-stable_linux.x86_64 tools/test.sh` after `rm -rf .godot` | `294 passed, 0 failed` | 0 |
+| `tools/test.sh --only=test_seat_colours,test_versus_look,test_race_screen` | `28 passed, 0 failed` | 0 |
+| `tools/run_tool.sh smoke` | `smoke: PASS` (printed twice: scenario 1p, then versus) | 0 |
+| `tools/run_tool.sh smoke --scenario=versus` | `smoke: PASS` | 0 |
+| `tools/run_tool.sh screenshots` | `screenshots: saved 01-title.png, ... 11-match-over.png in <repo>/docs/screenshots` | 0 |
+| `tools/run_tool.sh scalecheck` | `scalecheck: 5 windows passed` | 0 |
+| `tools/export_check.sh` | `export_check: PASS` (the pack holds 88 files, as before) | 0 |
+| `$GODOT --headless --path . -- --selftest` | `selftest: ok (600 ticks checked, 600 versus ticks checked, 210 frames drawn)` | 0 |
+| `tools/test.sh`, `tools/run_tool.sh smoke` and `tools/export_check.sh` in a copy of `git ls-files -co --exclude-standard` | the same | 0 |
+
+- **Before the last line**, the screenshots run prints the race picture's two checks:
+  `screenshots: 08-versus-race colour check: 6 cars in their seats' colours, 5 traffic sprites without a player colour`
+  and `screenshots: 08-versus-race.png by its pixels: 6 cars in 18 colours, 5 traffic cars; the nearest traffic
+  colour 15.4 away (bodies 20.3, CIEDE2000)`. The versus smoke run prints the steps it saw, then
+  `smoke versus: 1035 frames, 14 of 14 steps, rounds in the first match 2, errors 0`.
+- **Single player is unchanged.** The 1p smoke lines are identical to those of a `git archive` of 14b30a8 run side by
+  side; `01-title.png` to `06-skid-low-fuel.png` are byte for byte the committed ones (01 as B2a made it). Two
+  screenshot runs give the same bytes for all eleven pictures.
+- **Checked to fail.** Mutations, one at a time, each file restored and checked by MD5, every one caught:
+  - against the tests (`tools/test.sh --only=...`): TEAL's body set to the salmon car's #d4705c
+    (`test_colour_sets_disjoint`, `test_player_colours_are_far_from_traffic` and both race-picture tests fail), and to
+    #d8745f, near it (the distance test and both race-picture tests);
+  - against the screenshots run: the same two (the second only by the saved file's check: 1.3 from #d4705c, under
+    20; the check of the drawn frame compares exact colours and let it pass), PINK in RUBY's shades (both seats' cars
+    found twice), every car in RUBY's colours (`cars.gd`), the recolour skipping the light shade, each HUD panel's
+    border in the next seat's colour;
+  - the first agent's 14 mutations of the colours, the CIEDE2000 formula, the ink and the layout (its logs) each made
+    a test fail.
+
+#### The six colours (`scripts/view/player_colours.gd`)
+
+| Seat | Name | Body | Dark | Light | Ink on it | Body's nearest traffic colour (CIEDE2000) |
+|---|---|---|---|---|---|---|
+| P1 | RUBY | #dd0f63 | #8c0848 | #ff5a8c | white | 20.4, #844239 (salmon car, dark) |
+| P2 | TEAL | #009690 | #00474c | #64cca8 | black | 21.0, #206348 (truck, dark green) |
+| P3 | LILAC | #b7b4fe | #9184e0 | #dcd4ff | black | 23.7, #1f95e1 (blue car) |
+| P4 | PLUM | #600884 | #32002f | #a8309a | white | 20.3, #32384a (windows) |
+| P5 | PURPLE | #c94bf2 | #7418a4 | #eca0ff | black | 20.8, #4f6872 (windows) |
+| P6 | PINK | #fb99b6 | #d0628f | #ffcadb | black | 21.1, #d4705c (salmon car) |
+
+- **The cars.** car_red, car_red_ccw45 and car_red_cw45 are recoloured at boot (`add_frames()`, ImageTextures named
+  `frame_name()`, such as `car_red@p1`): car_red's body #ae2633, dark #611732 and light #f26864 become the seat's
+  shades of the same rank; every other pixel stays (the outline #141414, the windows #32384a and #4f6872, the lights
+  #f0eeec). Single player keeps car_red.
+- **The traffic's colours** are read from the pixels of its frames (`traffic_colours()`): the yellow, salmon and blue
+  cars, the truck and the oil, 18 colours, the outline, window greys and white every car has among them. The fuel car
+  (the police sprite under the rainbow tint) is the declared exception.
+- **The distance** is CIEDE2000 between sRGB colours (D65, 64-bit floats; `delta_e()`, checked against the 34 pairs of
+  Sharma, Wu and Dalal's test data). For scale: about 1 is just noticeable side by side, 10 and more are clearly
+  different colours. The tests keep every colour on a seat's frames at least 15 (`MIN_SHADE_TO_TRAFFIC`) from every
+  traffic colour, and each body at least 20 (`MIN_BODY_TO_TRAFFIC`), both measured on the frames' pixels; and between
+  seats, any two bodies at least 20 apart (`MIN_BODY_TO_BODY`), any two dark or two light shades at least 15
+  (`MIN_SHADE_TO_SHADE`).
+  Measured: the nearest shade to the traffic 15.4 (TEAL's light #64cca8 and the blue car's cyan #6de0e5), the nearest
+  body 20.3 (PLUM and the window grey); the nearest bodies 24.9 (RUBY and PINK), then 25.1 (LILAC with PURPLE and with
+  PINK); the nearest dark shades 19.8 (RUBY, PLUM), the nearest light ones 15.2 (LILAC, PINK). On the road, every body
+  is at least 27.6 from the asphalt #67615f (RUBY).
+- **Why these six.** The traffic takes yellow and orange, salmon, brown and peach, sky and royal blue with cyan,
+  green and lime, white and greys, which leaves roses, pinks, purples and lilacs, and a band of teal. The six are three
+  hue families at two lightness levels, so any two differ clearly in hue or in lightness. P1 and P2, whom every match
+  has, face each other on the colour wheel. car_red's own red could not stay: its body is 9.9 from the salmon car's
+  dark #844239 and its light 6.9 from the salmon car's body.
+- **Badges** (a seat's name on its colour) use `ink()`: black on colours from relative luminance 0.18 up, white below;
+  the test wants a WCAG contrast of 3 at least, and the better of the two. `text_colour()` of part 1 is gone.
+
+#### The HUD (`scripts/view/versus_hud.gd`)
+
+- **Seat panels** (`seat_panel_rect()`): seats 0 to 2 down the left column (`ViewConfig.PANEL_LEFT`), 3 to 5 down the
+  right (`PANEL_RIGHT`), each 112x108 with 10 px between them. A seat's panel is in the same place in every match;
+  seats without a car draw nothing. They stay on the grass, never over the road or its verges (x 168 to 472, tested),
+  so no car is ever hidden while racing.
+- **In a panel**, from its top-left corner: a 2 px border in the seat's colour; the seat's car, upright at 2x, at (8, 7);
+  the name (P1 to P6, or BOT) in medium type at (32, 12); for a person, a box per win the match needs
+  (`Config.MATCH_WINS`), yellow once won, right-aligned at y 16 (bots cannot win: none); the round's points in medium
+  type, centred at y 40; a fuel gauge on its side at y 60, 14 px high, green, light red below `ViewConfig.LOW_FUEL`;
+  at y 80 the first of OUT (light red), EDGE (yellow: touching the bottom edge) and LOW FUEL (light red, blinking at
+  the single-player rate); at y 92 NO PAD (white) for a person's seat whose pad has gone. An OUT panel is drawn at
+  0.4 alpha with a grey border (its OUT mark at full strength), and its car is gone from the road.
+- **Panels over the road** (`overlay_for()`) dim the screen (`ViewConfig.OVERLAY_DIM`); they cover the road only
+  while no round runs. PAUSED, 260 wide: `START  resume`, `BACK / ESC  quit to title` (the single-player pause
+  panel's style). ROUND n OVER and MATCH OVER, 336 wide and clear of the seat panels: a table with a row per car in
+  seat order, its badge (32x12) and then POINTS (TOTAL after the match), DIST (whole px of world), OUT, and WINS (its
+  boxes, people only; the heading centred over them, `cell_x()`); the round's winner (badge, WINS THE ROUND) or NO
+  WINNER, and PRESS A once `Config.MATCH_CONFIRM_TICKS` steps have gone by. After the match: the winner (badge, WINS
+  THE MATCH), or DRAW (several people) or YOU LOSE (one person, light red), the table, and
+  `A  REMATCH    B  JOIN SCREEN` once the keys count.
+- Text is `TEXT_MEDIUM` or `TEXT_SMALL`; every colour of a seat comes from `player_colours.gd`. The pure parts
+  (`seat_panel_rect()`, `seat_info()`, `mark_of()`, `overlay_for()`, `round_lines()`, `match_lines()`, `line_text()`,
+  `texts()`, `panel_rect()`, `table_left()`, `cell_x()`) are what the tests measure.
+
+#### The join screen (`scripts/view/join_view.gd`)
+
+Six cards, 96x124, in a row under the title. A card is its seat's for good: a badge along its top with the name (P1
+to P6, BOT for a bot's seat) on the seat's colour, the car in that colour, the colour's name, and READY (a person,
+white), CPU (a bot, grey) or PRESS A (free, yellow, blinking every half second). A free card has a grey border and a
+dark grey badge, but its car is in the seat's colour already, so a player sees what the seat gives. Under the cards:
+`< BOTS: n >`, each arrow yellow while the count can go that way and grey at its bound; the status line (PRESS A TO
+JOIN, PRESS START: n CARS, TWO CARS AT LEAST); the controls on a dark band.
+
+#### The pictures (`docs/screenshots/`, by `tools/run_tool.sh screenshots`)
+
+07 to 11 follow 01 to 06 in the same run, played with synthetic pads as players would: three pads press A, P1's
+D-pad Right twice (two bots), then a fourth pad joins and P1's Start begins a match of six cars; each pad drives its
+car (`tool_base.gd` `pad_autopilot()`), the tool ends each round by emptying P1's tank, and P2's A goes on.
+
+- `07-versus-join.png`: P1 to P3 ready, two bots (PLUM, PURPLE), the sixth card free with PRESS A lit.
+- `08-versus-race.png`: staged in round 2, the six cars one per lane, all on screen (the leader on the camera line, the
+  last on the bottom edge), two yellow cars, a salmon car, a blue car and a truck ahead; the six panels: P4's box for
+  round 1, P4's LOW FUEL, P3's NO PAD (its pad unplugged), the pink bot's EDGE.
+- `09-versus-pause.png`: the pause panel (P2's Start).
+- `10-round-over.png`: round 1's panel once A counts: P1 OUT, P4 wins the round, PRESS A.
+- `11-match-over.png`: the match's panel once its keys count: P4 wins the match 2-0.
+
+All eleven were looked at, also enlarged. So were, in a scratch tool not committed, the join screen empty, with one
+person (the bot it must have), full, and with a bot in a gap left by a person; a race of a person and a bot, both
+skidding (the recoloured 45-degree frames), its pause, its round with NO WINNER, YOU LOSE, a lone person winning the
+match; six people with one OUT and one on LOW FUEL; DRAW. The one fault found was the result tables' W heading, which
+sat over the second box: it is now WINS, centred over both.
+
+#### The race picture, checked by its pixels
+
+The screenshots run fails unless the race picture passes two checks:
+
+1. `check_race_colours()` in `tools/screenshots.gd`, on the frame as drawn, knowing the world: each seat's car shows its
+   body colour on at least half of its body's pixels where the view drew it, and its dark and light shades; no
+   pixel of a traffic sprite on screen (the fuel car aside) is a player colour; no colour of the traffic frames is.
+2. `tests/race_picture.gd` `check()`, on the PNG file alone, as saved. It knows nothing of the world: it finds sprites
+   by their pixels (a frame at 2x with every opaque pixel exact) and checks that the picture is the viewport at 2x
+   (every 2x2 block one colour); that each seat's car is on the road once; that the yellow, salmon and blue cars and a
+   truck are there; that the colours sampled where each car has car_red's body reds are its seat's three shades, 18
+   in all, none of them a colour sampled on the traffic sprites of the same picture, each at least 15 (bodies 20)
+   from all of those, the six bodies at least 20 apart; that no other pixel of the road has a player colour; and that
+   each HUD panel's border is its seat's colour.
+
+`tests/test_versus_look.gd` runs the second check on the committed picture
+(`test_the_race_picture_shows_six_colours_that_no_traffic_has`), so CI checks it too; a colour change without new
+pictures fails it (the cars are no longer found). `test_the_race_picture_check_fails_on_spoilt_pictures` shows that it
+objects to each of: a 2x2 block split, a car painted over, a car in another seat's colours, a traffic car in a player
+colour, a car in the salmon car's colours (its seat's frames carrying them too, so the car is found and the colour
+comparison itself must object), a panel border in another seat's colour.
+
+#### The smoke test's versus scenario (`tools/smoke.gd`, `--scenario=versus`)
+
+`tools/run_tool.sh smoke` without arguments runs scenario 1p (10 800 frames, unchanged) and then versus, so CI runs
+both; `tools/run_tool.sh smoke --scenario=versus` runs versus alone. Synthetic pads (devices 20 to 24 and 31) send
+real events through `Input.parse_input_event()`; their GUIDs come from a fake source set on the first frame
+(`VS_GUIDS`), since the engine knows no GUID for them. Fourteen steps, each with at most 900 frames to see what it
+expects: the title (Down, Enter); three pads join on seats 0 to 2; Right three times gives three bots, a fourth stays
+three (the cap), Left twice gives one; a fourth pad joins and leaves with B; Start (P2's pad) begins a race of four
+cars; P1's Start pauses and nothing moves for 30 frames, P3's Start resumes; losing focus pauses, focus back does not
+resume, P2's Start does; P2's pad goes away (orphan seat, 0xFF, NO PAD; its bot drives on and the round goes on);
+it comes back under another device number with the same GUID and takes its seat; P3's pad goes away, a pad with
+another GUID connects (it takes nothing) and takes the seat with A; P1's tank is emptied, round 1 ends, an early A
+is ignored and one after `MATCH_CONFIRM_TICKS` starts round 2; the next rounds run 240 steps each until the match is
+decided; A plays a rematch (the next seed, the same seats); Start pauses it and Back goes to the title, where every
+pad leaves its seat. It passes when every step saw what it expected and no error was logged.
+
+#### Edits of other agents' files, with tests
+
+- `tools/screenshots.gd` (A2): the versus leg (steps 7 to 16), its five pictures, `check_race_colours()` and the saved
+  file's check. 01 to 06 unchanged byte for byte; run by `tools/run_tool.sh screenshots`.
+- `tools/smoke.gd` (A2): scenario versus. Scenario 1p unchanged, its output identical to 14b30a8's; run by
+  `tools/run_tool.sh smoke`.
+- `tools/tool_base.gd` (A2): `versus()`, `join_screen()`, `pad_autopilot()`, `pad_hold_gear()`, `pad_press_a()`,
+  `pad_let_go()`, `pad_hold_steer()`, `room_ahead_of()` (`room_ahead()` now calls it, with the same result: the 1p
+  smoke output is unchanged), and the `Car` preload (moved from `smoke.gd`).
+- `tools/run_tool.sh` (A2): `smoke` without arguments runs both scenarios, the first failure setting the exit code.
+- `README.md` (A3): State (B2 done), VERSUS (the six colours by name, the race picture, what a seat's panel shows),
+  Tests and tools (the smoke test's second scenario, the pixel check), Layout (`tests/race_picture.gd`).
+
+#### Deviations from the plan and the lead's design, with reasons
+
+- **Two purples and two roses.** PLUM and PURPLE share a hue, as do RUBY and PINK; they differ in lightness (bodies
+  28.1 and 24.9 apart). The traffic leaves no seventh family far enough from every traffic colour (see "Why these
+  six"); the names, though, are less distinct than the colours: "purple" fits two of them.
+- **P1 is RUBY, not car_red's red**, which is too near the salmon car (above). Single player keeps car_red.
+- **The thresholds** (15 for any shade, 20 for bodies) are this project's: the plan asks only that the two sets never
+  coincide. They are the margins the six keep; the pictures show them clearly apart.
+- **No per-seat event messages** (PASS +50, OIL, the fuel car's +1000) in versus: over the road they would hide cars,
+  and the design lists none for the panels. The score in each panel shows the points.
+- **A bot's card says CPU** under its BOT badge, where a person's says READY.
+- **The race picture's test depends on the committed picture**: a new staging of `08-versus-race.png` must keep six
+  whole cars on the road, each of the four traffic car kinds and the six panels. `tests/race_picture.gd` lives in
+  `tests/` and `tools/screenshots.gd` preloads it, as `tools/versus_golden.gd` preloads a test file; neither folder is
+  in the pack.
+
+#### Known gaps
+
+- The colours were judged on the pictures (2x, Mesa's llvmpipe under xvfb), not on a real monitor at 3x, and not for
+  colour blindness. PLUM is the darkest: dark on dark, its car and border are the hardest to make out on the join
+  card's and the HUD's black panels (on the grey road it stands out).
+- The fuel car's rainbow passes through every hue, the player colours' too, so for a moment it can come near one:
+  the declared exception of plan §5.
+- Only `08-versus-race.png` is checked by its pixels; 07 and 09 to 11 by eye. The screenshots need a display
+  (xvfb-run), so CI does not take them; it checks the committed race picture.
+- No physical pad and no real fullscreen were tried (part 1's gaps stand).
+- The versus smoke scenario is short (one match of about 1000 frames, its rounds ended by emptying P1's tank): the long
+  scenarios of plan §8 are B3's. `tools/smoke.gd`'s step machinery (`vs_steps()`) and `tool_base.gd`'s
+  `pad_autopilot()` are there to build on.
+
+#### Requests for B1
+
+None: part 2 changed nothing in the simulation and needs nothing new from it.

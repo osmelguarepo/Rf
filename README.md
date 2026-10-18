@@ -13,12 +13,11 @@ GrafxKid's CC0 sheet, the Press Start 2P font, no sound.
   covers the scenes, the view, keyboard and gamepad input, the tests, a smoke test, a pack export check and CI.
 - **Phase B, local multiplayer, is under way.** The versus mode is playable from the title's VERSUS choice: up to 6
   cars on one screen, one gamepad each, bots for the seats people leave empty, best of 3 rounds. Done: the versus
-  rules, the match and the bots (B1), and the versus screens (B2, first part): the join screen, a seat per gamepad, the
-  race, the round and match results, rematch, gamepads that disconnect and come back. Still to come: the six final
-  player colours and the final look of the six-player HUD (the colours and panels in the game now are placeholders),
-  QA with six cars and real Linux and Windows builds (B3), and Steam Input through GodotSteam (B4). The owner's
-  decisions are in `docs/DECISIONES_MULTIJUGADOR.md`, the plan in `docs/GODOT_PLAN.md` (both in Spanish).
-  `docs/HANDOFF.md` has each step's notes: files, how to verify, APIs, known gaps.
+  rules, the match and the bots (B1), and the versus screens (B2): the join screen, a seat per gamepad, the six player
+  colours, the race with a panel per car, the round and match results, rematch, gamepads that disconnect and come
+  back. Still to come: QA with six cars and real Linux and Windows builds (B3), and Steam Input through GodotSteam
+  (B4). The owner's decisions are in `docs/DECISIONES_MULTIJUGADOR.md`, the plan in `docs/GODOT_PLAN.md` (both in
+  Spanish). `docs/HANDOFF.md` has each step's notes: files, how to verify, APIs, known gaps.
 - Targets: Steam on the desktop (Linux and Windows) first, the web later.
 - The Phaser prototype is no longer in the tree. It is in git at commit `0a0841f`.
 
@@ -70,7 +69,10 @@ Gamepad buttons are by position: A is the bottom face button, B the right one.
 ### VERSUS (gamepads only)
 
 Each player has a gamepad; the keyboard only goes back (Esc) and switches fullscreen. Each player's car is the colour
-of their seat, which is the only way to tell players apart: P1 to P6, each colour for good.
+of their seat, which is the only way to tell players apart: P1 ruby, P2 teal, P3 lilac, P4 plum, P5 purple and P6
+pink, each colour for good. No traffic car has any of them (the rainbow-coloured fuel car aside).
+
+![A versus race: six cars in the six player colours among the traffic, and a panel per car either side of the road](docs/screenshots/08-versus-race.png)
 
 | When | What | Gamepad | Keyboard |
 |---|---|---|---|
@@ -90,6 +92,10 @@ of their seat, which is the only way to tell players apart: P1 to P6, each colou
 Bots take the lowest free seats and show as BOT. When a gamepad disconnects mid-race, its bot drives
 that car without stopping the round (its panel says NO PAD); the same gamepad gets it back when it reconnects, and
 otherwise any gamepad that holds no seat takes it with A.
+
+In the race each car has a panel beside the road, in its colour (P1 to P3 on the left, P4 to P6 on the right): its
+points this round, its fuel, a player's rounds won (a box each; bots cannot win), and OUT (out of the round), EDGE
+(touching the bottom edge of the screen, which drains fuel), LOW FUEL or NO PAD.
 
 ## Rules
 
@@ -138,8 +144,9 @@ export GODOT=/path/to/Godot_v4.7.2-stable_linux.x86_64
 
 tools/test.sh                   # every test, headless; ends with "N passed, 0 failed"
 tools/test.sh --only=test_fuel  # the tests whose id (tests/test_x.gd::test_y) contains a pattern; comma-separated
-tools/run_tool.sh smoke         # plays 10 800 frames with keyboard and gamepad events; ends with "smoke: PASS"
-tools/run_tool.sh screenshots   # the pictures in docs/screenshots/ (needs xvfb-run)
+tools/run_tool.sh smoke         # 10 800 frames with keyboard and gamepad events, then a versus match played with
+                                # synthetic gamepads; each ends with "smoke: PASS"
+tools/run_tool.sh screenshots   # the pictures in docs/screenshots/, the versus race checked by its pixels (xvfb-run)
 tools/run_tool.sh scalecheck    # whole-number scaling, in five windows (needs xvfb-run)
 tools/export_check.sh           # exports build/fuel_rivals.pck and runs its self test; ends with "export_check: PASS"
 ```
@@ -194,7 +201,8 @@ scripts/
                      player_colours (versus)
   app/               app (boot, fixed step, focus pause, screens, fullscreen, --selftest), fixed_step, title, game;
                      join and versus (versus)
-tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, screen_helpers.gd, PARITY.md, golden/
+tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, screen_helpers.gd, race_picture.gd,
+                     PARITY.md, golden/
 tools/               test.sh, run_tool.sh, export_check.sh; smoke.gd, screenshots.gd, scalecheck.gd, tool_base.gd;
                      slice-sheet.py and fetch_assets.py (the atlas); gen_golden/ (the TypeScript golden traces)
 docs/                GODOT_PLAN.md, DECISIONES_MULTIJUGADOR.md, HANDOFF.md, PLAN.md and ART_PLAN.md (the Phaser
