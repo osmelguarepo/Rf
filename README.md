@@ -69,7 +69,8 @@ Gamepad buttons are by position: A is the bottom face button, B the right one.
 
 ### VERSUS (gamepads only)
 
-Each player has a gamepad; the keyboard only goes back (Esc) and switches fullscreen. Each player's car is the colour
+Each player has a gamepad; the keyboard drives no car. Esc goes back (it pauses a race only when no gamepad is
+left, and quits a paused match), and F11 or Alt+Enter switches fullscreen. Each player's car is the colour
 of their seat, which is the only way to tell players apart: P1 ruby, P2 teal, P3 lilac, P4 plum, P5 purple and P6
 pink, each colour for good. No traffic car has any of them (the rainbow-coloured fuel car aside).
 
