@@ -1936,3 +1936,45 @@ before a re-review. Still open, all minor:
 - Check which of the review's items 1-7 it finished: take over only when every set and action handle is non-zero;
   the tools never start Steam; `manifest_path_for()` and device-id tests; hold-over only right after a set switch;
   docs ("usually" crashes on the first import); a README test; controller types without a layout in STEAM_INPUT.md.
+
+## B3: QA with six cars and the real Linux and Windows builds (lead, 18 Oct)
+
+Done by the lead alone: the agents had reached the weekly usage limit. No adversarial review yet.
+
+### Files
+
+- `tools/fetch_templates.py`: installs the four 4.7.2 export templates the builds use (`version.txt`,
+  `linux_release.x86_64`, `windows_release_x86_64.exe` and its `_console` wrapper, about 175 MB) into Godot's template
+  folder, read out of the official 1.28 GB `.tpz` with HTTP range requests and checked by size and CRC-32. The release
+  publishes a SHA-512 for the whole `.tpz` only, so no per-file SHA-512 is possible without the full download
+  (deviation from plan §6, which asked for the release's SHA-512).
+- `tools/export_builds.sh`: exports `Linux`, `Windows Desktop`, `Linux Steam` and `Windows Steam` with release
+  templates; copies `OFL.txt` and `ASSETS.md` next to every executable, and `steam_input/` and `godotsteam_license.md`
+  next to the Steam builds (as B4 asked); runs each Linux build's `--selftest` from an empty folder and
+  `--headless --quit-after 300`; checks the Windows executables and DLLs are PE32+ x86-64; checks the Steam builds have
+  their libraries and the others none; fails on ERROR lines.
+- `tools/versus_qa.gd` (`tools/run_tool.sh versus_qa`, added to `run_tool.sh`): plan §8 B3's two scenarios through the
+  real screens with synthetic pads, 18 000 frames per seed, checking on every step that a round ends only on a human's
+  elimination (or a lone human's last bot going out), no bot wins a round or a match, and a match ends at two wins
+  (the five-round cap, or two losses for a lone human). Scenario `lone`: one pad and five bots, the pad disconnects
+  30 s into each match's first round and comes back (`Input.joy_connection_changed.emit`). Scenario `six`: six pads
+  join and disconnect once the round runs, so bot.gd drives six human seats; the first pad comes back to confirm
+  between rounds.
+- CI: `tools/run_tool.sh versus_qa --scenario=lone` (about 35 s) and `tools/export_builds.sh` (templates cached),
+  after the earlier steps. Run 12 (55c0b6a) was green.
+
+### Results (here, 18 Oct)
+
+| Command | Result |
+|---|---|
+| `tools/export_builds.sh` | 4 builds; Linux and Linux Steam `selftest: ok (600 ticks checked, 600 versus ticks checked, 210 frames drawn)`; Linux Steam warns once (status 1, no Steam client); Windows files PE32+ x86-64; `export_builds: PASS` |
+| `versus_qa --scenario=lone` | 5 rounds (3 won by the human, 2 without a winner), 2 matches, 2 reconnects to the same seat, 0 violations, `versus_qa: PASS` |
+| `versus_qa --scenario=six` (20 seeds) | 86 rounds, all won by a human; 21 matches decided; first elimination median **64.2 s** (44.0 to 82.8; plan: 45 to 180); **2.98** leader changes per running minute (plan: at least 1); 0 violations, 0 errors; `versus_qa: PASS` |
+
+### Known gaps
+
+- The Windows builds were not run (no Windows or Wine here); the Steam builds were not run with a Steam client.
+- Six physical gamepads, Remote Play Together and the lone-human balance with real people are untested (B1 notes).
+- The QA scenario six reaches a decided match in about one seed of two within 18 000 frames: rounds last about a
+  minute plus the results panel, and a match needs two wins among six humans.
+- `export_builds.sh` writes into the user's template folder when the templates are missing.

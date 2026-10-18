@@ -15,8 +15,9 @@ GrafxKid's CC0 sheet, the Press Start 2P font, no sound.
   cars on one screen, one gamepad each, bots for the seats people leave empty, best of 3 rounds. Done: the versus
   rules, the match and the bots (B1), and the versus screens (B2): the join screen, a seat per gamepad, the six player
   colours, the race with a panel per car, the round and match results, rematch, gamepads that disconnect and come
-  back. Steam Input through GodotSteam (B4) is in, not yet tried with a real Steam client (see Steam below). Still to
-  come: QA with six cars and real Linux and Windows builds (B3). The owner's decisions are in
+  back. Steam Input through GodotSteam (B4) is in, not yet tried with a real Steam client (see Steam below). QA with
+  six cars and the real Linux and Windows builds (B3) are done; nobody has played it with six physical gamepads or on
+  Windows yet. The owner's decisions are in
   `docs/DECISIONES_MULTIJUGADOR.md`, the plan in `docs/GODOT_PLAN.md` (both in Spanish). `docs/HANDOFF.md` has each
   step's notes: files, how to verify, APIs, known gaps.
 - Targets: Steam on the desktop (Linux and Windows) first, the web later.
