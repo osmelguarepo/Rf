@@ -26,17 +26,22 @@ extends RefCounted
 ##   one on it reads Steam's only (took_over), for the rest of the session: the app forgets Godot's pads and drops
 ##   their events (drops(), drops_device()), since the same controller would otherwise arrive twice, through Steam and
 ##   through the system.
-## - frame(racing), every frame before the screen runs: for each controller, activateActionSet() of the racing set (in
-##   a race) or the menus set, then getDigitalActionData() of that set's actions. Each action holds down a button of
-##   the virtual pad (ACTIONS), and each button that goes down or up is an InputEventJoypadButton (pad_event) on the
-##   controller's device: DEVICE_BASE for the first controller of the session, DEVICE_BASE + 1 for the next... A
-##   controller that goes away lets go of its buttons first, then pad_connection(device, false).
+## - frame(racing), every frame before the screen runs: for each controller, activateActionSet() of the racing set
+##   (while people drive: App.people_drive()) or the menus set (menus, pause, results), then getDigitalActionData() of
+##   that set's actions. Each action holds down a button of the virtual pad (ACTIONS), and each button that goes down or
+##   up is an InputEventJoypadButton (pad_event) on the controller's device: DEVICE_BASE for the first controller of the
+##   session, DEVICE_BASE + 1 for the next... A controller that goes away lets go of its buttons first, then
+##   pad_connection(device, false).
 ##
 ## So a Steam controller drives as the gamepad mapping of pads.gd: accelerate holds the pad's D-pad up (throttle),
 ## brake down, steering left and right, high gear the pad's A (high gear and throttle), pause its Start (pause and
-## confirm), confirm its A, and back its Back (Select) in a race. In the menus set the directions are the D-pad, confirm
-## A, back B (leave a seat), start Start and quit Back. The price of going through a pad: an action is read as its
+## confirm), confirm its A (a pad without a seat takes an orphan seat with it) and back its Back (Select). In the menus
+## set the directions are the D-pad, menu_confirm A, menu_back B (leave a seat, leave the results), menu_start Start
+## (start, resume) and menu_quit Back (to the title). The price of going through a pad: an action is read as its
 ## button, so confirm bound apart from high gear also gives high gear while held, as the pad's A does.
+##
+## Every action name is unique across the sets (the menus set's start with "menu_"): getDigitalActionHandle() takes no
+## set, so Steam gives a name used in two sets one handle and ignores the other set's action (ISteamInput docs).
 
 ## Emitted for each button of a virtual pad that goes down or up: the app parses it into Input and routes it.
 signal pad_event(event: InputEventJoypadButton)
@@ -70,7 +75,8 @@ const STATE_NAMES := ["off", "disabled", "unavailable", "waiting", "active"]
 ## The manifest's action sets.
 const RACING := "racing"
 const MENUS := "menus"
-## Per action set: each digital action of the manifest and the button of the virtual pad it holds down.
+## Per action set: each digital action of the manifest and the button of the virtual pad it holds down. No name may be
+## in both sets (see the class comment).
 const ACTIONS := {
 	RACING: {
 		"accelerate": JOY_BUTTON_DPAD_UP,
@@ -87,10 +93,10 @@ const ACTIONS := {
 		"menu_down": JOY_BUTTON_DPAD_DOWN,
 		"menu_left": JOY_BUTTON_DPAD_LEFT,
 		"menu_right": JOY_BUTTON_DPAD_RIGHT,
-		"confirm": JOY_BUTTON_A,
-		"back": JOY_BUTTON_B,
-		"start": JOY_BUTTON_START,
-		"quit": JOY_BUTTON_BACK,
+		"menu_confirm": JOY_BUTTON_A,
+		"menu_back": JOY_BUTTON_B,
+		"menu_start": JOY_BUTTON_START,
+		"menu_quit": JOY_BUTTON_BACK,
 	},
 }
 ## The singleton's methods and signals the adapter uses; a GodotSteam without one of them counts as no GodotSteam.
@@ -194,6 +200,11 @@ func state_name() -> String:
 
 ## Reads every controller of the session for one frame: see the class comment. racing picks the racing action set,
 ## else the menus set. Returns the number of pad events emitted. Nothing, and no call, unless Steam is the source.
+##
+## A button that actions of the set hold keeps its state while all of those actions read inactive: Steam reports an
+## action inactive while its set is not the controller's active one, which may last until Steam's next frame after
+## activateActionSet(), so a Start held across the switch from the menus to a race stays one press instead of a second
+## one that would pause the race. A button that no action of the set holds goes up.
 func frame(racing: bool) -> int:
 	if state != ACTIVE:
 		return 0
@@ -204,15 +215,24 @@ func frame(racing: bool) -> int:
 	for handle: int in announced:
 		if set_handle != 0:
 			singleton.call("activateActionSet", handle, set_handle)
-		var buttons := 0
+		var device: int = devices[handle]
+		var down := 0
+		var mapped := 0
+		var read := 0
 		for action: String in actions:
 			var action_handle: int = action_handles.get(action, 0)
 			if action_handle == 0:
 				continue
+			var bit := 1 << int(actions[action])
+			mapped |= bit
 			var data: Variant = singleton.call("getDigitalActionData", handle, action_handle)
-			if data is Dictionary and (data as Dictionary).get("state", false) == true:
-				buttons |= 1 << int(actions[action])
-		events += _hold(devices[handle], buttons)
+			if not (data is Dictionary) or (data as Dictionary).get("active", false) != true:
+				continue
+			read |= bit
+			if (data as Dictionary).get("state", false) == true:
+				down |= bit
+		var before: int = held.get(device, 0)
+		events += _hold(device, down | (before & mapped & ~read))
 	return events
 
 

@@ -203,7 +203,8 @@ scripts/
 tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, screen_helpers.gd, fake_steam.gd,
                      PARITY.md, golden/
 tools/               test.sh, run_tool.sh, export_check.sh; smoke.gd, screenshots.gd, scalecheck.gd, tool_base.gd;
-                     slice-sheet.py and fetch_assets.py (the atlas); gen_golden/ (the TypeScript golden traces)
+                     slice-sheet.py and fetch_assets.py (the atlas); gen_golden/ (the TypeScript golden traces);
+                     gen_steam_input.py (the files in steam_input/)
 docs/                GODOT_PLAN.md, DECISIONES_MULTIJUGADOR.md, HANDOFF.md, STEAM_INPUT.md, PLAN.md and ART_PLAN.md
                      (the Phaser prototype's plans), screenshots/
 .github/workflows/   ci.yml

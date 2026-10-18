@@ -366,16 +366,23 @@ func start_steam() -> int:
 	return steam.start_engine() if steam != null else SteamInput.OFF
 
 
-## Reads Steam's controllers for this frame, before the screen runs: the racing action set on a screen where people
-## drive, the menus set elsewhere.
+## Reads Steam's controllers for this frame, before the screen runs: the racing action set while people drive, the
+## menus set elsewhere.
 func poll_steam() -> void:
 	if steam != null:
-		steam.frame(on_race_screen())
+		steam.frame(people_drive())
 
 
-## True on the screens where people drive: the single-player game and the versus race.
-func on_race_screen() -> bool:
-	return _screen != null and (_screen.name == &"Game" or _screen.name == &"Versus")
+## True while people drive: a single-player game or a versus round that runs. Paused, between rounds, after a game or
+## a match, and on the other screens, the menus set is read, so the panels answer a Steam controller as a pad: on the
+## match-over panel B goes back to the join screen (in the racing set B accelerates).
+func people_drive() -> bool:
+	if _screen == null or not (_screen.name == &"Game" or _screen.name == &"Versus"):
+		return false
+	var world: World = _screen.world
+	if world == null or world.phase != World.RUNNING:
+		return false
+	return _screen.name == &"Game" or (_screen.game_match as Match).phase == Match.PLAYING
 
 
 ## A pad's GUID for the seats: Steam's own for its controllers, the engine's for any other pad.

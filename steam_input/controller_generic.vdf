@@ -47,10 +47,10 @@
 				"menu_down"		"#Menu_Down"
 				"menu_left"		"#Menu_Left"
 				"menu_right"		"#Menu_Right"
-				"confirm"		"#Menu_Confirm"
-				"back"		"#Menu_Back"
-				"start"		"#Menu_Start"
-				"quit"		"#Menu_Quit"
+				"menu_confirm"		"#Menu_Confirm"
+				"menu_back"		"#Menu_Back"
+				"menu_start"		"#Menu_Start"
+				"menu_quit"		"#Menu_Quit"
 			}
 		}
 	}
@@ -65,17 +65,17 @@
 			"Action_SteerLeft"		"Steer left"
 			"Action_SteerRight"		"Steer right"
 			"Action_HighGear"		"High gear (also accelerates)"
-			"Action_Confirm"		"Confirm (next round, rematch, retry)"
+			"Action_Confirm"		"Confirm (a new controller takes a free car)"
 			"Action_Pause"		"Pause"
-			"Action_Back"		"Back (quit a paused race, leave the results)"
+			"Action_Back"		"Back (as a gamepad's Back)"
 			"Menu_Up"		"Up"
 			"Menu_Down"		"Down"
 			"Menu_Left"		"Left (one bot less)"
 			"Menu_Right"		"Right (one bot more)"
-			"Menu_Confirm"		"Confirm (join, choose)"
-			"Menu_Back"		"Back (leave your seat)"
-			"Menu_Start"		"Start the race"
-			"Menu_Quit"		"Back to the title"
+			"Menu_Confirm"		"Confirm (join, choose, next round, rematch, retry)"
+			"Menu_Back"		"Back (leave your seat or the results)"
+			"Menu_Start"		"Start the race, resume"
+			"Menu_Quit"		"Back to the title, or to the join screen"
 			"Title_Default"		"Fuel Rivals"
 			"Description_Default"		"The game's own controls: the same buttons as a gamepad without Steam."
 		}
@@ -88,17 +88,17 @@
 			"Action_SteerLeft"		"Girar a la izquierda"
 			"Action_SteerRight"		"Girar a la derecha"
 			"Action_HighGear"		"Marcha alta (también acelera)"
-			"Action_Confirm"		"Confirmar (siguiente ronda, revancha, reintentar)"
+			"Action_Confirm"		"Confirmar (un mando nuevo toma un auto libre)"
 			"Action_Pause"		"Pausa"
-			"Action_Back"		"Atrás (salir de una carrera en pausa o de los resultados)"
+			"Action_Back"		"Atrás (como el Back de un mando)"
 			"Menu_Up"		"Arriba"
 			"Menu_Down"		"Abajo"
 			"Menu_Left"		"Izquierda (un bot menos)"
 			"Menu_Right"		"Derecha (un bot más)"
-			"Menu_Confirm"		"Confirmar (unirse, elegir)"
-			"Menu_Back"		"Atrás (dejar tu plaza)"
-			"Menu_Start"		"Empezar la carrera"
-			"Menu_Quit"		"Volver al título"
+			"Menu_Confirm"		"Confirmar (unirse, elegir, siguiente ronda, revancha, reintentar)"
+			"Menu_Back"		"Atrás (dejar tu plaza o los resultados)"
+			"Menu_Start"		"Empezar la carrera, reanudar"
+			"Menu_Quit"		"Volver al título, o a la pantalla de unión"
 			"Title_Default"		"Fuel Rivals"
 			"Description_Default"		"Los controles del juego: los mismos botones que un mando sin Steam."
 		}
@@ -306,7 +306,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action menus confirm, Confirm"
+							"binding"		"game_action menus menu_confirm, Confirm"
 						}
 					}
 				}
@@ -319,7 +319,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action menus back, Back"
+							"binding"		"game_action menus menu_back, Back"
 						}
 					}
 				}
@@ -460,7 +460,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action menus start, Start"
+							"binding"		"game_action menus menu_start, Start"
 						}
 					}
 				}
@@ -473,7 +473,7 @@
 					{
 						"bindings"
 						{
-							"binding"		"game_action menus quit, Title"
+							"binding"		"game_action menus menu_quit, Title"
 						}
 					}
 				}

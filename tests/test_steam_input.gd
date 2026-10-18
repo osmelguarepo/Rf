@@ -1,9 +1,10 @@
 extends "res://tests/test_case.gd"
 ## Steam Input (B4, scripts/input/steam_input.gd; docs/GODOT_PLAN.md §5 and §8 B4, docs/STEAM_INPUT.md): the start
 ## in the plan's order, one warning and no other call when Steam does not start, --no-steam, the handles read when a
-## configuration loads, one source of pads per session, Steam's actions as the buttons of a virtual pad, and through a
-## real App: a Steam controller that joins a seat, drives it, goes away (0xFF) and comes back to the same seat. The
-## Steam singleton is tests/fake_steam.gd, except in test_the_real_godotsteam_singleton. Warnings are counted by a
+## configuration loads, one source of pads per session, Steam's actions as the buttons of a virtual pad (each action
+## name in one set only, buttons held across a set switch), and through a real App: a Steam controller that joins a
+## seat, drives it, goes away (0xFF) and comes back to its own seat, single player, the menus and the results panels.
+## The Steam singleton is tests/fake_steam.gd, except in test_the_real_godotsteam_singleton. Warnings are counted by a
 ## Logger of this file; errors fail a test as everywhere (tests/run_tests.gd).
 
 const SteamInput := preload("res://scripts/input/steam_input.gd")
@@ -14,6 +15,8 @@ const Held := preload("res://scripts/input/held.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
 const Car := preload("res://scripts/sim/car.gd")
+const Match := preload("res://scripts/sim/match.gd")
+const Config := preload("res://scripts/sim/config.gd")
 
 const SEED := 21
 ## Steam's controller handles (uint64 in Steam).
@@ -69,7 +72,7 @@ func before_each() -> void:
 	warnings = Warnings.new()
 	OS.add_logger(warnings)
 	fake = FakeSteam.new()
-	fake.name_handles([SteamInput.RACING, SteamInput.MENUS], all_actions())
+	fake.name_handles(SteamInput.ACTIONS)
 	adapter = SteamInput.new()
 	events = []
 	connections = []
@@ -121,7 +124,7 @@ func test_a_failed_start_warns_once_and_never_calls_steam_again() -> void:
 	var count := 0
 	for result: Dictionary in results:
 		var steam := FakeSteam.new()
-		steam.name_handles([SteamInput.RACING, SteamInput.MENUS], all_actions())
+		steam.name_handles(SteamInput.ACTIONS)
 		steam.init_result = result
 		var failed := SteamInput.new()
 		assert_eq(failed.start(steam, SteamInput.manifest_path()), SteamInput.UNAVAILABLE, str(result))
@@ -260,9 +263,11 @@ func test_actions_hold_the_buttons_of_a_virtual_pad() -> void:
 			assert_eq(_frame(racing), [], "nothing changed")
 			fake.hold(H1, action, false)
 			assert_eq(_frame(racing), [[FIRST, button, false]])
-	assert_eq(SteamInput.ACTIONS[SteamInput.RACING]["high_gear"], JOY_BUTTON_A)
-	assert_eq(SteamInput.ACTIONS[SteamInput.RACING]["accelerate"], JOY_BUTTON_DPAD_UP)
-	assert_eq(SteamInput.ACTIONS[SteamInput.MENUS]["back"], JOY_BUTTON_B)
+	var racing_set: Dictionary = SteamInput.ACTIONS[SteamInput.RACING]
+	var menus_set: Dictionary = SteamInput.ACTIONS[SteamInput.MENUS]
+	assert_eq(racing_set.get("high_gear"), JOY_BUTTON_A)
+	assert_eq(racing_set.get("accelerate"), JOY_BUTTON_DPAD_UP)
+	assert_eq(menus_set.get("menu_back"), JOY_BUTTON_B)
 	# Two actions on one button (high gear and confirm, the pad's A) hold it once.
 	fake.hold(H1, "high_gear")
 	fake.hold(H1, "confirm")
@@ -277,6 +282,56 @@ func test_actions_hold_the_buttons_of_a_virtual_pad() -> void:
 	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_DPAD_UP, true], [FIRST, JOY_BUTTON_DPAD_RIGHT, true]])
 	assert_eq(_frame(false), [[FIRST, JOY_BUTTON_DPAD_UP, false], [FIRST, JOY_BUTTON_DPAD_RIGHT, false]])
 	assert_eq(fake.active_set[H1], fake.set_handles["menus"])
+
+
+## Steam may apply activateActionSet() only at its next frame, and reports the new set's actions inactive until then. A
+## button that a held action of the old set and one of the new set share (Start: menu_start, then pause) stays down
+## through the switch, so it makes one press, not two; a button the new set has no action for (B: menu_back) goes up
+## at once; once the set is active the buttons follow its actions.
+func test_an_action_set_switch_keeps_shared_buttons_held() -> void:
+	_start()
+	_configure(H1)
+	# The same physical buttons, as both sets' actions: Start and B held in the menus.
+	for action: String in ["menu_start", "pause", "menu_back"]:
+		fake.hold(H1, action)
+	assert_eq(_frame(false), [[FIRST, JOY_BUTTON_B, true], [FIRST, JOY_BUTTON_START, true]])
+	fake.activation_lag = true
+	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_B, false]], "the racing set is not active yet: Start stays down")
+	fake.run_frame()
+	assert_eq(_frame(true), [], "now it is: pause holds Start, no second press")
+	for action: String in ["menu_start", "pause", "menu_back"]:
+		fake.hold(H1, action, false)
+	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_START, false]])
+	# Back to the menus with accelerate held: D-pad up is menu_up's button too, so it stays down while the menus set is
+	# pending, and goes up once menu_up reads as not held.
+	fake.hold(H1, "accelerate")
+	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_DPAD_UP, true]])
+	assert_eq(_frame(false), [], "D-pad up is menu_up's too: kept while the menus set is pending")
+	fake.run_frame()
+	assert_eq(_frame(false), [[FIRST, JOY_BUTTON_DPAD_UP, false]], "menu_up is not held")
+
+
+## ISteamInput's getDigitalActionHandle() takes no set, so a name used in two sets is one handle, the first set's
+## action, and Steam ignores the other (Steamworks docs; tests/fake_steam.gd does the same): every name of the adapter's
+## ACTIONS is in one set only, and the menus set's own start with "menu_".
+func test_every_action_name_is_in_one_set_only() -> void:
+	var seen := {}
+	for set_name: String in SteamInput.ACTIONS:
+		for action: String in SteamInput.ACTIONS[set_name]:
+			assert_false(seen.has(action), "%s is in %s and in %s" % [action, seen.get(action, ""), set_name])
+			seen[action] = set_name
+			if set_name == SteamInput.MENUS:
+				assert_true(action.begins_with("menu_"), action)
+	assert_eq(seen.size(), 16)
+	# A name in both sets, on the fake as on Steam: held, it reads as held in its first set only.
+	var steam := FakeSteam.new()
+	steam.name_handles({"racing": ["go"], "menus": ["go"]})
+	assert_eq(steam.action_handles.size(), 1)
+	steam.hold(H1, "go")
+	steam.activateActionSet(H1, steam.set_handles["menus"])
+	assert_false(steam.getDigitalActionData(H1, steam.action_handles["go"])["state"], "never in the menus set")
+	steam.activateActionSet(H1, steam.set_handles["racing"])
+	assert_true(steam.getDigitalActionData(H1, steam.action_handles["go"])["state"])
 
 
 ## Each controller gets its own device and keeps it, with its GUID, when it goes away and comes back. Going away lets
@@ -368,13 +423,13 @@ func test_a_steam_controller_joins_drives_leaves_and_comes_back() -> void:
 	_configure(H1)
 	assert_eq(app.guid_of(FIRST), "steam:%d" % H1)
 	# The app's own frame reads Steam before the screen runs.
-	fake.hold(H1, "confirm")
+	fake.hold(H1, "menu_confirm")
 	app._process(S.DT)
 	assert_eq(app.seats.seat_of(FIRST), 0, "joined the first seat in that frame")
-	fake.hold(H1, "confirm", false)
+	fake.hold(H1, "menu_confirm", false)
 	app._process(S.DT)
 	assert_eq(fake.active_set[H1], fake.set_handles["menus"], "the menus set on the join screen")
-	_press(H1, "start")
+	_press(H1, "menu_start")
 	assert_eq(S.screen_name(app), "Versus", "the race started: one person and the bot a lone person gets")
 	app.poll_steam()
 	assert_eq(fake.active_set[H1], fake.set_handles["racing"], "the racing set in the race")
@@ -403,40 +458,155 @@ func test_a_steam_controller_joins_drives_leaves_and_comes_back() -> void:
 	assert_eq(app.seats.step_bytes(app.seats.lineup.size())[slot], Held.to_byte(Held.ACCEL | Held.LEFT))
 
 
+## Two Steam controllers on seats 0 and 1 both go away in a race (0xFF on both seats); the second comes back first and
+## takes its own seat by its GUID (steam:<handle>), not the lowest orphan seat, which stays its bot's until the first
+## controller comes back to it. Each seat is driven by its own controller again.
+func test_steam_controllers_come_back_to_their_own_seats() -> void:
+	_boot_app()
+	app.show_join()
+	_configure(H1)
+	_configure(H2)
+	_press(H1, "menu_confirm")
+	_press(H2, "menu_confirm")
+	assert_eq(app.seats.seat_of(FIRST), 0)
+	assert_eq(app.seats.seat_of(FIRST + 1), 1)
+	_press(H2, "menu_start")
+	assert_eq(S.screen_name(app), "Versus", "two people, no bot")
+	assert_eq(app.seats.lineup, [0, 1])
+	fake.input_device_disconnected.emit(H1)
+	fake.input_device_disconnected.emit(H2)
+	assert_eq(app.seats.step_bytes(2), PackedByteArray([PlayerInput.BOT, PlayerInput.BOT]), "both bots drive")
+	fake.input_device_connected.emit(H2)
+	assert_eq(app.seats.seat_of(FIRST + 1), 1, "its own seat, by its GUID")
+	assert_true(app.seats.is_orphan(0), "the lower seat waits for its own controller")
+	fake.hold(H2, "steer_right")
+	app.poll_steam()
+	assert_eq(app.seats.step_bytes(2), PackedByteArray([PlayerInput.BOT, Held.to_byte(Held.RIGHT)]))
+	fake.input_device_connected.emit(H1)
+	assert_eq(app.seats.seat_of(FIRST), 0)
+	fake.hold(H1, "brake")
+	app.poll_steam()
+	assert_eq(app.seats.step_bytes(2), PackedByteArray([Held.to_byte(Held.BRAKE), Held.to_byte(Held.RIGHT)]))
+
+
+## Single player with a Steam controller, as with a pad: menu_confirm on the title starts a game (1 PLAYER is the first
+## choice), the racing set is read there and high gear drives (high gear and throttle, the pad's A), pause pauses, the
+## menus set is read while paused, and its menu_start (Start too) resumes.
+func test_a_steam_controller_plays_single_player() -> void:
+	_boot_app()
+	_configure(H1)
+	_press(H1, "menu_confirm")
+	assert_eq(S.screen_name(app), "Game")
+	app.poll_steam()
+	assert_eq(fake.active_set[H1], fake.set_handles["racing"])
+	fake.hold(H1, "high_gear")
+	app.poll_steam()
+	assert_eq(app.solo.held(), Held.ACCEL | Held.HIGH_GEAR, "the pad's A")
+	var world: World = app.current_screen().world
+	for i in 60:
+		app.poll_steam()
+		S.frame(app)
+	assert_gt(world.player().speed, 0.0, "the car drove")
+	assert_eq(world.player().gear, Car.GEAR_HIGH, "in high gear")
+	_press(H1, "pause")
+	assert_eq(world.phase, World.PAUSED)
+	app.poll_steam()
+	assert_eq(fake.active_set[H1], fake.set_handles["menus"], "the menus set while paused")
+	_press(H1, "menu_start")
+	assert_eq(world.phase, World.RUNNING)
+	app.poll_steam()
+	assert_eq(fake.active_set[H1], fake.set_handles["racing"])
+
+
 ## The menus and the race's commands with a Steam controller, as with a pad: on the title menu_down picks VERSUS and
-## confirm opens the join screen; there confirm joins, menu_right and menu_left change the bots, back leaves the seat,
-## quit goes to the title; in a race pause pauses and resumes, and back quits a paused race to the title.
+## menu_confirm opens the join screen; there menu_confirm joins, menu_right and menu_left change the bots, menu_back
+## leaves the seat, menu_quit goes to the title; in a race pause pauses, and while paused (the menus set) menu_start
+## resumes and menu_quit (Back) quits to the title.
 func test_menus_and_race_commands_through_steam() -> void:
 	_boot_app()
 	_configure(H1)
 	_press(H1, "menu_down")
 	assert_eq(app.current_screen().choice, 1, "VERSUS chosen")
-	_press(H1, "confirm")
+	_press(H1, "menu_confirm")
 	assert_eq(S.screen_name(app), "Join")
-	_press(H1, "confirm")
+	_press(H1, "menu_confirm")
 	assert_eq(app.seats.seat_of(FIRST), 0)
 	assert_eq(app.seats.bots, 1, "a lone person gets a bot")
 	_press(H1, "menu_right")
 	assert_eq(app.seats.bots, 2)
 	_press(H1, "menu_left")
 	assert_eq(app.seats.bots, 1)
-	_press(H1, "back")
+	_press(H1, "menu_back")
 	assert_eq(app.seats.seat_of(FIRST), -1, "back leaves the seat")
-	_press(H1, "confirm")
-	_press(H1, "quit")
+	_press(H1, "menu_confirm")
+	_press(H1, "menu_quit")
 	assert_eq(S.screen_name(app), "Title", "quit goes to the title")
-	_press(H1, "confirm")
-	_press(H1, "confirm")
-	_press(H1, "start")
+	_press(H1, "menu_confirm")
+	_press(H1, "menu_confirm")
+	_press(H1, "menu_start")
 	assert_eq(S.screen_name(app), "Versus")
 	var world: World = app.current_screen().world
 	_press(H1, "pause")
 	assert_eq(world.phase, World.PAUSED, "pause pauses")
+	_press(H1, "menu_start")
+	assert_eq(world.phase, World.RUNNING, "and Start resumes")
 	_press(H1, "pause")
-	assert_eq(world.phase, World.RUNNING, "and resumes")
-	_press(H1, "pause")
-	_press(H1, "back")
-	assert_eq(S.screen_name(app), "Title", "back quits a paused race")
+	_press(H1, "menu_quit")
+	assert_eq(S.screen_name(app), "Title", "Back quits a paused race")
+
+
+## The versus panels with Steam controllers, as with pads (the menus set is read there): after a round, menu_confirm
+## (A) from MATCH_CONFIRM_TICKS steps on starts the next one; at the match's end menu_back (B) goes back to the join
+## screen, where both controllers keep their seats.
+func test_the_results_panels_through_steam() -> void:
+	_boot_app()
+	app.show_join()
+	_configure(H1)
+	_configure(H2)
+	_press(H1, "menu_confirm")
+	_press(H2, "menu_confirm")
+	_press(H1, "menu_start")
+	assert_eq(S.screen_name(app), "Versus")
+	var m: Match = app.current_screen().game_match
+	for round_index in Config.MATCH_ROUNDS_MAX:
+		if m.phase == Match.MATCH_OVER:
+			break
+		S.frame(app, 5)
+		m.world.players[0].fuel = 0.01
+		S.frame(app, 1)
+		assert_ne(m.phase, Match.PLAYING, "P1 ran dry: the round is over")
+		app.poll_steam()
+		assert_eq(fake.active_set[H1], fake.set_handles["menus"], "the menus set on the results")
+		if m.phase == Match.ROUND_OVER:
+			S.frame(app, Config.MATCH_CONFIRM_TICKS)
+			_press(H1, "menu_confirm")
+			assert_eq(m.phase, Match.PLAYING, "A starts the next round")
+	assert_eq(m.phase, Match.MATCH_OVER)
+	assert_eq(m.winner, 1, "P2 won both rounds")
+	S.frame(app, Config.MATCH_CONFIRM_TICKS)
+	_press(H2, "menu_back")
+	assert_eq(S.screen_name(app), "Join", "B goes back to the join screen")
+	assert_eq([app.seats.seat_of(FIRST), app.seats.seat_of(FIRST + 1)], [0, 1])
+
+
+## A Steam controller that starts the race with Start and keeps it held while Steam switches to the
+## racing set does not pause the race it just started.
+func test_start_held_into_the_race_does_not_pause_it() -> void:
+	_boot_app()
+	app.show_join()
+	_configure(H1)
+	_press(H1, "menu_confirm")
+	assert_eq(app.seats.seat_of(FIRST), 0)
+	fake.activation_lag = true
+	fake.hold(H1, "menu_start")
+	fake.hold(H1, "pause")
+	for i in 4:
+		app._process(S.DT)
+		fake.run_frame()
+	assert_eq(S.screen_name(app), "Versus")
+	var world: World = app.current_screen().world
+	assert_eq(world.phase, World.RUNNING, "one press of Start: the race runs")
+	assert_gt(world.tick, 0)
 
 
 ## One source per session in the app: a Godot pad seated before Steam takes over leaves its seat; afterwards Godot's
@@ -456,7 +626,7 @@ func test_godot_pads_leave_when_steam_takes_over() -> void:
 	assert_eq(app.seats.seat_of(PAD), -1, "its events are dropped")
 	app._on_joy_connection_changed(PAD, true)
 	assert_false(app.seats.pads.devices.has(PAD), "and its comings and goings")
-	_press(H1, "confirm")
+	_press(H1, "menu_confirm")
 	assert_eq(app.seats.seat_of(FIRST), 0, "Steam's controller takes the seat")
 
 
@@ -484,19 +654,28 @@ func test_without_steam_controllers_the_app_reads_godot_pads() -> void:
 	assert_eq(warnings.taken().size(), 1)
 
 
-## The app activates the racing set on the screens where people drive and the menus set elsewhere; its seats take
-## Steam's GUIDs; start_steam() goes through start_engine().
+## The app activates the racing set while people drive and the menus set elsewhere (paused, between rounds, at the
+## end, and on the title and join screens); its seats take Steam's GUIDs; start_steam() goes through start_engine().
 func test_the_app_reads_the_racing_set_where_people_drive() -> void:
 	_boot_app()
-	assert_false(app.on_race_screen(), "the title")
-	app.start_game()
-	assert_true(app.on_race_screen(), "the single-player game")
+	assert_false(app.people_drive(), "the title")
+	var game := app.start_game()
+	assert_true(app.people_drive(), "a single-player game")
+	for phase: int in [World.PAUSED, World.GAME_OVER, World.STAGE_CLEAR]:
+		game.world.phase = phase
+		assert_false(app.people_drive(), "single player, phase %d" % phase)
 	app.show_join()
-	assert_false(app.on_race_screen(), "the join screen")
+	assert_false(app.people_drive(), "the join screen")
 	app.seats.join(PAD)
 	app.seats.set_bots(1)
-	app.start_versus()
-	assert_true(app.on_race_screen(), "the versus race")
+	var race := app.start_versus()
+	assert_true(app.people_drive(), "a versus round")
+	race.world.phase = World.PAUSED
+	assert_false(app.people_drive(), "paused")
+	race.world.phase = World.RUNNING
+	for phase: int in [Match.ROUND_OVER, Match.MATCH_OVER]:
+		race.game_match.phase = phase
+		assert_false(app.people_drive(), "match phase %d" % phase)
 	app.show_title()
 	assert_eq(app.seats.guid_of.call(PAD), "", "a pad the engine does not know")
 	_configure(H1)
@@ -507,16 +686,6 @@ func test_the_app_reads_the_racing_set_where_people_drive() -> void:
 
 
 # --- helpers ---------------------------------------------------------------------------------------------------------
-
-
-## Every action name of the manifest's sets, each once.
-static func all_actions() -> Array:
-	var out: Array = []
-	for set_name: String in SteamInput.ACTIONS:
-		for action: String in SteamInput.ACTIONS[set_name]:
-			if not out.has(action):
-				out.append(action)
-	return out
 
 
 ## GDScript source without its comments and string literals.

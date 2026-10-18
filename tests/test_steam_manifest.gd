@@ -44,13 +44,15 @@ func test_the_manifest_has_configurations_actions_and_localization() -> void:
 		assert_true(vdf_get(manifest, section) is Array, section)
 
 
-## The sets are the adapter's, with exactly its digital actions; no analog action (the adapter reads none).
+## The sets are the adapter's, with exactly its digital actions; no analog action (the adapter reads none). No action
+## name is in two sets: Steam's getDigitalActionHandle() takes no set, so it would ignore one of the two.
 func test_the_manifest_sets_are_the_adapters() -> void:
 	var actions: Array = vdf_get(_manifest(), "actions")
 	var sets: Array = []
 	for pair: Array in actions:
 		sets.append(pair[0])
 	assert_eq(sets, SteamInput.ACTIONS.keys())
+	var names: Array = []
 	for set_name: String in SteamInput.ACTIONS:
 		var set_block: Array = vdf_get(actions, set_name)
 		assert_true((vdf_get(set_block, "title") as String).begins_with("#"), set_name)
@@ -58,9 +60,12 @@ func test_the_manifest_sets_are_the_adapters() -> void:
 		for pair: Array in vdf_get(set_block, "Button"):
 			buttons.append(pair[0])
 			assert_true((pair[1] as String).begins_with("#"), "%s %s has a localized title" % [set_name, pair[0]])
+			assert_does_not_have(names, (pair[0] as String).to_lower(), "%s is in two sets" % pair[0])
+			names.append((pair[0] as String).to_lower())
 		assert_eq(buttons, (SteamInput.ACTIONS[set_name] as Dictionary).keys(), set_name)
 		assert_eq(vdf_get(set_block, "StickPadGyro"), [], "%s: no analog action" % set_name)
 		assert_eq(vdf_get(set_block, "AnalogTrigger"), [], "%s: no trigger action" % set_name)
+	assert_eq(names.size(), 16)
 
 
 ## Every title token of the manifest has its text in English and Spanish, and so do the configurations' title and
@@ -144,10 +149,10 @@ func test_the_default_layout_is_the_gamepad_mapping() -> void:
 				"switch.button_menu": ["back"],
 			},
 			SteamInput.MENUS: {
-				"button_diamond.button_A": ["confirm"],
-				"button_diamond.button_B": ["back"],
-				"switch.button_escape": ["start"],
-				"switch.button_menu": ["quit"],
+				"button_diamond.button_A": ["menu_confirm"],
+				"button_diamond.button_B": ["menu_back"],
+				"switch.button_escape": ["menu_start"],
+				"switch.button_menu": ["menu_quit"],
 			},
 		}
 		for source: String in [pad, "joystick"]:
@@ -231,6 +236,17 @@ func test_the_gdextension_names_only_the_shipped_libraries() -> void:
 		assert_eq(files.size(), 1, key)
 		for path: String in files:
 			assert_true(FileAccess.file_exists(path), path)
+
+
+## The adapter starts Steam itself (steamInitEx(480, true)). project.godot keeps GodotSteam's own settings at their
+## defaults (no [steam] section): with "initialize_on_startup" on, GodotSteam would start Steam first and the adapter's
+## call would log "Steam is already initialized." as an ERROR.
+func test_godotsteam_does_not_start_steam_by_itself() -> void:
+	var project := ConfigFile.new()
+	assert_eq(project.load("res://project.godot"), OK)
+	assert_true(project.has_section("application"), "project.godot read")
+	assert_false(project.has_section("steam"), "no GodotSteam settings in project.godot")
+	assert_false(ProjectSettings.get_setting("steam/initialization/processes/initialize_on_startup", false))
 
 
 ## ASSETS.md lists every file under addons/godotsteam/ with its SHA-256 and licence (MIT for GodotSteam, Valve's

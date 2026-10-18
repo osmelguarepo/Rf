@@ -4,6 +4,11 @@ extends RefCounted
 ## order; and the three Steam Input signals, which a test emits as Steam would. What Steam answers is set here:
 ## steamInitEx()'s result, the handles of action sets and actions (0, as Steam before a configuration has loaded, unless
 ## named), and the digital actions each controller holds down.
+##
+## Like ISteamInput, it reports an action as held only while the controller's active action set (the last one
+## activated, the first set before any) is the action's own set, and it gives a name one handle whatever the set:
+## getDigitalActionHandle() takes no set, so a name used in two sets is the first set's action only ("this function
+## will only ever return one of them and the other will be ignored", Steamworks ISteamInput docs).
 
 signal input_device_connected(input_handle: int)
 signal input_device_disconnected(input_handle: int)
@@ -18,24 +23,34 @@ var manifest_taken: bool = true
 ## Action set name -> handle, action name -> handle.
 var set_handles: Dictionary = {}
 var action_handles: Dictionary = {}
+## Action handle -> the handle of the set it belongs to.
+var action_set_of: Dictionary = {}
 ## Controller handle -> the action handles it holds down (true).
 var down: Dictionary = {}
-## Controller handle -> the action set handle activated last.
+## Controller handle -> the action set handle activated last (with activation_lag, applied by run_frame()).
 var active_set: Dictionary = {}
+## True: activateActionSet() takes effect at the next run_frame(), as Steam may apply it at its next frame.
+var activation_lag: bool = false
+var _pending_sets: Dictionary = {}
 ## How many of the three signals had a connection when enableDeviceCallbacks() was called (-1: not called).
 var connected_at_enable: int = -1
 
 
-## Handles for the action sets and actions given: 1, 2, ... in order, the same name always the same handle.
-func name_handles(sets: Array, actions: Array) -> void:
+## Handles for action sets and their actions, from {set name: [action names] or {action name: anything}}: 1, 2, ... in
+## order. A name already named keeps its handle and its first set, as in Steam.
+func name_handles(sets: Dictionary) -> void:
 	var next := 1
-	for name: String in sets:
-		set_handles[name] = next
+	for set_name: String in sets:
+		set_handles[set_name] = next
 		next += 1
-	for name: String in actions:
-		if not action_handles.has(name):
-			action_handles[name] = next
-			next += 1
+	for set_name: String in sets:
+		var actions: Variant = sets[set_name]
+		var names: Array = (actions as Dictionary).keys() if actions is Dictionary else actions
+		for name: String in names:
+			if not action_handles.has(name):
+				action_handles[name] = next
+				action_set_of[next] = set_handles[set_name]
+				next += 1
 
 
 ## Holds an action down on a controller, or lets go of it.
@@ -47,6 +62,13 @@ func hold(handle: int, action: String, pressed: bool = true) -> void:
 
 func let_go(handle: int) -> void:
 	down.erase(handle)
+
+
+## Steam's frame: the action sets activated since the last one become active (activation_lag).
+func run_frame() -> void:
+	for handle: int in _pending_sets:
+		active_set[handle] = _pending_sets[handle]
+	_pending_sets = {}
 
 
 ## The names of the methods called, oldest first.
@@ -108,10 +130,15 @@ func getDigitalActionHandle(action_name: String) -> int:
 
 func activateActionSet(input_handle: int, action_set_handle: int) -> void:
 	calls.append(["activateActionSet", [input_handle, action_set_handle]])
-	active_set[input_handle] = action_set_handle
+	if activation_lag:
+		_pending_sets[input_handle] = action_set_handle
+	else:
+		active_set[input_handle] = action_set_handle
 
 
 func getDigitalActionData(input_handle: int, digital_action_handle: int) -> Dictionary:
 	calls.append(["getDigitalActionData", [input_handle, digital_action_handle]])
+	var first_set: int = set_handles.values()[0] if not set_handles.is_empty() else 0
+	var active: bool = action_set_of.get(digital_action_handle, -1) == active_set.get(input_handle, first_set)
 	var actions: Dictionary = down.get(input_handle, {})
-	return {"state": actions.get(digital_action_handle, false), "active": true}
+	return {"state": active and actions.get(digital_action_handle, false) == true, "active": active}
