@@ -9,8 +9,9 @@ extends "res://scripts/input/local_input.gd"
 ##   frees its seat; set_bots(n) chooses how many bots there are, and they take the lowest free seats (bot_seats()).
 ##   The rules bound the count the players chose: with one person there is at least one bot (two cars at least, plan
 ##   §7), and never more than six cars, so a pad that joins when people and bots fill every seat takes a bot's place.
-##   `bots` is the count within the bounds; the choice stays, so the bot added for a lone person goes again when a
-##   second person joins, and a bot that gave way to a person comes back when the person leaves.
+##   `bots` is the count within the bounds; the choice stays (from 0 to six cars), so the bot added for a lone person
+##   goes again when a second person joins, even after a Left at that bot, and a bot that gave way to a person comes
+##   back when the person leaves.
 ## - lock() fixes a match's line-up: the people's seats and the bots' seats, in seat order, become the world's slots
 ##   0, 1, ... (lineup[slot] is the seat, so a seat keeps its colour whatever its slot). open() ends it.
 ## - A race (locked). step_bytes() gives each slot its pad's held controls (Pads.held_of(), the single-player mapping)
@@ -50,7 +51,7 @@ var seat_guid: Array[String] = []
 var seat_pending: Array[int] = []
 ## The number of bots: the players' choice within the rules' bounds (min_bots() to max_bots()).
 var bots: int = 0
-## The number of bots the players chose on the join screen (set_bots()).
+## The number of bots the players chose on the join screen (set_bots()), from 0 to max_bots().
 var wanted_bots: int = 0
 ## True from lock() to open(): a match is on and its line-up is fixed.
 var locked: bool = false
@@ -124,6 +125,11 @@ func is_orphan(seat: int) -> bool:
 ## The number of people.
 func people() -> int:
 	return taken.count(true)
+
+
+## The number of seats whose pad is here: the people, but for those whose pad has gone in a race (orphan seats).
+func pad_count() -> int:
+	return SEATS - seat_device.count(NO_DEVICE)
 
 
 func min_bots() -> int:
@@ -206,11 +212,13 @@ func leave(device: int) -> int:
 	return seat
 
 
-## Chooses the number of bots, kept from min_bots() to max_bots(). Returns it. Not while locked.
+## Chooses the number of bots. The choice (wanted_bots) is kept from 0 to max_bots(), and `bots` is the choice within
+## min_bots() and max_bots(), so asking a lone person's one bot for fewer keeps the choice at none: that bot is still
+## the rules' (it goes when a second person joins), not the players'. Returns `bots`. Not while locked.
 func set_bots(count: int) -> int:
 	if not locked:
-		wanted_bots = clampi(count, min_bots(), max_bots())
-		bots = wanted_bots
+		wanted_bots = clampi(count, 0, max_bots())
+		_clamp_bots()
 	return bots
 
 

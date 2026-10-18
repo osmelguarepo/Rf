@@ -22,6 +22,8 @@ const Hud := preload("res://scripts/view/hud.gd")
 
 const SEED := 11
 const PADS: Array[int] = [50, 51, 52, 55, 56, 57, 58]
+## Keys that drive the single-player car when held: high gear, throttle (two of its keys) and steering.
+const KEYS_HELD: Array[Key] = [KEY_X, KEY_UP, KEY_Z, KEY_LEFT]
 
 var app: App
 var seats: Seats
@@ -58,6 +60,7 @@ func test_the_race_plays_a_match_of_the_line_up() -> void:
 	assert_eq(humans, [1, 1, 0] as Array[int])
 	assert_eq(race.lineup, [0, 1, 2] as Array[int])
 	assert_eq(race.cars.seat_colours, race.lineup, "each car in its seat's colour")
+	assert_eq(race.hud.lineup, race.lineup, "each panel its seat's")
 	assert_eq(app.input, seats)
 	S.frame(app, 3)
 	assert_eq(m.world.tick, 3, "the clock's steps")
@@ -102,7 +105,7 @@ func test_any_person_pauses_and_resumes() -> void:
 
 
 ## While paused, a seated pad's Back (Select) or Esc goes to the title, which lets every pad go. While running, Back
-## does nothing and Esc pauses.
+## and Esc do nothing (so Esc twice cannot lose the match: Esc is no pause key while pads are here).
 func test_back_or_esc_while_paused_quits_to_the_title() -> void:
 	var race := _race([50, 51], 0)
 	var world: World = race.world
@@ -125,10 +128,89 @@ func test_back_or_esc_while_paused_quits_to_the_title() -> void:
 	world = race.world
 	S.key_tap(app, KEY_ESCAPE)
 	S.frame(app, 1)
-	assert_eq(world.phase, World.PAUSED, "Esc pauses a running round")
+	assert_eq([S.screen_name(app), world.phase], ["Versus", World.RUNNING], "Esc while running, with pads here")
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 1)
+	assert_eq([S.screen_name(app), world.phase], ["Versus", World.RUNNING], "Esc twice")
+	S.tap(app, 50, JOY_BUTTON_START)
+	S.frame(app, 1)
+	assert_eq(world.phase, World.PAUSED)
 	S.key_tap(app, KEY_ESCAPE)
 	S.frame(app, 1)
 	assert_eq(S.screen_name(app), "Title", "Esc while paused")
+
+
+## With every person's pad gone, the keyboard is the only way out: Esc pauses a running round, and Esc while paused
+## goes to the title. Between rounds Esc goes to the title too: no pad is left to confirm the next round (0xFF never
+## confirms), so the panel would wait for good.
+func test_with_every_pad_gone_esc_pauses_and_leaves() -> void:
+	var race := _race([50, 51], 0)
+	var world: World = race.world
+	S.frame(app, 10)
+	Input.joy_connection_changed.emit(50, false)
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 1)
+	assert_eq(world.phase, World.RUNNING, "one pad is still here: Esc does nothing")
+	Input.joy_connection_changed.emit(51, false)
+	assert_eq(seats.pad_count(), 0)
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 1)
+	assert_eq(world.phase, World.PAUSED, "no pad left: Esc pauses")
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 1)
+	assert_eq(S.screen_name(app), "Title", "and Esc while paused leaves")
+	race = _race([50, 51], 0)
+	var m: Match = race.game_match
+	S.frame(app, 10)
+	Input.joy_connection_changed.emit(50, false)
+	Input.joy_connection_changed.emit(51, false)
+	m.world.players[0].fuel = 0.01
+	S.frame(app, 1)
+	assert_eq(m.phase, Match.ROUND_OVER)
+	S.frame(app, Config.MATCH_CONFIRM_TICKS + 60)
+	assert_eq(m.phase, Match.ROUND_OVER, "nobody can confirm the next round")
+	S.key_tap(app, KEY_ENTER)
+	S.frame(app, 1)
+	assert_eq(m.phase, Match.ROUND_OVER, "nor can the keyboard")
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 1)
+	assert_eq(S.screen_name(app), "Title", "Esc between rounds leaves")
+	assert_eq(seats.people(), 0)
+
+
+## Versus is pads only (docs/DECISIONES_MULTIJUGADOR.md §2): the keyboard drives no car. Keys held (X, Up, Z, Left)
+## give no seat any input, and key presses (P, Enter, Space) neither pause a running round nor start the next one.
+func test_the_keyboard_drives_no_car() -> void:
+	var race := _race([50, 51], 1)
+	var m: Match = race.game_match
+	var world: World = race.world
+	for code: Key in KEYS_HELD:
+		S.key(app, code, true)
+	var xs: Array[float] = [world.players[0].x, world.players[1].x]
+	assert_eq(seats.step_bytes(3), PackedByteArray([PlayerInput.NONE, PlayerInput.NONE, PlayerInput.BOT]),
+		"keys held: each person's slot has its idle pad's byte")
+	S.frame(app, 60)
+	for slot in 2:
+		var car: Car = world.players[slot]
+		assert_eq([car.gear, car.speed, car.x], [Car.GEAR_LOW, 0.0, xs[slot]], "slot %d: no high gear, no throttle, no steering" % slot)
+	assert_gt(world.players[2].speed, 0.0, "the bot drives")
+	for code: Key in [KEY_P, KEY_ENTER, KEY_SPACE, KEY_KP_ENTER]:
+		S.key_tap(app, code)
+		S.frame(app, 1)
+		assert_eq(world.phase, World.RUNNING, "%s does not pause" % OS.get_keycode_string(code))
+	for code: Key in KEYS_HELD:
+		S.key(app, code, false)
+	m.world.players[0].fuel = 0.01
+	S.frame(app, 1)
+	assert_eq(m.phase, Match.ROUND_OVER)
+	S.frame(app, Config.MATCH_CONFIRM_TICKS)
+	for code: Key in [KEY_ENTER, KEY_SPACE, KEY_KP_ENTER, KEY_P]:
+		S.key_tap(app, code)
+		S.frame(app, 1)
+		assert_eq(m.phase, Match.ROUND_OVER, "%s does not start round 2" % OS.get_keycode_string(code))
+	S.tap(app, 51, JOY_BUTTON_A)
+	S.frame(app, 1)
+	assert_eq([m.phase, m.round_number], [Match.PLAYING, 2], "a pad's A does")
 
 
 ## NOTIFICATION_APPLICATION_FOCUS_OUT pauses a running round on its next step, and does nothing to a paused one.

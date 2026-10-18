@@ -70,6 +70,30 @@ static func seat_car_sprite(car: Car, colours: Array[int]) -> Dictionary:
 	return player_sprite(car)
 
 
+## How a player car looks: {sprite (seat_car_sprite()), fallback (the flat colour drawn on its hitbox if the frame is
+## missing: its seat's colour in versus, ViewConfig.PLAYER_FALLBACK in single player)}.
+static func car_look(car: Car, colours: Array[int]) -> Dictionary:
+	var fallback := ViewConfig.PLAYER_FALLBACK
+	if car.slot < colours.size():
+		fallback = PlayerColours.colour(colours[car.slot])
+	return {"sprite": seat_car_sprite(car, colours), "fallback": fallback}
+
+
+## The player cars _draw() draws, in slot order: each car on the road (alive, and not blinked off) as {slot, sprite,
+## fallback (car_look()), box (its hitbox's top-left corner on screen), size (its hitbox's)}. _draw() draws exactly
+## these, so the tests see which car is drawn where, and in which seat's colour.
+static func car_draws(w: World, colours: Array[int]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for p: Car in w.players:
+		if p.alive != 0 and player_visible(p, w.stage_ticks):
+			var look := car_look(p, colours)
+			look["slot"] = p.slot
+			look["box"] = hitbox_pos(w, p.x, p.y_world)
+			look["size"] = Vector2i(roundi(p.w), roundi(p.h))
+			out.append(look)
+	return out
+
+
 ## The fuel car's tint at a stage tick: a full trip round the hue circle every 1.5 s.
 static func rainbow(stage_ticks: int) -> Color:
 	return hue_colour(stage_ticks * ViewConfig.RAINBOW_DEGREES_PER_TICK)
@@ -108,13 +132,8 @@ func _draw() -> void:
 	for c: Traffic in world.traffic:
 		if c.kind != Config.KIND_OIL:
 			_draw_traffic(c, rainbow(ticks) if c.kind == Config.KIND_FUEL_CAR else Color.WHITE)
-	for p: Car in world.players:
-		if p.alive != 0 and player_visible(p, ticks):
-			var box := hitbox_pos(world, p.x, p.y_world)
-			var fallback := ViewConfig.PLAYER_FALLBACK
-			if p.slot < seat_colours.size():
-				fallback = PlayerColours.colour(seat_colours[p.slot])
-			Draw.sprite_on_hitbox(self, atlas, seat_car_sprite(p, seat_colours), box, Vector2i(roundi(p.w), roundi(p.h)), fallback)
+	for car: Dictionary in car_draws(world, seat_colours):
+		Draw.sprite_on_hitbox(self, atlas, car["sprite"], car["box"], car["size"], car["fallback"])
 
 
 func _draw_traffic(c: Traffic, modulate: Color) -> void:

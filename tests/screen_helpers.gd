@@ -87,7 +87,9 @@ static func release(devices: Array[int]) -> void:
 			motion.device = device
 			motion.axis = axis
 			Input.parse_input_event(motion)
-	for code: Key in [KEY_ENTER, KEY_ESCAPE, KEY_F11, KEY_DOWN, KEY_UP]:
+	for code: Key in [
+		KEY_ENTER, KEY_KP_ENTER, KEY_SPACE, KEY_ESCAPE, KEY_P, KEY_F11, KEY_DOWN, KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_X, KEY_Z
+	]:
 		var up := InputEventKey.new()
 		up.physical_keycode = code
 		up.keycode = code

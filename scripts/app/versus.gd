@@ -9,7 +9,11 @@ extends Node2D
 ##   Config.MATCH_CONFIRM_TICKS steps on starts the next one.
 ## - Menu commands (scripts/input/nav.gd), taken before the steps:
 ##   - while the round is paused, a seated pad's Back (Select), or Esc on the keyboard, goes to the title;
-##   - while it runs, Esc on the keyboard pauses it (a press of the program, on the next step);
+##   - between rounds (the round-over panel), Esc on the keyboard goes to the title too, so the keyboard can leave a
+##     match whose pads have all gone (their bots never confirm the next round);
+##   - while a round runs, the keyboard does nothing (versus is pads only, and Esc quits once paused, so Esc must not
+##     pause too: Esc twice would lose the match), but for one case: when no person's pad is left, Esc pauses (a press
+##     of the program, on the next step), as the keyboard is then the only way to stop the race;
 ##   - once the match is over, from MATCH_CONFIRM_TICKS steps on (so a press made while racing cannot skip the
 ##     panel), a seated pad's A or Start plays a rematch (the same seats, the next seed: App.next_seed()) and its B or
 ##     Back, or Esc, goes back to the join screen with the same pads on their seats;
@@ -102,12 +106,17 @@ func handle(device: int, command: int) -> bool:
 			app.show_join()
 			return true
 		return false
+	if game_match.phase == Match.ROUND_OVER:
+		if keyboard and command == Nav.BACK:
+			app.show_title()
+			return true
+		return false
 	if world.phase == World.PAUSED:
 		if (keyboard and command == Nav.BACK) or (not keyboard and command == Nav.SELECT):
 			app.show_title()
 			return true
 		return false
-	if keyboard and command == Nav.BACK and _racing():
+	if keyboard and command == Nav.BACK and _racing() and seats.pad_count() == 0:
 		seats.press(PlayerInput.PAUSE)
 	return false
 

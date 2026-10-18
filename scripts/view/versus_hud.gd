@@ -6,9 +6,10 @@ extends Node2D
 ## the same place in every match; seats without a car draw nothing. The panels stay on the grass beside the road
 ## (ViewConfig.PANEL_LEFT and PANEL_RIGHT), so they never hide a car. Each shows (seat_info()), in a border of the
 ## seat's colour: the seat's car as it looks on the road, its name (P1 to P6, or BOT), a pip per round it won (people
-## only: bots cannot win), the points this round, a fuel gauge (red when low), and a mark: OUT (out of the round: the
-## panel dims), EDGE (touching the bottom edge, which drains the tank), LOW FUEL (blinking); and NO PAD for a person's
-## seat whose pad has gone (its bot drives).
+## only: bots cannot win), the points this round, a fuel gauge (red when low), and two lines of marks (marks_of()):
+## first OUT (out of the round: the panel dims), EDGE (touching the bottom edge, which drains the tank) or LOW FUEL
+## (blinking); then, for a person's seat whose pad has gone (its bot drives), NO PAD and PRESS A in turn (any pad that
+## holds no seat takes the seat with A), or else LOW FUEL under EDGE.
 ##
 ## Panels over the road (overlay_for()), which dim the screen: PAUSED; after a round, a row per seat (its badge, the
 ## round's points and distance, OUT, its wins), the round's winner or NO WINNER, and PRESS A once the match takes the
@@ -49,12 +50,16 @@ const PIP_DY := 16
 const SCORE_DY := 40
 const GAUGE_DY := 60
 const GAUGE_H := 14
+## The two lines of marks (marks_of()).
 const MARK_DY := 80
 const PAD_MARK_DY := 92
 ## How much of a panel shows once its car is out.
 const OUT_ALPHA := 0.4
 ## The low-fuel mark blinks every this many ticks (the single-player warning's rate).
 const BLINK_TICKS := Hud.WARN_BLINK_TICKS
+## A seat whose pad has gone shows NO PAD and PRESS A in turn, each for this many world ticks (World.tick, which counts
+## in every phase: paused and between rounds too).
+const PAD_BLINK_TICKS := 60
 
 # --- Panels over the road.
 ## The round-over and match-over panels: as wide as the road and its verges, clear of the seat panels.
@@ -131,6 +136,25 @@ static func mark_of(info: Dictionary) -> String:
 	if info["low_fuel"]:
 		return "LOW FUEL"
 	return ""
+
+
+## A panel's two lines of marks, "" for none: the first is mark_of(); the second NO PAD for a person's seat whose pad
+## has gone, or else LOW FUEL while the first shows EDGE (a car on the bottom edge loses fuel fastest, so its low tank
+## must show too). draw_seat_panel() blinks LOW FUEL, and shows NO PAD as pad_mark().
+static func marks_of(info: Dictionary) -> Array[String]:
+	var first := mark_of(info)
+	var second := ""
+	if info["no_pad"]:
+		second = "NO PAD"
+	elif first == "EDGE" and info["low_fuel"]:
+		second = "LOW FUEL"
+	return [first, second]
+
+
+## What a seat whose pad has gone says at a world tick: NO PAD, then PRESS A (how another pad takes the seat), each for
+## PAD_BLINK_TICKS.
+static func pad_mark(tick: int) -> String:
+	return "NO PAD" if floori(tick / float(PAD_BLINK_TICKS)) % 2 == 0 else "PRESS A"
 
 
 ## The panel over the road for the match's state, or {} while a round runs: {title, width, lines}. Each line is a
@@ -275,13 +299,19 @@ func draw_seat_panel(info: Dictionary) -> void:
 	var fuel: float = 0.0 if out else info["fuel"]
 	draw_bar(Rect2i(x + INSET, y + GAUGE_DY, r.size.x - 2 * INSET, GAUGE_H), fuel / Config.FUEL_MAX,
 		ViewConfig.LIGHT_RED if low else ViewConfig.GRASS, fade)
-	var mark := mark_of(info)
-	var blink_off := mark == "LOW FUEL" and floori(game_match.world.stage_ticks / float(BLINK_TICKS)) % 2 == 1
-	if not mark.is_empty() and not blink_off:
-		var colour := ViewConfig.YELLOW if mark == "EDGE" else ViewConfig.LIGHT_RED
-		Draw.text_centred(self, font, cx, y + MARK_DY, mark, ViewConfig.TEXT_SMALL, colour)
-	if info["no_pad"]:
-		Draw.text_centred(self, font, cx, y + PAD_MARK_DY, "NO PAD", ViewConfig.TEXT_SMALL, ViewConfig.WHITE)
+	var low_off := floori(game_match.world.stage_ticks / float(BLINK_TICKS)) % 2 == 1
+	var marks := marks_of(info)
+	for line in marks.size():
+		var mark: String = marks[line]
+		if mark.is_empty() or (mark == "LOW FUEL" and low_off):
+			continue
+		var colour := ViewConfig.LIGHT_RED
+		if mark == "EDGE":
+			colour = ViewConfig.YELLOW
+		elif mark == "NO PAD":
+			mark = pad_mark(game_match.world.tick)
+			colour = ViewConfig.WHITE if mark == "NO PAD" else ViewConfig.YELLOW
+		Draw.text_centred(self, font, cx, y + (MARK_DY if line == 0 else PAD_MARK_DY), mark, ViewConfig.TEXT_SMALL, colour)
 
 
 ## A border of BORDER px just inside a rect.
