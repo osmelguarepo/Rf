@@ -21,6 +21,10 @@ extends Node
 ##   Menu commands (up, down, accept, back...) of every device go to `nav` (scripts/input/nav.gd) for the menus.
 ## - F11 and Alt+Enter, on every screen, switch between a window and fullscreen (toggle_fullscreen()); the picture
 ##   keeps its whole-number scale (project.godot's stretch settings). The key never reaches the screens.
+## - Steam Input (B4, scripts/input/steam_input.gd): when GodotSteam is loaded and Steam runs, `steam` turns Steam's
+##   controllers into virtual pads, read once a frame (poll_steam()) and parsed into Input like a pad driver's events,
+##   so every screen reads them as pads. Once Steam has a controller, Godot's own pads are left out for the session.
+##   Steam starts in _ready() (start_steam()), so only the game itself talks to Steam: tests boot apps with start().
 ## - --selftest (after the "--" of the command line): boots, drives SELFTEST_TICKS steps through the real screens and
 ##   checks the result (selftest_problems(): among others, a pause press pauses the game and a second one resumes
 ##   it), then a versus race of SELFTEST_TICKS steps through the join and race screens (selftest_versus_problems(),
@@ -34,6 +38,7 @@ const LocalInput := preload("res://scripts/input/local_input.gd")
 const Seats := preload("res://scripts/input/seats.gd")
 const Nav := preload("res://scripts/input/nav.gd")
 const Keyboard := preload("res://scripts/input/keyboard.gd")
+const SteamInput := preload("res://scripts/input/steam_input.gd")
 const FixedStep := preload("res://scripts/app/fixed_step.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
@@ -97,6 +102,8 @@ var solo: LocalInput
 var seats: Seats
 ## Menu commands from every device, for the menus (title, join screen, versus pause and results).
 var nav := Nav.new()
+## Steam's controllers as pads (B4). Made by boot(), started by start_steam(); off until then.
+var steam: SteamInput
 ## The title's last choice (title.gd CHOICE_SINGLE or CHOICE_VERSUS), shown again when it opens.
 var title_choice: int = 0
 ## The window that F11 and Alt+Enter switch: the game's own when null. Tests give another, since a headless window
@@ -121,6 +128,7 @@ var _selftest_problems := PackedStringArray()
 
 func _ready() -> void:
 	start()
+	start_steam()
 
 
 ## Boots and opens the title, or runs the self test and quits. _ready() calls it. Code that adds the app to a tree
@@ -197,6 +205,8 @@ func boot() -> bool:
 	Keyboard.build_input_map()
 	solo = LocalInput.new()
 	seats = Seats.new()
+	seats.guid_of = guid_of
+	use_steam(SteamInput.new())
 	input = solo
 	atlas = Atlas.new()
 	booted = atlas.load_all()
@@ -297,12 +307,15 @@ func _input(event: InputEvent) -> void:
 	if is_fullscreen_key(event):
 		toggle_fullscreen()
 		return
+	if steam != null and steam.drops(event):
+		return
 	if input != null:
 		input.handle_event(event)
 	nav.handle_event(event)
 
 
 func _process(delta: float) -> void:
+	poll_steam()
 	if _selftest_frame >= 0:
 		_selftest_draw_frame()
 		return
@@ -320,12 +333,82 @@ func _notification(what: int) -> void:
 			_screen.on_focus_lost()
 
 
-## Both inputs follow the pads, whichever is active, and so do the menu commands.
+## Godot's pads coming and going (Input.joy_connection_changed), unless Steam is the session's source of pads (B4).
 func _on_joy_connection_changed(device: int, connected: bool) -> void:
+	if steam != null and steam.drops_device(device):
+		return
+	_pad_connection(device, connected)
+
+
+## Both inputs follow the pads, whichever is active, and so do the menu commands.
+func _pad_connection(device: int, connected: bool) -> void:
 	for each: LocalInput in [solo, seats]:
 		if each != null:
 			each.connection_changed(device, connected)
 	nav.connection_changed(device, connected)
+
+
+# --- Steam Input (B4) ------------------------------------------------------------------------------------------------
+
+
+## Gives the app its Steam Input adapter (boot() makes one; a test gives one with a fake singleton): its controllers'
+## pad events and comings and goings reach the inputs as a pad's would.
+func use_steam(adapter: SteamInput) -> void:
+	steam = adapter
+	adapter.pad_event.connect(_on_steam_pad_event)
+	adapter.pad_connection.connect(_pad_connection)
+	adapter.took_over.connect(_on_steam_took_over)
+
+
+## Starts Steam Input once (_ready() calls it): nothing with --no-steam, one warning without GodotSteam or without a
+## Steam client (Godot's pads are read then). Returns the adapter's state.
+func start_steam() -> int:
+	return steam.start_engine() if steam != null else SteamInput.OFF
+
+
+## Reads Steam's controllers for this frame, before the screen runs: the racing action set on a screen where people
+## drive, the menus set elsewhere.
+func poll_steam() -> void:
+	if steam != null:
+		steam.frame(on_race_screen())
+
+
+## True on the screens where people drive: the single-player game and the versus race.
+func on_race_screen() -> bool:
+	return _screen != null and (_screen.name == &"Game" or _screen.name == &"Versus")
+
+
+## A pad's GUID for the seats: Steam's own for its controllers, the engine's for any other pad.
+func guid_of(device: int) -> String:
+	if steam != null and steam.owns(device):
+		return steam.guid_of(device)
+	return Seats.engine_guid(device)
+
+
+## A button of a Steam controller's virtual pad going down or up, as a pad driver's event: into Input's state, then to
+## _input(). The engine delivers it to _input() as it flushes; outside a running tree (the test runner) nothing would,
+## so it goes there directly.
+func _on_steam_pad_event(event: InputEvent) -> void:
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	if not is_inside_tree():
+		_input(event)
+
+
+## Steam is the session's source of pads from now on: Godot's own pads leave the inputs (a seated one leaves its seat,
+## or hands it to its bot in a race), since the same controllers now come through Steam.
+func _on_steam_took_over() -> void:
+	var known: Array[int] = []
+	known.append_array(Input.get_connected_joypads())
+	for each: LocalInput in [solo, seats]:
+		if each != null:
+			known.append_array(each.pads.devices)
+	var gone: Array[int] = []
+	for device: int in known:
+		if not steam.owns(device) and not gone.has(device):
+			gone.append(device)
+	for device: int in gone:
+		_pad_connection(device, false)
 
 
 # --- Self test -------------------------------------------------------------------------------------------------------

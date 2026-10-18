@@ -25,6 +25,30 @@ A credits screen, if one is added, should show these two lines.
 - **CC0 1.0 Universal** (public domain dedication): <https://creativecommons.org/publicdomain/zero/1.0/>. No conditions. Licence and credit request checked on the OpenGameArt page on 2026-10-10.
 - **SIL Open Font License 1.1**: full text in [`assets/font/OFL.txt`](assets/font/OFL.txt), also at <https://openfontlicense.org>. In short: keep the copyright notice and licence with the font, do not sell the font on its own, and do not use the Reserved Font Name for a modified version of the font. We ship the font file unmodified. Changing it (re-subsetting included) counts as a modified version, so read the OFL first.
 
+## GodotSteam (`addons/godotsteam/`), shipped in the Steam builds only
+
+The Steam builds (the export presets `Linux Steam` and `Windows Steam`) ship GodotSteam, the GDExtension that lets the game talk to Steam (Steam Input, docs/STEAM_INPUT.md). The builds without Steam (`Linux`, `Windows Desktop`) leave the folder out with their `exclude_filter`, and the game runs without it.
+
+- **Source:** GodotSteam GDExtension **4.23.1** for Godot 4.4 and up, built against the Steamworks SDK 1.65: the release asset <https://codeberg.org/godotsteam/godotsteam/releases/download/v4.23.1/godotsteam-4.23.1-gdextension-plugin-4.4.zip.tar.xz> (tag `v4.23.1`, commit `37cc25db782a58a60a4f7b0971782f08769a8f5d`), 18 074 552 bytes, SHA-256 `37d53ede5eda11d2247d70c1af91f95a4777ad2a419fc8a24de1cc816d21cc0a`. Despite its name the file is a tar.xz archive. Downloaded on 2026-10-17.
+- **Kept:** the licence, the Linux x86_64 and Windows x86_64 libraries (debug and release builds of each, since the editor and debug exports load the debug one), and the Steamworks redistributables they need. **Left out:** the other platforms' libraries (Android, Linux ARM64 and x86_32, macOS, Windows x86_32), the readme, and the updater editor plugin (`plugin.cfg`, `godotsteam_plugin.gd`, `editor/`), which is not needed to use Steam.
+- **Changed:** `godotsteam.gdextension` keeps only the four libraries and two dependencies shipped here; every line it keeps is the release's, unchanged. Godot writes `godotsteam.gdextension.uid` next to it.
+- **Licences.** GodotSteam is MIT (`license.md`: "Copyright (c) 2015-Current | GP Garcia, Chris Ridenour, and Contributors"). `libsteam_api.so` and `steam_api64.dll` are Valve's Steamworks SDK Redistributables (the SDK's `redistributable_bin`): Valve's [Steamworks SDK Access Agreement](https://partner.steamgames.com/documentation/sdk_access_agreement) §1.1(b) lets a licensee "reproduce and distribute" them "along with the Licensee Software in object code form", and using them means accepting that agreement.
+
+`tests/test_steam_manifest.gd` fails if a file under `addons/godotsteam/` (other than Godot's `.uid`) has no row here, if a row's SHA-256 differs from the file, or if a row names a file that does not exist while the folder does.
+
+| Addon file | SHA-256 | Source | Licence | Use |
+|---|---|---|---|---|
+| `addons/godotsteam/godotsteam.gdextension` | `208a43e025090bc850a36b33acdca0c8e96e425792a81700b495008703653466` | The release's, with the lines of the platforms not shipped removed | MIT | Tells Godot which library to load on each platform |
+| `addons/godotsteam/license.md` | `4b72012dba000de1e0b4c0183e5ed99f4fe8e949f50e570442f692ce3995bae2` | The release's, unmodified | MIT | GodotSteam's licence |
+| `addons/godotsteam/linux64/libgodotsteam.linux.template_debug.x86_64.so` | `1e8a468a19a341677fb2205123626434cdfc65c15f4c7a021170f2c0d678d528` | The release's, unmodified | MIT | GodotSteam for the editor and debug builds, Linux |
+| `addons/godotsteam/linux64/libgodotsteam.linux.template_release.x86_64.so` | `859604d4c1bbeec93a3e05e1f0dc3ae1db17c06b299f10e811cf93b7a370c9e3` | The release's, unmodified | MIT | GodotSteam for release builds, Linux |
+| `addons/godotsteam/linux64/libsteam_api.so` | `659127fd3c36788162149006efb607ae24c08b7264259c7af52c806fa40c2b4f` | The release's, unmodified (Steamworks SDK 1.65) | Steamworks SDK | Valve's Steam API, Linux |
+| `addons/godotsteam/win64/libgodotsteam.windows.template_debug.x86_64.dll` | `2f94c4ef1142534f332d0cbb41ee597f67af6fb6498a110c3644984488ed28ce` | The release's, unmodified | MIT | GodotSteam for the editor and debug builds, Windows |
+| `addons/godotsteam/win64/libgodotsteam.windows.template_release.x86_64.dll` | `799e1917061854661ab53c8ef6d297366193ed495088b34f5e32a280fa4ef744` | The release's, unmodified | MIT | GodotSteam for release builds, Windows |
+| `addons/godotsteam/win64/steam_api64.dll` | `8de54d32508e216c9135b8bf025749243d44e404c1c22a8e5fe35acecabe7a9c` | The release's, unmodified (Steamworks SDK 1.65) | Steamworks SDK | Valve's Steam API, Windows |
+
+To update GodotSteam: download the new release's GDExtension asset into an empty folder, check its SHA-256, copy the same files over these, trim `godotsteam.gdextension` the same way, and update this table (the test gives the new SHA-256 of each file).
+
 ## Not shipped
 
 - `assets/source/grafxkid-td-racing-assets.png`: the original sheet (CC0, GrafxKid), committed so the slicer runs offline. `tools/fetch_assets.py` downloads it again and checks its pinned SHA-256. It is input to the slicer only, and `assets/source/.gdignore` keeps it out of the Godot import and export.

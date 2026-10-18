@@ -16,8 +16,9 @@ GrafxKid's CC0 sheet, the Press Start 2P font, no sound.
   rules, the match and the bots (B1), and the versus screens (B2, first part): the join screen, a seat per gamepad, the
   race, the round and match results, rematch, gamepads that disconnect and come back. Still to come: the six final
   player colours and the final look of the six-player HUD (the colours and panels in the game now are placeholders),
-  QA with six cars and real Linux and Windows builds (B3), and Steam Input through GodotSteam (B4). The owner's
-  decisions are in `docs/DECISIONES_MULTIJUGADOR.md`, the plan in `docs/GODOT_PLAN.md` (both in Spanish).
+  QA with six cars and real Linux and Windows builds (B3). Steam Input through GodotSteam (B4) is in, not yet tried
+  with a real Steam client (see Steam below). The owner's decisions are in `docs/DECISIONES_MULTIJUGADOR.md`, the
+  plan in `docs/GODOT_PLAN.md` (both in Spanish).
   `docs/HANDOFF.md` has each step's notes: files, how to verify, APIs, known gaps.
 - Targets: Steam on the desktop (Linux and Windows) first, the web later.
 - The Phaser prototype is no longer in the tree. It is in git at commit `0a0841f`.
@@ -160,10 +161,13 @@ tools/export_check.sh           # exports build/fuel_rivals.pck and runs its sel
 
 ## Export
 
-`export_presets.cfg` has two presets, **Linux** and **Windows Desktop**. Both embed the pack in the binary, leave out
+`export_presets.cfg` has four presets. **Linux** and **Windows Desktop** embed the pack in the binary, leave out
 `tests/`, `tools/` and `docs/`, include the font's licence (`assets/font/OFL.txt`) and write to
-`build/linux/fuel_rivals.x86_64` and `build/windows/fuel_rivals.exe`. Godot writes this file itself when presets are
-edited in Project > Export, so edit them there.
+`build/linux/fuel_rivals.x86_64` and `build/windows/fuel_rivals.exe`. They are the builds without Steam: they also
+leave out `addons/godotsteam/`. **Linux Steam** and **Windows Steam** are the same with GodotSteam in, written to
+`build/linux_steam/` and `build/windows_steam/`; a Steam build also needs the `steam_input/` folder copied next to
+the executable (`docs/STEAM_INPUT.md`). Godot writes this file itself when presets are edited in Project > Export, so
+edit them there.
 
 A pack needs no export templates:
 
@@ -181,24 +185,27 @@ set up yet: real Linux and Windows exports come in phase B3.
 
 ```
 project.godot        engine settings: 640x360, whole-number scaling, nearest filtering, no audio
-export_presets.cfg   the Linux and Windows Desktop presets
+export_presets.cfg   the Linux and Windows Desktop presets, and their Steam builds
 icon.svg
+addons/godotsteam/   GodotSteam (Steam builds only)
+steam_input/         the Steam Input action manifest and default layouts (next to the executable in Steam builds)
 assets/              sprites.png and sprites.json (the atlas), font/ (Press Start 2P and its OFL.txt),
                      source/ (the original sheet; Godot ignores it)
 scenes/              boot.tscn (main scene), title.tscn, game.tscn; join.tscn and versus.tscn (versus)
 scripts/
   sim/               the rules: config, rng, car, fuel, traffic, collision, player_input, world, match, bot (no nodes)
   input/             keyboard (input map built in code), pads (read per device), held, local_input (1 player),
-                     seats (versus: a seat per gamepad), nav (menu commands)
+                     seats (versus: a seat per gamepad), nav (menu commands), steam_input (Steam's controllers)
   view/              atlas, pixel_art, draw, road, cars, hud, title_view, view_config; join_view, versus_hud,
                      player_colours (versus)
   app/               app (boot, fixed step, focus pause, screens, fullscreen, --selftest), fixed_step, title, game;
                      join and versus (versus)
-tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, screen_helpers.gd, PARITY.md, golden/
+tests/               run_tests.gd, test_case.gd, test_*.gd, sim_helpers.gd, screen_helpers.gd, fake_steam.gd,
+                     PARITY.md, golden/
 tools/               test.sh, run_tool.sh, export_check.sh; smoke.gd, screenshots.gd, scalecheck.gd, tool_base.gd;
                      slice-sheet.py and fetch_assets.py (the atlas); gen_golden/ (the TypeScript golden traces)
-docs/                GODOT_PLAN.md, DECISIONES_MULTIJUGADOR.md, HANDOFF.md, PLAN.md and ART_PLAN.md (the Phaser
-                     prototype's plans), screenshots/
+docs/                GODOT_PLAN.md, DECISIONES_MULTIJUGADOR.md, HANDOFF.md, STEAM_INPUT.md, PLAN.md and ART_PLAN.md
+                     (the Phaser prototype's plans), screenshots/
 .github/workflows/   ci.yml
 ASSETS.md            every shipped asset, its source and licence
 ```
@@ -216,8 +223,13 @@ ASSETS.md            every shipped asset, its source and licence
 
 ## Steam
 
+- **Steam Input** (B4, `docs/STEAM_INPUT.md`): when the game runs under Steam, every controller Steam sees (up to 16,
+  of any make, Remote Play Together guests' too) is read through the action manifest in `steam_input/` and plays as a
+  gamepad, so 5 and 6 gamepads work. GodotSteam 4.23.1 (`addons/godotsteam/`, MIT; Valve's Steam API library under
+  the Steamworks SDK terms, `ASSETS.md`) does the talking to Steam.
+- Without a Steam client, or in a build without GodotSteam, the game prints one warning ("Steam Input is off") and
+  reads the gamepads itself, as without Steam. `--no-steam` (also in Steam's launch options) turns Steam Input off.
 - Development uses the Steam App ID **480** (Spacewar, Valve's test app) until the game has its own.
-- There is no Steam code in the repository yet. GodotSteam comes in phase B (B4), for Steam Input, so that 5 and 6
-  gamepads work, also with Remote Play Together. No physical gamepad, no Steam Input and no Windows machine has been
-  tested yet.
+- Not tested yet: a real Steam client, physical gamepads (six, or any), Remote Play Together, Windows.
+  `docs/STEAM_INPUT.md` says how to test with App ID 480 on a PC with Steam.
 - The name "Fuel Rivals" still has to be checked as a trademark before publishing.
