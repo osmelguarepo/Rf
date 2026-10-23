@@ -1974,3 +1974,25 @@ Done by the lead alone: the agents had reached the weekly usage limit. No advers
 - The QA scenario six reaches a decided match in about one seed of two within 18 000 frames: rounds last about a
   minute plus the results panel, and a match needs two wins among six humans.
 - `export_builds.sh` writes into the user's template folder when the templates are missing.
+
+## Lead review of B3 and of the B2/B4 fixes (23 Oct, alone, no agents)
+
+A lighter check than an adversarial agent review, from a fresh copy of the tree (`git ls-files -co --exclude-standard`),
+with and without `addons/godotsteam`: `tools/test.sh` 339 passed, `tools/run_tool.sh smoke` PASS, `tools/export_check.sh`
+PASS in both; `tools/export_builds.sh` PASS with the addon. Failures injected into scratch copies, each caught:
+
+| Injected | Caught by |
+|---|---|
+| a Steam library missing from a Steam build | `export_builds.sh` exit 1 |
+| a Steam library in a build without Steam (addon not excluded) | `export_builds.sh` exit 1 |
+| a `push_error()` in the self test | `export_builds.sh` exit 2 |
+| any elimination ends a round | `versus_qa --scenario=lone` FAIL ("ended without a human going out") |
+| inputInit and the manifest call swapped | `test_steam_starts_in_the_plans_order` and `test_start_steam_honours_no_steam` |
+| Steam handles accepted with 0 | `test_no_takeover_while_steam_has_no_handle_for_a_name` |
+
+One mutation was NOT caught by `versus_qa`: bots counted as round-winner candidates. In the one-human scenario the rule
+"the human must beat every live bot" cancels it, and the six-human scenario has no bots; B1's `test_bots_never_win`
+covers it (checked by B1's verifier), so the QA tool is not the guard for that rule.
+
+Not done: an adversarial agent review (needs agents), the CI run of the latest commit (GitHub tools were not available
+in this session), and everything in "Known gaps" that needs Windows, Steam, six gamepads or people.
