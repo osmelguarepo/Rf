@@ -25,7 +25,10 @@ extends RefCounted
 ## A race match (World.is_race(), the game's rules; docs/SPEC_RANKING.md) is Config.match_races races. Each race gives every seat
 ## Config.RACE_POINTS by its place (World.standings()); the most race points win the match, a tie going to the better place
 ## in the last race, so some seat, a bot's too, always does. A person given the bot byte 0xFF leaves the match
-## (abandoned_mask) and ranks last in ranking_order().
+## (abandoned_mask) and ranks last in ranking_order(). With step(inputs, true) (`rejoin`, online, docs/SPEC_ONLINE.md §16.4)
+## that is not for good yet: a seat that gets a real byte again (the server sends one when the person reconnects) takes its
+## place back; the server keeps sending 0xFF once the grace window is over, which makes it final. The local game never
+## passes it, so there leaving is for good. It is a parameter, not a field: the state and its checksum do not change.
 ##
 ## Each round starts afresh (World.start_round()): points, distance, fuel, traffic, gaps, the difficulty clock and the
 ## bots. The world's RNG, the seats' and the bots' streams go on from the round before, so every round is new and the
@@ -109,13 +112,17 @@ static func create(p_cfg: Config, p_seed: int, p_seats: int, p_humans: int) -> S
 ## phase (it takes no input once its round is over, but counts the tick). PLAYING: when the world's round ends, the
 ## match counts it and becomes ROUND_OVER or MATCH_OVER. ROUND_OVER: a confirm press from a human seat, from
 ## MATCH_CONFIRM_TICKS steps after the round ended, starts the next round, whose first step is the next one.
-func step(inputs: PackedByteArray) -> void:
+func step(inputs: PackedByteArray, rejoin: bool = false) -> void:
 	events = 0
 	phase_ticks += 1
 	if world.is_race() and phase != MATCH_OVER:
 		for p: Car in world.players:
-			if p.human != 0 and p.slot < inputs.size() and PlayerInput.is_bot(inputs[p.slot]):
+			if p.human == 0 or p.slot >= inputs.size():
+				continue
+			if PlayerInput.is_bot(inputs[p.slot]):
 				abandon(p.slot)
+			elif rejoin:
+				abandoned_mask &= ~(1 << p.slot)
 	world.step(inputs)
 	if phase == PLAYING:
 		if world.phase == World.ROUND_OVER:
