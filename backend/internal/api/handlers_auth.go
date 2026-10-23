@@ -12,8 +12,8 @@ import (
 	"fuelrivals/backend/internal/store"
 )
 
-func itoa(n int) string      { return strconv.Itoa(n) }
-func itoa64(n int64) string  { return strconv.FormatInt(n, 10) }
+func itoa(n int) string     { return strconv.Itoa(n) }
+func itoa64(n int64) string { return strconv.FormatInt(n, 10) }
 
 type sessionResponse struct {
 	Token     string        `json:"token"`

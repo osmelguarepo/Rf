@@ -23,6 +23,7 @@ func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			out_path = arg.substr(6)
+	out_path = ProjectSettings.globalize_path(out_path)
 	var file := FileAccess.open(out_path, FileAccess.WRITE)
 	if file == null:
 		printerr("export_ranking_tables: cannot write ", out_path)

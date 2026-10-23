@@ -407,7 +407,9 @@ func (e *env) openidReturn(state, cookie, nonce, steamID string) resp {
 	return e.do("GET", "/auth/openid/return?"+q.Encode(), nil, h)
 }
 
-func nonceAt(t time.Time, suffix string) string { return t.UTC().Format("2006-01-02T15:04:05Z") + suffix }
+func nonceAt(t time.Time, suffix string) string {
+	return t.UTC().Format("2006-01-02T15:04:05Z") + suffix
+}
 
 func TestOpenIDLoginEndToEnd(t *testing.T) {
 	e := newEnv(t, nil)

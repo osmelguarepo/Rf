@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,6 +19,10 @@ import (
 )
 
 func main() {
+	// `api healthcheck` is for the container's HEALTHCHECK (the image has no curl): exit 0 if /healthz answers.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck())
+	}
 	cfg, err := config.FromEnv()
 	if err != nil {
 		slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("invalid configuration", "err", err.Error())
@@ -90,6 +95,26 @@ func main() {
 		}
 		log.Info("stopped")
 	}
+}
+
+func healthcheck() int {
+	addr := os.Getenv("LISTEN_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+	client := http.Client{Timeout: 3 * time.Second}
+	res, err := client.Get("http://" + addr + "/healthz")
+	if err != nil {
+		return 1
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
 }
 
 // connect waits for the database for up to a minute (the container may start before PostgreSQL is ready).
