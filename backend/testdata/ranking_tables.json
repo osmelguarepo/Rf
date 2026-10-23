@@ -1,0 +1,556 @@
+{
+	"applies": [
+		{
+			"points": 0,
+			"change": -30,
+			"result": 0
+		},
+		{
+			"points": 0,
+			"change": -1,
+			"result": 0
+		},
+		{
+			"points": 0,
+			"change": 0,
+			"result": 0
+		},
+		{
+			"points": 0,
+			"change": 1,
+			"result": 1
+		},
+		{
+			"points": 0,
+			"change": 30,
+			"result": 30
+		},
+		{
+			"points": 1,
+			"change": -30,
+			"result": 0
+		},
+		{
+			"points": 1,
+			"change": -1,
+			"result": 0
+		},
+		{
+			"points": 1,
+			"change": 0,
+			"result": 1
+		},
+		{
+			"points": 1,
+			"change": 1,
+			"result": 2
+		},
+		{
+			"points": 1,
+			"change": 30,
+			"result": 31
+		},
+		{
+			"points": 299,
+			"change": -30,
+			"result": 269
+		},
+		{
+			"points": 299,
+			"change": -1,
+			"result": 298
+		},
+		{
+			"points": 299,
+			"change": 0,
+			"result": 299
+		},
+		{
+			"points": 299,
+			"change": 1,
+			"result": 300
+		},
+		{
+			"points": 299,
+			"change": 30,
+			"result": 329
+		},
+		{
+			"points": 300,
+			"change": -30,
+			"result": 270
+		},
+		{
+			"points": 300,
+			"change": -1,
+			"result": 299
+		},
+		{
+			"points": 300,
+			"change": 0,
+			"result": 300
+		},
+		{
+			"points": 300,
+			"change": 1,
+			"result": 301
+		},
+		{
+			"points": 300,
+			"change": 30,
+			"result": 330
+		},
+		{
+			"points": 301,
+			"change": -30,
+			"result": 271
+		},
+		{
+			"points": 301,
+			"change": -1,
+			"result": 300
+		},
+		{
+			"points": 301,
+			"change": 0,
+			"result": 301
+		},
+		{
+			"points": 301,
+			"change": 1,
+			"result": 302
+		},
+		{
+			"points": 301,
+			"change": 30,
+			"result": 331
+		},
+		{
+			"points": 699,
+			"change": -30,
+			"result": 669
+		},
+		{
+			"points": 699,
+			"change": -1,
+			"result": 698
+		},
+		{
+			"points": 699,
+			"change": 0,
+			"result": 699
+		},
+		{
+			"points": 699,
+			"change": 1,
+			"result": 700
+		},
+		{
+			"points": 699,
+			"change": 30,
+			"result": 729
+		},
+		{
+			"points": 700,
+			"change": -30,
+			"result": 670
+		},
+		{
+			"points": 700,
+			"change": -1,
+			"result": 699
+		},
+		{
+			"points": 700,
+			"change": 0,
+			"result": 700
+		},
+		{
+			"points": 700,
+			"change": 1,
+			"result": 701
+		},
+		{
+			"points": 700,
+			"change": 30,
+			"result": 730
+		},
+		{
+			"points": 701,
+			"change": -30,
+			"result": 671
+		},
+		{
+			"points": 701,
+			"change": -1,
+			"result": 700
+		},
+		{
+			"points": 701,
+			"change": 0,
+			"result": 701
+		},
+		{
+			"points": 701,
+			"change": 1,
+			"result": 702
+		},
+		{
+			"points": 701,
+			"change": 30,
+			"result": 731
+		},
+		{
+			"points": 1199,
+			"change": -30,
+			"result": 1169
+		},
+		{
+			"points": 1199,
+			"change": -1,
+			"result": 1198
+		},
+		{
+			"points": 1199,
+			"change": 0,
+			"result": 1199
+		},
+		{
+			"points": 1199,
+			"change": 1,
+			"result": 1200
+		},
+		{
+			"points": 1199,
+			"change": 30,
+			"result": 1229
+		},
+		{
+			"points": 1200,
+			"change": -30,
+			"result": 1170
+		},
+		{
+			"points": 1200,
+			"change": -1,
+			"result": 1199
+		},
+		{
+			"points": 1200,
+			"change": 0,
+			"result": 1200
+		},
+		{
+			"points": 1200,
+			"change": 1,
+			"result": 1201
+		},
+		{
+			"points": 1200,
+			"change": 30,
+			"result": 1230
+		},
+		{
+			"points": 1201,
+			"change": -30,
+			"result": 1171
+		},
+		{
+			"points": 1201,
+			"change": -1,
+			"result": 1200
+		},
+		{
+			"points": 1201,
+			"change": 0,
+			"result": 1201
+		},
+		{
+			"points": 1201,
+			"change": 1,
+			"result": 1202
+		},
+		{
+			"points": 1201,
+			"change": 30,
+			"result": 1231
+		},
+		{
+			"points": 1799,
+			"change": -30,
+			"result": 1769
+		},
+		{
+			"points": 1799,
+			"change": -1,
+			"result": 1798
+		},
+		{
+			"points": 1799,
+			"change": 0,
+			"result": 1799
+		},
+		{
+			"points": 1799,
+			"change": 1,
+			"result": 1800
+		},
+		{
+			"points": 1799,
+			"change": 30,
+			"result": 1829
+		},
+		{
+			"points": 1800,
+			"change": -30,
+			"result": 1770
+		},
+		{
+			"points": 1800,
+			"change": -1,
+			"result": 1799
+		},
+		{
+			"points": 1800,
+			"change": 0,
+			"result": 1800
+		},
+		{
+			"points": 1800,
+			"change": 1,
+			"result": 1801
+		},
+		{
+			"points": 1800,
+			"change": 30,
+			"result": 1830
+		},
+		{
+			"points": 1801,
+			"change": -30,
+			"result": 1771
+		},
+		{
+			"points": 1801,
+			"change": -1,
+			"result": 1800
+		},
+		{
+			"points": 1801,
+			"change": 0,
+			"result": 1801
+		},
+		{
+			"points": 1801,
+			"change": 1,
+			"result": 1802
+		},
+		{
+			"points": 1801,
+			"change": 30,
+			"result": 1831
+		},
+		{
+			"points": 2500,
+			"change": -30,
+			"result": 2470
+		},
+		{
+			"points": 2500,
+			"change": -1,
+			"result": 2499
+		},
+		{
+			"points": 2500,
+			"change": 0,
+			"result": 2500
+		},
+		{
+			"points": 2500,
+			"change": 1,
+			"result": 2501
+		},
+		{
+			"points": 2500,
+			"change": 30,
+			"result": 2530
+		},
+		{
+			"points": 10000,
+			"change": -30,
+			"result": 9970
+		},
+		{
+			"points": 10000,
+			"change": -1,
+			"result": 9999
+		},
+		{
+			"points": 10000,
+			"change": 0,
+			"result": 10000
+		},
+		{
+			"points": 10000,
+			"change": 1,
+			"result": 10001
+		},
+		{
+			"points": 10000,
+			"change": 30,
+			"result": 10030
+		}
+	],
+	"division_names": [
+		"BRONZE",
+		"SILVER",
+		"GOLD",
+		"PLATINUM",
+		"DIAMOND"
+	],
+	"division_starts": [
+		0,
+		300,
+		700,
+		1200,
+		1800
+	],
+	"divisions": [
+		{
+			"points": 0,
+			"division": 0,
+			"name": "BRONZE",
+			"to_next": 300
+		},
+		{
+			"points": 1,
+			"division": 0,
+			"name": "BRONZE",
+			"to_next": 299
+		},
+		{
+			"points": 299,
+			"division": 0,
+			"name": "BRONZE",
+			"to_next": 1
+		},
+		{
+			"points": 300,
+			"division": 1,
+			"name": "SILVER",
+			"to_next": 400
+		},
+		{
+			"points": 301,
+			"division": 1,
+			"name": "SILVER",
+			"to_next": 399
+		},
+		{
+			"points": 699,
+			"division": 1,
+			"name": "SILVER",
+			"to_next": 1
+		},
+		{
+			"points": 700,
+			"division": 2,
+			"name": "GOLD",
+			"to_next": 500
+		},
+		{
+			"points": 701,
+			"division": 2,
+			"name": "GOLD",
+			"to_next": 499
+		},
+		{
+			"points": 1199,
+			"division": 2,
+			"name": "GOLD",
+			"to_next": 1
+		},
+		{
+			"points": 1200,
+			"division": 3,
+			"name": "PLATINUM",
+			"to_next": 600
+		},
+		{
+			"points": 1201,
+			"division": 3,
+			"name": "PLATINUM",
+			"to_next": 599
+		},
+		{
+			"points": 1799,
+			"division": 3,
+			"name": "PLATINUM",
+			"to_next": 1
+		},
+		{
+			"points": 1800,
+			"division": 4,
+			"name": "DIAMOND",
+			"to_next": -1
+		},
+		{
+			"points": 1801,
+			"division": 4,
+			"name": "DIAMOND",
+			"to_next": -1
+		},
+		{
+			"points": 2500,
+			"division": 4,
+			"name": "DIAMOND",
+			"to_next": -1
+		},
+		{
+			"points": 10000,
+			"division": 4,
+			"name": "DIAMOND",
+			"to_next": -1
+		}
+	],
+	"race_points": [
+		10,
+		7,
+		5,
+		3,
+		2,
+		1
+	],
+	"tables": {
+		"2": [
+			20,
+			-20
+		],
+		"3": [
+			25,
+			0,
+			-25
+		],
+		"4": [
+			30,
+			10,
+			-10,
+			-30
+		],
+		"5": [
+			30,
+			15,
+			0,
+			-15,
+			-30
+		],
+		"6": [
+			30,
+			18,
+			8,
+			-8,
+			-18,
+			-30
+		]
+	}
+}
