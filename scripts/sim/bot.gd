@@ -7,7 +7,7 @@ extends RefCounted
 ##
 ## The rules of plan §7, as the bot applies them:
 ## - It always accelerates and never brakes.
-## - It takes high gear from Config.BOT_HIGH_GEAR_KMH (160 km/h) while cfg.bot_free_ahead (150 px) of road ahead of
+## - It takes nitro from Config.BOT_NITRO_KMH (160 km/h) while cfg.bot_free_ahead (150 px) of road ahead of
 ##   its car are free, and low gear otherwise.
 ## - It steers into a skid until the skid is over.
 ## - It chases a fuel car in its lane or the next one, up to cfg.bot_fuel_reach ahead, unless a truck is in the way.
@@ -78,7 +78,7 @@ func next_byte(
 
 ## Takes a car over: until the bot has reacted, the car keeps the throttle and its present gear, and does not steer.
 func take_over(car: Car) -> void:
-	_fill(PlayerInput.encode(true, false, 0, car.gear == Car.GEAR_HIGH))
+	_fill(PlayerInput.encode(true, false, 0, car.gear == Car.GEAR_NITRO))
 	lane = -1
 
 
@@ -173,7 +173,7 @@ func decide(cfg: Config, car: Car, players: Array[Car], traffic: Array[Traffic],
 		var dx := corridor[target - first] - ghost_x
 		if absf(dx) > Car.steer_rate(cfg, car.speed) * Config.DT / 2.0:
 			steer = 1 if dx > 0.0 else -1
-	var high := car.speed >= Config.BOT_HIGH_GEAR_KMH and free_ahead >= cfg.bot_free_ahead
+	var high := car.speed >= Config.BOT_NITRO_KMH and free_ahead >= cfg.bot_free_ahead
 	return PlayerInput.encode(true, false, steer, high)
 
 

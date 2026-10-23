@@ -51,7 +51,7 @@ func test_golden_file_uses_the_ports_codes() -> void:
 	assert_eq(int(bits.get("accel", 0)), PlayerInput.ACCEL)
 	assert_eq(int(bits.get("brake", 0)), PlayerInput.BRAKE)
 	assert_eq(int(bits.get("steer_shift", 0)), PlayerInput.STEER_SHIFT)
-	assert_eq(int(bits.get("high_gear", 0)), PlayerInput.HIGH_GEAR)
+	assert_eq(int(bits.get("high_gear", 0)), PlayerInput.NITRO)
 	assert_eq(int(bits.get("pause", 0)), PlayerInput.PAUSE)
 	assert_eq(int(bits.get("confirm", 0)), PlayerInput.CONFIRM)
 
@@ -129,7 +129,7 @@ func test_golden_speed_trace_bit_exact() -> void:
 	var speed := double_of(trace.get("start_speed", ""))
 	var got: Array[String] = []
 	for byte in inputs:
-		var gear := Car.GEAR_HIGH if PlayerInput.high_gear(byte) else Car.GEAR_LOW
+		var gear := Car.GEAR_NITRO if PlayerInput.nitro(byte) else Car.GEAR_LOW
 		speed = Car.step_speed(speed, gear, PlayerInput.accel(byte), PlayerInput.brake(byte))
 		got.append(hex_of(speed))
 	assert_eq(_first_mismatch(got, expected), "", "speeds")

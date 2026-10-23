@@ -134,7 +134,7 @@ func test_camera_monotonic() -> void:
 				leader_left = true
 		var bytes := PackedByteArray()
 		for p: Car in w.players:
-			# Seat s brakes for 2 s in turn; odd seats change to high gear at 160 km/h.
+			# Seat s brakes for 2 s in turn; odd seats change to nitro at 160 km/h.
 			var braking := floori(tick / 120.0) % 4 == p.slot
 			var high := p.slot % 2 == 1 and p.speed >= 160.0
 			bytes.append(H.BRAKE if braking else (H.ACCEL_HIGH if high else H.ACCEL))

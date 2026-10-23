@@ -23,7 +23,7 @@ const Hud := preload("res://scripts/view/hud.gd")
 
 const SEED := 11
 const PADS: Array[int] = [50, 51, 52, 55, 56, 57, 58]
-## Keys that drive the single-player car when held: high gear, throttle (two of its keys) and steering.
+## Keys that drive the single-player car when held: nitro, throttle (two of its keys) and steering.
 const KEYS_HELD: Array[Key] = [KEY_X, KEY_UP, KEY_Z, KEY_LEFT]
 
 var app: App
@@ -108,12 +108,12 @@ func test_each_seat_gets_its_pads_byte_and_the_bot_drives_its_own() -> void:
 	S.pad(app, 50, JOY_BUTTON_A, true)
 	S.pad(app, 51, JOY_BUTTON_DPAD_LEFT, true)
 	assert_eq(seats.step_bytes(3), PackedByteArray([
-		Held.to_byte(Held.ACCEL | Held.HIGH_GEAR, PlayerInput.CONFIRM), Held.to_byte(Held.LEFT), PlayerInput.BOT
-	]), "A held is high gear and throttle, and its press a confirm")
+		Held.to_byte(Held.ACCEL | Held.NITRO, PlayerInput.CONFIRM), Held.to_byte(Held.LEFT), PlayerInput.BOT
+	]), "A held is nitro and throttle, and its press a confirm")
 	S.pad(app, 51, JOY_BUTTON_DPAD_LEFT, false)
 	S.frame(app, 90)
 	var world: World = race.world
-	assert_eq(world.players[0].gear, Car.GEAR_HIGH, "A held: high gear")
+	assert_eq(world.players[0].gear, Car.GEAR_NITRO, "A held: nitro")
 	assert_gt(world.players[0].speed, 0.0)
 	assert_eq(world.players[1].speed, 0.0, "nothing held: no throttle")
 	assert_gt(world.players[2].speed, 0.0, "the bot drives")
@@ -228,7 +228,7 @@ func test_the_keyboard_drives_no_car() -> void:
 	S.frame(app, 60)
 	for slot in 2:
 		var car: Car = world.players[slot]
-		assert_eq([car.gear, car.speed, car.x], [Car.GEAR_LOW, 0.0, xs[slot]], "slot %d: no high gear, no throttle, no steering" % slot)
+		assert_eq([car.gear, car.speed, car.x], [Car.GEAR_LOW, 0.0, xs[slot]], "slot %d: no nitro, no throttle, no steering" % slot)
 	assert_gt(world.players[2].speed, 0.0, "the bot drives")
 	for code: Key in [KEY_P, KEY_ENTER, KEY_SPACE, KEY_KP_ENTER]:
 		S.key_tap(app, code)

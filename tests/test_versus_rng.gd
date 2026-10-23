@@ -178,7 +178,7 @@ func _pair_world(seats: int) -> World:
 	return w
 
 
-## Seats 0 and 1: throttle in high gear, steering into any skid. Bot seats: no input (a bot given a byte is driven
+## Seats 0 and 1: throttle in nitro, steering into any skid. Bot seats: no input (a bot given a byte is driven
 ## by it), so they stand in the traffic's way and draw from their own streams.
 static func _pair_bytes(w: World) -> PackedByteArray:
 	var bytes := PackedByteArray()
@@ -203,7 +203,7 @@ static func _log_spawns(w: World, tick: int, spawns: Array) -> void:
 			spawns.append([tick, c.id, c.kind, c.x, c.y_world, c.kmh, c.lanes_left, c.lane_timer])
 
 
-## One step of a scripted versus game: humans hold the throttle, high gear from 160 km/h, steer into skids and weave;
+## One step of a scripted versus game: humans hold the throttle, nitro from 160 km/h, steer into skids and weave;
 ## bots 0xFF; seat 0 pauses at tick 300 and resumes at 360. A round that ends is followed by a new one
 ## (World.start_round()). Returns the winner of a round that ended in this step (World.NO_WINNER for none), or
 ## NOT_ENDED.

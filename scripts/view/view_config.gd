@@ -101,6 +101,12 @@ const PLAYER_FALLBACK := Color("#e74c3c")
 # --- Animation, in simulation ticks (60 per second) so it is the same at any frame rate and freezes with a pause.
 ## While invulnerable the player is hidden on every other 6 ticks (10 Hz, INVULNERABLE_BLINK_HZ in Phaser).
 const BLINK_TICKS := 6
+## Nitro flames behind a car: shortest length and extra flicker (px), ticks per flicker step, outer and inner colour.
+const FLAME_MIN := 4
+const FLAME_FLICKER := 4
+const FLAME_STEP_TICKS := 2
+const FLAME_OUTER := Color("#ae2633")
+const FLAME_INNER := Color("#f1bb3b")
 ## The fuel car's hue turns 4 degrees a tick: a full circle every 1.5 s (Phaser: time x 240).
 const RAINBOW_DEGREES_PER_TICK := 4
 
@@ -145,7 +151,7 @@ const CONTROLS_LINES_DY := 40
 const CONTROLS_LINE_STEP := 16
 const CONTROLS_KEYBOARD := [
 	"UP W Z  throttle",
-	"X       high gear",
+	"X       nitro",
 	"        400 km/h,",
 	"        slow start",
 	"DOWN S  brake",
@@ -156,7 +162,7 @@ const CONTROLS_KEYBOARD := [
 ]
 const CONTROLS_PAD := [
 	"B       throttle",
-	"A       high gear",
+	"A       nitro",
 	"        400 km/h,",
 	"        slow start",
 	"DOWN    brake",

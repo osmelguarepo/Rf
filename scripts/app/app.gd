@@ -489,7 +489,7 @@ func _end_selftest() -> int:
 	return 0
 
 
-## The scripted input of the self test at a tick: high gear and throttle, steering left, none, right, none, each for
+## The scripted input of the self test at a tick: nitro and throttle, steering left, none, right, none, each for
 ## two seconds, and a pause press at SELFTEST_PAUSE_TICK and at SELFTEST_RESUME_TICK.
 static func selftest_byte(tick: int) -> int:
 	var steer: int = [-1, 0, 1, 0][floori(tick / 120.0) % 4]

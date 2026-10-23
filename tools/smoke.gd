@@ -13,7 +13,7 @@ extends "res://tools/tool_base.gd"
 ##
 ## The keyboard:
 ##   30          Enter on the title: the game starts.
-##   40          X goes down and stays down: high gear and throttle.
+##   40          X goes down and stays down: nitro and throttle.
 ##   every 120   the steering changes: left, none, right, none, ... (the arrow keys).
 ##   600, 660    Esc: pause, then resume.
 ##   900         the application loses focus (NOTIFICATION_APPLICATION_FOCUS_OUT): the game must pause.
@@ -22,7 +22,7 @@ extends "res://tools/tool_base.gd"
 ##   game over   one second later, Enter: a new game (retry). The same after a stage clear, to go on.
 ## Then a joypad (device 0), from 10 s after that first retry (T):
 ##   T           the keys go up: the car coasts in low gear.
-##   T+3         A goes down and stays down: high gear and throttle again.
+##   T+3         A goes down and stays down: nitro and throttle again.
 ##   every 120   the steering changes: left stick left, none, stick right, none, D-pad left, none, D-pad right, none.
 ##   T+600, +60  Start: pause, then resume.
 ##   T+1200      the tank is set to 0.1 (as tools/screenshots.gd does for its game-over picture), so the game ends
@@ -33,7 +33,7 @@ extends "res://tools/tool_base.gd"
 ## frame where the game is running, and the actions after it move along with it.
 ##
 ## It passes (exit 0) when: the game screen was reached; Esc paused and resumed; losing focus paused and getting it
-## back did not resume; Enter retried after a game over; the pad's A held high gear and throttle; its stick and its
+## back did not resume; Enter retried after a game over; the pad's A held nitro and throttle; its stick and its
 ## D-pad each steered the car left and right (the car moved that way while not skidding); Start paused, resumed, and
 ## went from a game over to the title; A started a game from the title and retried after a game over; and no error
 ## was logged from the start until the game's nodes were freed (tools/tool_base.gd). The exit code does not cover what
@@ -124,7 +124,7 @@ const VS_NEWCOMER := 24
 const VS_P2_AGAIN := 31
 ## The GUIDs the tool's source gives (the engine knows no synthetic pad): P2's pad keeps its GUID under its new number.
 const VS_GUIDS := {20: "guid-p1", 21: "guid-p2", 22: "guid-p3", 23: "guid-p4", 24: "guid-new", 31: "guid-p2"}
-## Each pad shifts to high gear at its own speed (km/h), so the cars do not drive as one.
+## Each pad shifts to nitro at its own speed (km/h), so the cars do not drive as one.
 const VS_SHIFT_KMH := {20: 160.0, 21: 170.0, 22: 180.0, 24: 175.0, 31: 170.0}
 ## The most frames a step may wait for what it expects.
 const VS_STEP_FRAMES := 900
@@ -306,13 +306,13 @@ func _do(action: String) -> void:
 				_fail("the car did not drop to low gear when the keys went up (frame %d)" % frame)
 			pad_button(PAD, JOY_BUTTON_A, true)
 		"check A held":
-			var both := Held.ACCEL | Held.HIGH_GEAR
+			var both := Held.ACCEL | Held.NITRO
 			held_by_a = (
 				app.input.pads.devices.has(PAD) and Keyboard.held() == 0 and (app.input.held() & both) == both
-				and w != null and w.player().gear == Car.GEAR_HIGH
+				and w != null and w.player().gear == Car.GEAR_NITRO
 			)
 			if not held_by_a:
-				_fail("the pad's A did not give high gear and throttle (frame %d)" % frame)
+				_fail("the pad's A did not give nitro and throttle (frame %d)" % frame)
 		"empty tank":
 			w.player().fuel = FUEL_LEFT
 		"start pause", "start resume", "tap start":
@@ -469,7 +469,7 @@ func _report() -> void:
 	if retries_by_enter < 1:
 		_fail("no game over followed by a retry with Enter")
 	if not (coasted_without_keys and held_by_a):
-		_fail("the joypad did not take over (the keys up, then A for high gear and throttle)")
+		_fail("the joypad did not take over (the keys up, then A for nitro and throttle)")
 	for kind: String in ["stick left", "stick right", "D-pad left", "D-pad right"]:
 		if not steered.has(kind):
 			_fail("the pad's %s never steered the car" % kind)

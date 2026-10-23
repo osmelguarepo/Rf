@@ -5,7 +5,7 @@ extends RefCounted
 ##   bit 0     accelerate (held)
 ##   bit 1     brake (held, beats the throttle)
 ##   bits 2-3  steer + 1: 0 left, 1 none, 2 right (3 reads as none)
-##   bit 4     high gear (held)
+##   bit 4     nitro (held)
 ##   bit 5     pause (press: set only on the step that consumes the press)
 ##   bit 6     confirm (press)
 ##   bit 7     never set by a person
@@ -20,7 +20,7 @@ const STEER_MASK := 12
 const STEER_LEFT := 0
 const STEER_NONE := 4
 const STEER_RIGHT := 8
-const HIGH_GEAR := 16
+const NITRO := 16
 const PAUSE := 32
 const CONFIRM := 64
 ## The one-shot bits. Everything else is held.
@@ -30,7 +30,7 @@ const BOT := 255
 
 
 static func encode(
-	p_accel: bool, p_brake: bool, p_steer: int, p_high_gear: bool, p_pause: bool = false, p_confirm: bool = false
+	p_accel: bool, p_brake: bool, p_steer: int, p_nitro: bool, p_pause: bool = false, p_confirm: bool = false
 ) -> int:
 	var byte := 0
 	if p_accel:
@@ -38,8 +38,8 @@ static func encode(
 	if p_brake:
 		byte |= BRAKE
 	byte |= (clampi(p_steer, -1, 1) + 1) << STEER_SHIFT
-	if p_high_gear:
-		byte |= HIGH_GEAR
+	if p_nitro:
+		byte |= NITRO
 	if p_pause:
 		byte |= PAUSE
 	if p_confirm:
@@ -69,8 +69,8 @@ static func brake(byte: int) -> bool:
 	return (byte & BRAKE) != 0
 
 
-static func high_gear(byte: int) -> bool:
-	return (byte & HIGH_GEAR) != 0
+static func nitro(byte: int) -> bool:
+	return (byte & NITRO) != 0
 
 
 static func pause(byte: int) -> bool:

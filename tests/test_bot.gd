@@ -1,5 +1,5 @@
 extends "res://tests/test_case.gd"
-## The bots (scripts/sim/bot.gd; docs/GODOT_PLAN.md §7 "Bots"): their decisions in staged situations (the high gear
+## The bots (scripts/sim/bot.gd; docs/GODOT_PLAN.md §7 "Bots"): their decisions in staged situations (the nitro
 ## rule, the lane they choose, skids, fuel cars, what they see), the 12-tick reaction, a 0xFF seat that drives on its
 ## own, takeovers, and the randomness they leave alone: the traffic does not depend on how many bots there are, and
 ## nothing is drawn while a round is paused.
@@ -24,15 +24,15 @@ const REACTION := Config.BOT_REACTION_TICKS
 var std := Config.standard()
 
 
-## Plan §7: high gear from 160 km/h while 150 px ahead of the car are free (the gap from its front edge to the next
+## Plan §7: nitro from 160 km/h while 150 px ahead of the car are free (the gap from its front edge to the next
 ## obstacle's rear edge, in its own path); low gear otherwise. Traffic in another lane, and fuel cars, do not count.
-func test_bot_high_gear_from_160_with_150_px_free() -> void:
+func test_bot_nitro_from_160_with_150_px_free() -> void:
 	var w := _scene(2)
 	var car := w.players[1]
 	car.speed = 159.9
 	assert_false(_high(w), "159.9 km/h, nothing ahead: low gear")
-	car.speed = Config.BOT_HIGH_GEAR_KMH
-	assert_true(_high(w), "160 km/h, nothing ahead: high gear")
+	car.speed = Config.BOT_NITRO_KMH
+	assert_true(_high(w), "160 km/h, nothing ahead: nitro")
 	var yellow := _ahead(w, Config.KIND_YELLOW, 2, 149.0)
 	assert_false(_high(w), "a car 149 px ahead")
 	_move_to_gap(w, yellow, 151.0)
@@ -262,14 +262,14 @@ func test_bot_always_accelerates() -> void:
 			var byte := b.pending[b.pending.size() - 1]
 			if not PlayerInput.accel(byte) or PlayerInput.brake(byte):
 				bad += 1
-			gears[PlayerInput.high_gear(byte)] = true
+			gears[PlayerInput.nitro(byte)] = true
 	assert_eq(bad, 0, "bytes without the throttle, or with the brake")
-	assert_eq(gears.size(), 2, "high gear and low gear both chosen")
+	assert_eq(gears.size(), 2, "nitro and low gear both chosen")
 	assert_true(PlayerInput.accel(Bot.START_BYTE) and not PlayerInput.brake(Bot.START_BYTE))
 
 
 ## A seat whose byte is 0xFF drives on its own: in 40 s of traffic the bot (and the human seat given 0xFF too, as
-## after a disconnect) reaches high gear and high speed, changes lane, passes cars, stays clear of the bottom edge
+## after a disconnect) reaches nitro and high speed, changes lane, passes cars, stays clear of the bottom edge
 ## most of the time and is still in the round. A bot seat given no input instead is pushed along the bottom edge.
 func test_bot_seat_drives_on_its_own() -> void:
 	var w := World.versus(std, 41, 3, 0b001)
@@ -291,7 +291,7 @@ func test_bot_seat_drives_on_its_own() -> void:
 		var p := w.players[seat]
 		assert_eq(p.alive, 1, "seat %d still in" % seat)
 		assert_gt(top[seat], 380.0, "seat %d near the top speed" % seat)
-		assert_gt(high[seat], 1200, "seat %d mostly in high gear" % seat)
+		assert_gt(high[seat], 1200, "seat %d mostly in nitro" % seat)
 		assert_gt(lanes[seat].size(), 2, "seat %d drove in several lanes" % seat)
 		assert_gt(passes[seat], 20, "seat %d passed cars" % seat)
 		assert_lt(touching[seat], 600, "seat %d mostly clear of the bottom edge" % seat)
@@ -393,12 +393,12 @@ func test_bot_takes_over_a_disconnected_human_seat() -> void:
 	var car := w.players[0]
 	for step in 300:
 		H.run_bytes(w, [PlayerInput.encode(true, false, 0, car.speed >= 160.0), BOT])
-	assert_eq(car.gear, Car.GEAR_HIGH)
+	assert_eq(car.gear, Car.GEAR_NITRO)
 	var x := car.x
 	var steps_held := 0
 	for step in REACTION:
 		H.run_bytes(w, [BOT, BOT])
-		if car.gear == Car.GEAR_HIGH and car.x == x and car.slide_vx == 0.0:
+		if car.gear == Car.GEAR_NITRO and car.x == x and car.slide_vx == 0.0:
 			steps_held += 1
 	assert_eq(steps_held, REACTION, "for 12 steps the car held its gear and its line")
 	var bot := w.bots[0]
@@ -515,7 +515,7 @@ func _steer(w: World) -> int:
 
 
 func _high(w: World) -> bool:
-	return PlayerInput.high_gear(w.bots[1].decide(std, w.players[1], w.players, w.traffic, w.camera_y + w.anchor))
+	return PlayerInput.nitro(w.bots[1].decide(std, w.players[1], w.players, w.traffic, w.camera_y + w.anchor))
 
 
 static func _fill(bot: Bot, byte: int) -> void:
@@ -543,7 +543,7 @@ func _lead_world(seats: int) -> World:
 	return w
 
 
-## Seat 0: throttle in high gear, steering into any skid. The bots: 0xFF.
+## Seat 0: throttle in nitro, steering into any skid. The bots: 0xFF.
 static func _lead_bytes(w: World) -> PackedByteArray:
 	var bytes := PackedByteArray()
 	for p: Car in w.players:

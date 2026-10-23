@@ -1,6 +1,6 @@
 extends Node2D
 ## The game screen's HUD (render() in src/scenes/GameScene.ts, Phaser version), moved into the two side panels of
-## the 16:9 screen: score, best, stage and the goal gauge on the left; speed, gear, fuel and the fuel gauge on the
+## the 16:9 screen: score, best, stage and the goal gauge on the left; speed, nitro, fuel and the fuel gauge on the
 ## right. Over the road: the short event messages, hidden while a panel is up. Over everything: the pause,
 ## stage-clear and game-over panels.
 ##
@@ -84,7 +84,7 @@ func _draw_right_panel(car: Car) -> void:
 	Draw.text_centred(self, font, cx, rows[0], "SPEED", small, ViewConfig.YELLOW)
 	Draw.text(self, font, x, value_top, speed, medium, ViewConfig.WHITE)
 	Draw.text(self, font, x + speed_w + small, value_top + medium - small, unit, small, ViewConfig.GREY)
-	draw_row(self, font, cx, rows[1], "GEAR", "HIGH" if car.gear == Car.GEAR_HIGH else "LOW", ViewConfig.YELLOW)
+	draw_row(self, font, cx, rows[1], "NITRO", "ON" if car.gear == Car.GEAR_NITRO else "OFF", ViewConfig.YELLOW)
 	var low := car.fuel < ViewConfig.LOW_FUEL
 	var fuel_colour := ViewConfig.LIGHT_RED if low else ViewConfig.WHITE
 	draw_row(self, font, cx, rows[2], "FUEL", "%3d" % floori(car.fuel + 0.5), fuel_colour)

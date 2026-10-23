@@ -27,11 +27,11 @@ var phs := Config.phaser()
 func test_gear_is_high_only_while_held() -> void:
 	var w := H.quiet_world(std)
 	H.run(w, H.ACCEL_HIGH)
-	assert_eq(w.player().gear, Car.GEAR_HIGH, "A (X) held")
+	assert_eq(w.player().gear, Car.GEAR_NITRO, "A (X) held")
 	H.run(w, H.ACCEL)
 	assert_eq(w.player().gear, Car.GEAR_LOW, "released")
-	H.run(w, PlayerInput.HIGH_GEAR | PlayerInput.STEER_NONE)
-	assert_eq(w.player().gear, Car.GEAR_HIGH, "held without throttle")
+	H.run(w, PlayerInput.NITRO | PlayerInput.STEER_NONE)
+	assert_eq(w.player().gear, Car.GEAR_NITRO, "held without throttle")
 	H.run(w, H.NONE)
 	assert_eq(w.player().gear, Car.GEAR_LOW, "no input")
 
@@ -44,17 +44,17 @@ func test_low_gear_tops_out_at_198() -> void:
 	assert_eq(Config.LOW_GEAR_TOP, 198.0)
 
 
-func test_high_gear_reaches_400() -> void:
-	assert_eq(_run_speed(0.0, Car.GEAR_HIGH, true, false, 40 * 60), Config.HIGH_GEAR_TOP)
-	assert_eq(Config.HIGH_GEAR_TOP, 400.0)
+func test_nitro_reaches_400() -> void:
+	assert_eq(_run_speed(0.0, Car.GEAR_NITRO, true, false, 40 * 60), Config.NITRO_TOP)
+	assert_eq(Config.NITRO_TOP, 400.0)
 
 
 ## 15 km/h/s below 160 km/h, then 45 km/h/s: per tick 0.25 and 0.75; over one second 15 and 45.
-func test_high_gear_is_slow_below_160_then_faster() -> void:
-	assert_almost_eq(Car.step_speed(0.0, Car.GEAR_HIGH, true, false), 0.25, 1e-12, "one tick from 0")
-	assert_almost_eq(Car.step_speed(200.0, Car.GEAR_HIGH, true, false), 200.75, 1e-12, "one tick from 200")
-	assert_almost_eq(_run_speed(0.0, Car.GEAR_HIGH, true, false, 60), 15.0, EPS, "one second from 0")
-	assert_almost_eq(_run_speed(200.0, Car.GEAR_HIGH, true, false, 60), 245.0, EPS, "one second from 200")
+func test_nitro_is_slow_below_160_then_faster() -> void:
+	assert_almost_eq(Car.step_speed(0.0, Car.GEAR_NITRO, true, false), 0.25, 1e-12, "one tick from 0")
+	assert_almost_eq(Car.step_speed(200.0, Car.GEAR_NITRO, true, false), 200.75, 1e-12, "one tick from 200")
+	assert_almost_eq(_run_speed(0.0, Car.GEAR_NITRO, true, false, 60), 15.0, EPS, "one second from 0")
+	assert_almost_eq(_run_speed(200.0, Car.GEAR_NITRO, true, false, 60), 245.0, EPS, "one second from 200")
 
 
 func test_coasting_loses_drag() -> void:

@@ -11,7 +11,7 @@ const Config := preload("res://scripts/sim/config.gd")
 const Rng := preload("res://scripts/sim/rng.gd")
 
 const GEAR_LOW := 0
-const GEAR_HIGH := 1
+const GEAR_NITRO := 1
 
 ## Seat index: the car's byte in World.step(inputs) and its bit (1 << slot) in the traffic masks.
 var slot: int = 0
@@ -53,11 +53,11 @@ func is_skidding() -> bool:
 
 ## Top speed of a gear, km/h.
 static func gear_top(p_gear: int) -> float:
-	return Config.HIGH_GEAR_TOP if p_gear == GEAR_HIGH else Config.LOW_GEAR_TOP
+	return Config.NITRO_TOP if p_gear == GEAR_NITRO else Config.LOW_GEAR_TOP
 
 
 ## Advances speed (km/h) by one step. Brake beats everything. Above the gear's top the car falls back at
-## OVERSPEED_FALL. Otherwise the throttle accelerates (high gear is slow below 160 km/h); with no throttle it coasts.
+## OVERSPEED_FALL. Otherwise the throttle accelerates (nitro is slow below 160 km/h); with no throttle it coasts.
 static func step_speed(p_speed: float, p_gear: int, accel: bool, brake: bool) -> float:
 	var top := gear_top(p_gear)
 	if brake:
@@ -66,8 +66,8 @@ static func step_speed(p_speed: float, p_gear: int, accel: bool, brake: bool) ->
 		return maxf(top, p_speed - Config.OVERSPEED_FALL * Config.DT)
 	if accel:
 		var rate := Config.LOW_GEAR_ACCEL
-		if p_gear == GEAR_HIGH:
-			rate = Config.HIGH_GEAR_SLOW_ACCEL if p_speed < Config.HIGH_GEAR_SLOW_BELOW else Config.HIGH_GEAR_ACCEL
+		if p_gear == GEAR_NITRO:
+			rate = Config.NITRO_SLOW_ACCEL if p_speed < Config.NITRO_SLOW_BELOW else Config.NITRO_ACCEL
 		return minf(top, p_speed + rate * Config.DT)
 	return maxf(0.0, p_speed - Config.DRAG * Config.DT)
 

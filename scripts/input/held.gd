@@ -11,7 +11,7 @@ const ACCEL := 1
 const BRAKE := 2
 const LEFT := 4
 const RIGHT := 8
-const HIGH_GEAR := 16
+const NITRO := 16
 
 
 static func steer_of(mask: int) -> int:
@@ -24,5 +24,5 @@ static func steer_of(mask: int) -> int:
 
 ## The input byte for one step: the held bits of `mask` plus the latched presses (PAUSE, CONFIRM) of `presses`.
 static func to_byte(mask: int, presses: int = 0) -> int:
-	var held := PlayerInput.encode((mask & ACCEL) != 0, (mask & BRAKE) != 0, steer_of(mask), (mask & HIGH_GEAR) != 0)
+	var held := PlayerInput.encode((mask & ACCEL) != 0, (mask & BRAKE) != 0, steer_of(mask), (mask & NITRO) != 0)
 	return PlayerInput.with_edges(held, presses)

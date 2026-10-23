@@ -104,7 +104,7 @@ func test_input_events_reach_the_app() -> void:
 
 ## Joypad events take the keys' road: Input's state, and App._input(), which the engine calls with every event (here
 ## the test calls it, as the runner's tree delivers no events; tools/smoke.gd sends pad events through the engine). A
-## on the title starts a game, A held is high gear and throttle, the stick steers, and Start pauses.
+## on the title starts a game, A held is nitro and throttle, the stick steers, and Start pauses.
 func test_pad_events_drive_the_game() -> void:
 	_boot()
 	app.start_game()
@@ -113,7 +113,7 @@ func test_pad_events_drive_the_game() -> void:
 	var game := app.current_screen()
 	var world: World = game.world
 	game.frame(60, DT * 60.0)
-	assert_eq(world.player().gear, Car.GEAR_HIGH, "A held: high gear")
+	assert_eq(world.player().gear, Car.GEAR_NITRO, "A held: nitro")
 	assert_gt(world.player().speed, 0.0, "A held: throttle")
 	var x := world.player().x
 	_pad_event(_pad_axis(JOY_AXIS_LEFT_X, -0.9))

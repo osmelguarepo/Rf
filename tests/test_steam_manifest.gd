@@ -135,7 +135,7 @@ func test_each_configuration_binds_every_action_of_both_sets() -> void:
 			assert_eq(bound_actions, all, "%s binds every %s action" % [type, set_name])
 
 
-## The default layout is the gamepad mapping of pads.gd and nav.gd, on every controller: A high gear and confirm, B
+## The default layout is the gamepad mapping of pads.gd and nav.gd, on every controller: A nitro and confirm, B
 ## accelerate (as a pad's B), the D-pad and the left stick steer, accelerate (up) and brake (down), Start pauses, Back
 ## (View, Select) goes back; in the menus A confirms, B leaves a seat, the D-pad and the stick move, Start starts the
 ## race, Back goes to the title. The 2015 Steam Controller has its left trackpad for the D-pad.

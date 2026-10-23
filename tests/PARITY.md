@@ -33,8 +33,8 @@ of the speed rule, 60 s without traffic, and three minutes of whole games in the
 |---|---|---|---|
 | car-1 | gear › is high only while A (X) is held, low otherwise | `tests/test_car.gd::test_gear_is_high_only_while_held` | Unchanged. Also checked: high gear held without throttle. |
 | car-2 | stepSpeed › low gear accelerates with the throttle and stops at 198 km/h | `tests/test_car.gd::test_low_gear_tops_out_at_198` | Unchanged: exactly 198 km/h after 20 s (1200 ticks). |
-| car-3 | stepSpeed › high gear reaches 400 km/h | `tests/test_car.gd::test_high_gear_reaches_400` | Unchanged: exactly 400 km/h after 40 s (2400 ticks). |
-| car-4 | stepSpeed › high gear is slow to start below 160 km/h, then faster | `tests/test_car.gd::test_high_gear_is_slow_below_160_then_faster` | Phaser used dt = 1 s (15 and 245). Per tick: 0.25 and 200.75; over 60 ticks: 15 and 245. |
+| car-3 | stepSpeed › high gear reaches 400 km/h | `tests/test_car.gd::test_nitro_reaches_400` | Unchanged: exactly 400 km/h after 40 s (2400 ticks). |
+| car-4 | stepSpeed › high gear is slow to start below 160 km/h, then faster | `tests/test_car.gd::test_nitro_is_slow_below_160_then_faster` | Phaser used dt = 1 s (15 and 245). Per tick: 0.25 and 200.75; over 60 ticks: 15 and 245. |
 | car-5 | stepSpeed › with no throttle the car coasts down with drag | `tests/test_car.gd::test_coasting_loses_drag` | Per tick 100 − 25/60; over 60 ticks 75 (Phaser, dt = 1 s: 75). |
 | car-6 | stepSpeed › brake beats throttle and never goes below zero | `tests/test_car.gd::test_brake_beats_throttle_and_stops_at_zero` | Per tick 10 → 8; 0 exactly after 60 ticks. |
 | car-7 | stepSpeed › above the gear top the car falls back at overspeedFall, not instantly | `tests/test_car.gd::test_overspeed_falls_back_at_25_per_second` | Per tick 350 − 25/60; 325 after 60 ticks. |

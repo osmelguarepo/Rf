@@ -9,7 +9,7 @@ extends "res://tools/tool_base.gd"
 ## It plays the real game with key events (Enter, X held, Esc; the tool_base.gd autopilot steers with the arrow
 ## keys) and saves:
 ##   01-title.png        the title screen;
-##   02-game.png         a game in high gear, once several cars are on screen;
+##   02-game.png         a game in nitro, once several cars are on screen;
 ##   03-pause.png        the pause panel, one tick after 02 (the Esc sent after 02 reaches the game a frame later);
 ##   04-game-over.png    the game-over panel (the tank set to 0.1, so it runs dry within 6 ticks);
 ##   05-stage-clear.png  the stage-clear panel (the car set just short of the goal);
@@ -54,7 +54,7 @@ const SCALE := 2
 const SHOTS := 11
 ## Versus: the pads (synthetic devices), in the order they join (P1 to P4).
 const VERSUS_PADS: Array[int] = [10, 11, 12, 13]
-## Each pad's car shifts to high gear at this speed (km/h), so the four drive a little differently.
+## Each pad's car shifts to nitro at this speed (km/h), so the four drive a little differently.
 const SHIFT_KMH: Array[float] = [160.0, 170.0, 180.0, 190.0]
 ## Steps of a round after which the tool empties P1's tank, so the round ends.
 const ROUND_STEPS := 600
@@ -102,7 +102,7 @@ func _process(_delta: float) -> bool:
 				# The single-player game is no longer on the title (LOCAL opens the join screen): start it as the app would.
 				app.start_game()
 				_next()
-		1:  # Driving: hold X (high gear), keep clear of trouble, and wait for a busy road.
+		1:  # Driving: hold X (nitro), keep clear of trouble, and wait for a busy road.
 			if w != null and waited == 2:
 				key(KEY_X, true)
 			autopilot()

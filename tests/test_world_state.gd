@@ -145,7 +145,7 @@ func test_to_array_starts_with_format_profile_and_rng() -> void:
 # --- helpers ---------------------------------------------------------------------------------------------------------
 
 
-## A fixed script of inputs: throttle, high gear when fast, steering that weaves, a pause, braking.
+## A fixed script of inputs: throttle, nitro when fast, steering that weaves, a pause, braking.
 static func _input(tick: int) -> PackedByteArray:
 	if tick == 300 or tick == 360:
 		return PackedByteArray([PlayerInput.PAUSE | PlayerInput.STEER_NONE])

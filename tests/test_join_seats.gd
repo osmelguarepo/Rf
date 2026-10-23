@@ -148,7 +148,7 @@ func test_each_slot_gets_its_pads_byte_and_bots_get_0xff() -> void:
 	_send(_button(20, JOY_BUTTON_A, true))
 	_send(_button(21, JOY_BUTTON_DPAD_LEFT, true))
 	seats.handle_event(_button(21, JOY_BUTTON_START, true))
-	var held_a := Held.to_byte(Held.ACCEL | Held.HIGH_GEAR)
+	var held_a := Held.to_byte(Held.ACCEL | Held.NITRO)
 	var left := Held.to_byte(Held.LEFT)
 	assert_eq(seats.step_bytes(4), PackedByteArray([
 		held_a, PlayerInput.with_edges(left, PlayerInput.PAUSE | PlayerInput.CONFIRM), PlayerInput.BOT, PlayerInput.NONE

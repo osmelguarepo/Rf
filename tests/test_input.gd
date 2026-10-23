@@ -5,13 +5,13 @@ extends "res://tests/test_case.gd"
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 
 
-## bit 0 accelerate, bit 1 brake, bits 2-3 steer + 1, bit 4 high gear, bit 5 pause, bit 6 confirm, 0xFF bot.
+## bit 0 accelerate, bit 1 brake, bits 2-3 steer + 1, bit 4 nitro, bit 5 pause, bit 6 confirm, 0xFF bot.
 func test_byte_layout_is_the_plans() -> void:
 	assert_eq(PlayerInput.ACCEL, 1)
 	assert_eq(PlayerInput.BRAKE, 2)
 	assert_eq(PlayerInput.STEER_SHIFT, 2)
 	assert_eq([PlayerInput.STEER_LEFT, PlayerInput.STEER_NONE, PlayerInput.STEER_RIGHT], [0, 4, 8])
-	assert_eq(PlayerInput.HIGH_GEAR, 16)
+	assert_eq(PlayerInput.NITRO, 16)
 	assert_eq(PlayerInput.PAUSE, 32)
 	assert_eq(PlayerInput.CONFIRM, 64)
 	assert_eq(PlayerInput.BOT, 0xFF)
@@ -33,7 +33,7 @@ func test_encode_and_read_back_every_combination() -> void:
 			var byte := PlayerInput.encode(accel, brake, steer, high, pause, confirm)
 			var back := [
 				PlayerInput.accel(byte), PlayerInput.brake(byte), PlayerInput.steer_of(byte),
-				PlayerInput.high_gear(byte), PlayerInput.pause(byte), PlayerInput.confirm(byte), byte < 128,
+				PlayerInput.nitro(byte), PlayerInput.pause(byte), PlayerInput.confirm(byte), byte < 128,
 			]
 			if not strict_equal(back, [accel, brake, steer, high, pause, confirm, true]):
 				wrong += 1
@@ -67,7 +67,7 @@ func test_latch_combines_presses_of_different_actions() -> void:
 
 
 func test_with_edges_merges_held_bits_and_latched_presses() -> void:
-	var held := PlayerInput.ACCEL | PlayerInput.HIGH_GEAR | PlayerInput.STEER_RIGHT | PlayerInput.PAUSE
+	var held := PlayerInput.ACCEL | PlayerInput.NITRO | PlayerInput.STEER_RIGHT | PlayerInput.PAUSE
 	var byte := PlayerInput.with_edges(held, PlayerInput.CONFIRM)
-	assert_eq(byte, PlayerInput.ACCEL | PlayerInput.HIGH_GEAR | PlayerInput.STEER_RIGHT | PlayerInput.CONFIRM)
+	assert_eq(byte, PlayerInput.ACCEL | PlayerInput.NITRO | PlayerInput.STEER_RIGHT | PlayerInput.CONFIRM)
 	assert_false(PlayerInput.is_bot(PlayerInput.with_edges(0xFF, 0)), "never produces the bot byte")

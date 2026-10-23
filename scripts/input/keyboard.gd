@@ -5,7 +5,7 @@ extends RefCounted
 ## the controls stay where they are on any keyboard layout (Phaser used KeyboardEvent.code). The actions hold only
 ## keys: joypads are read device by device in pads.gd, never through merged InputMap actions.
 ##
-##   Up / W / Z    throttle            X             high gear and throttle (held)
+##   Up / W / Z    throttle            X             nitro and throttle (held)
 ##   Down / S      brake               Left / A      steer left
 ##   Right / D     steer right         Enter / Space confirm (press)
 ##   Esc / P       pause (press)
@@ -17,7 +17,7 @@ const Held := preload("res://scripts/input/held.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 
 const THROTTLE := "kb_throttle"
-const HIGH_GEAR := "kb_high_gear"
+const NITRO := "kb_nitro"
 const BRAKE := "kb_brake"
 const LEFT := "kb_left"
 const RIGHT := "kb_right"
@@ -27,7 +27,7 @@ const PAUSE := "kb_pause"
 ## Action -> physical keys.
 const ACTIONS := {
 	THROTTLE: [KEY_UP, KEY_W, KEY_Z],
-	HIGH_GEAR: [KEY_X],
+	NITRO: [KEY_X],
 	BRAKE: [KEY_DOWN, KEY_S],
 	LEFT: [KEY_LEFT, KEY_A],
 	RIGHT: [KEY_RIGHT, KEY_D],
@@ -55,13 +55,13 @@ static func has_input_map() -> bool:
 	return true
 
 
-## Held controls as Held bits. X is high gear and also throttle.
+## Held controls as Held bits. X is nitro and also throttle.
 static func held() -> int:
 	var mask := 0
 	if Input.is_action_pressed(THROTTLE):
 		mask |= Held.ACCEL
-	if Input.is_action_pressed(HIGH_GEAR):
-		mask |= Held.ACCEL | Held.HIGH_GEAR
+	if Input.is_action_pressed(NITRO):
+		mask |= Held.ACCEL | Held.NITRO
 	if Input.is_action_pressed(BRAKE):
 		mask |= Held.BRAKE
 	if Input.is_action_pressed(LEFT):

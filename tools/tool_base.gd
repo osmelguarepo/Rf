@@ -246,7 +246,7 @@ func join_screen() -> Node:
 
 
 ## Drives the car of a pad's seat with the pad, as a player would: B (throttle, low gear) until the car reaches
-## `shift_kmh`, then A (high gear and throttle); the D-pad steers towards the lane with the most room ahead, as
+## `shift_kmh`, then A (nitro and throttle); the D-pad steers towards the lane with the most room ahead, as
 ## autopilot() does with the keys, and into a skid. While no round runs, or the seat has no car, the D-pad is let go
 ## (A or B stays as it was). Call once a frame per pad.
 func pad_autopilot(device: int, shift_kmh: float = 160.0) -> void:
@@ -279,7 +279,7 @@ func pad_autopilot(device: int, shift_kmh: float = 160.0) -> void:
 		pad_hold_steer(device, JOY_BUTTON_INVALID)
 
 
-## Holds A (high gear and throttle) or B (throttle) on a pad, letting go of the other; JOY_BUTTON_INVALID lets go of
+## Holds A (nitro and throttle) or B (throttle) on a pad, letting go of the other; JOY_BUTTON_INVALID lets go of
 ## both.
 func pad_hold_gear(device: int, button: JoyButton) -> void:
 	var held: JoyButton = _pad_gear_held.get(device, JOY_BUTTON_INVALID)
@@ -292,7 +292,7 @@ func pad_hold_gear(device: int, button: JoyButton) -> void:
 	_pad_gear_held[device] = button
 
 
-## A press of A on a pad (a confirm): down and up, or, while A is held for high gear, up and down again.
+## A press of A on a pad (a confirm): down and up, or, while A is held for nitro, up and down again.
 func pad_press_a(device: int) -> void:
 	if _pad_gear_held.get(device, JOY_BUTTON_INVALID) == JOY_BUTTON_A:
 		pad_button(device, JOY_BUTTON_A, false)

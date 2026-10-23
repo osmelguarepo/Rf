@@ -38,11 +38,11 @@ extends RefCounted
 ##   of its buttons first, then pad_connection(device, false).
 ##
 ## So a Steam controller drives as the gamepad mapping of pads.gd: accelerate holds the pad's D-pad up (throttle),
-## brake down, steering left and right, high gear the pad's A (high gear and throttle), pause its Start (pause and
+## brake down, steering left and right, nitro the pad's A (nitro and throttle), pause its Start (pause and
 ## confirm), confirm its A (a pad without a seat takes an orphan seat with it) and back its Back (Select). In the menus
 ## set the directions are the D-pad, menu_confirm A, menu_back B (leave a seat, leave the results), menu_start Start
 ## (start, resume) and menu_quit Back (to the title). The price of going through a pad: an action is read as its
-## button, so confirm bound apart from high gear also gives high gear while held, as the pad's A does.
+## button, so confirm bound apart from nitro also gives nitro while held, as the pad's A does.
 ##
 ## Every action name is unique across the sets (the menus set's start with "menu_"): getDigitalActionHandle() takes no
 ## set, so Steam gives a name used in two sets one handle and ignores the other set's action (ISteamInput docs).

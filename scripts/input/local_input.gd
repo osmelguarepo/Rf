@@ -2,7 +2,7 @@ extends RefCounted
 ## The single-player input: the keyboard and every joypad together, as one input byte per simulation step
 ## (docs/GODOT_PLAN.md §3, §5; src/input.ts and src/game/edges.ts in the Phaser version).
 ##
-## - Held controls (throttle, brake, steer, high gear) are read when a step asks for its byte.
+## - Held controls (throttle, brake, steer, nitro) are read when a step asks for its byte.
 ## - Presses (pause, confirm) are latched when their event arrives and kept until a step (step_byte()) or a menu
 ##   (take_presses()) takes them, so a press on a frame with no fixed step is not lost.
 ##

@@ -102,6 +102,27 @@ static func car_draws(w: World, colours: Array[int], twin: bool = false) -> Arra
 	return out
 
 
+## The flames of every car with nitro on and moving, behind its bottom edge: two tail pipes, each an outer and a
+## brighter inner rect, {rect, colour}. The length flickers every FLAME_STEP_TICKS of the stage clock, a little
+## differently per slot and pipe. Pure look: the simulation does not know about it.
+static func nitro_flames(w: World) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for p: Car in w.players:
+		if p.alive == 0 or p.gear != Car.GEAR_NITRO or p.speed <= 0.0 or not player_visible(p, w.stage_ticks):
+			continue
+		var box := hitbox_pos(w, p.x, p.y_world)
+		var size := Vector2i(roundi(p.w), roundi(p.h))
+		var step := floori(w.stage_ticks / float(ViewConfig.FLAME_STEP_TICKS))
+		for pipe in 2:
+			var length := ViewConfig.FLAME_MIN + (step * 7 + p.slot * 3 + pipe * 5) % (ViewConfig.FLAME_FLICKER + 1)
+			var quarter := floori(size.x / 4.0)
+			var cx := box.x + (quarter if pipe == 0 else size.x - quarter - 1)
+			var top := box.y + size.y
+			out.append({"rect": Rect2i(cx - 1, top, 3, length), "colour": ViewConfig.FLAME_OUTER})
+			out.append({"rect": Rect2i(cx, top, 1, length - 2), "colour": ViewConfig.FLAME_INNER})
+	return out
+
+
 ## The fuel car's tint at a stage tick: a full trip round the hue circle every 1.5 s.
 static func rainbow(stage_ticks: int) -> Color:
 	return hue_colour(stage_ticks * ViewConfig.RAINBOW_DEGREES_PER_TICK)
@@ -146,6 +167,8 @@ func _draw() -> void:
 		var left := int(world.cfg.road_left)
 		var road := Rect2i(left, 0, int(world.cfg.road_right) - left, ViewConfig.VIEW_H)
 		Draw.rect(self, road, Color(0, 0, 0, Tunnel.DARKNESS))
+	for flame: Dictionary in nitro_flames(world):
+		Draw.rect(self, flame["rect"], flame["colour"])
 	for car: Dictionary in car_draws(world, seat_colours, twin):
 		Draw.sprite_on_hitbox(self, atlas, car["sprite"], car["box"], car["size"], car["fallback"])
 

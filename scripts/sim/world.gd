@@ -347,7 +347,7 @@ func _run(bytes: PackedByteArray) -> void:
 		if p.alive == 0:
 			continue
 		var byte := bytes[p.slot]
-		p.gear = Car.GEAR_HIGH if PlayerInput.high_gear(byte) else Car.GEAR_LOW
+		p.gear = Car.GEAR_NITRO if PlayerInput.nitro(byte) else Car.GEAR_LOW
 		p.speed = Car.step_speed(p.speed, p.gear, PlayerInput.accel(byte), PlayerInput.brake(byte))
 		var hit_roadside := Car.step_lateral(cfg, p, PlayerInput.steer_of(byte))
 		p.fuel = Fuel.drain(p.fuel)

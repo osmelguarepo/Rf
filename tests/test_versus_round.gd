@@ -371,7 +371,7 @@ static func _without_clock(w: World) -> Array:
 	return a
 
 
-## Bytes for a round with traffic: humans hold the throttle, take high gear from 160 km/h, steer into skids and change
+## Bytes for a round with traffic: humans hold the throttle, take nitro from 160 km/h, steer into skids and change
 ## lane now and then; bots get 0xFF.
 static func _drive(w: World, tick: int) -> PackedByteArray:
 	var bytes := PackedByteArray()

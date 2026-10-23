@@ -293,7 +293,7 @@ func test_actions_hold_the_buttons_of_a_virtual_pad() -> void:
 	assert_eq(racing_set.get("high_gear"), JOY_BUTTON_A)
 	assert_eq(racing_set.get("accelerate"), JOY_BUTTON_DPAD_UP)
 	assert_eq(menus_set.get("menu_back"), JOY_BUTTON_B)
-	# Two actions on one button (high gear and confirm, the pad's A) hold it once.
+	# Two actions on one button (nitro and confirm, the pad's A) hold it once.
 	fake.hold(H1, "high_gear")
 	fake.hold(H1, "confirm")
 	assert_eq(_frame(true), [[FIRST, JOY_BUTTON_A, true]])
@@ -585,7 +585,7 @@ func test_steam_controllers_come_back_to_their_own_seats() -> void:
 	assert_eq(app.seats.step_bytes(2), PackedByteArray([Held.to_byte(Held.BRAKE), Held.to_byte(Held.RIGHT)]))
 
 
-## Single player (App.start_game(), no longer on the title) with a Steam controller, as with a pad: the racing set is read there and high gear drives (high gear and throttle, the pad's A), pause pauses, the
+## Single player (App.start_game(), no longer on the title) with a Steam controller, as with a pad: the racing set is read there and nitro drives (nitro and throttle, the pad's A), pause pauses, the
 ## menus set is read while paused, and its menu_start (Start too) resumes.
 func test_a_steam_controller_plays_single_player() -> void:
 	_boot_app()
@@ -596,13 +596,13 @@ func test_a_steam_controller_plays_single_player() -> void:
 	assert_eq(fake.active_set[H1], fake.set_handles["racing"])
 	fake.hold(H1, "high_gear")
 	app.poll_steam()
-	assert_eq(app.solo.held(), Held.ACCEL | Held.HIGH_GEAR, "the pad's A")
+	assert_eq(app.solo.held(), Held.ACCEL | Held.NITRO, "the pad's A")
 	var world: World = app.current_screen().world
 	for i in 60:
 		app.poll_steam()
 		S.frame(app)
 	assert_gt(world.player().speed, 0.0, "the car drove")
-	assert_eq(world.player().gear, Car.GEAR_HIGH, "in high gear")
+	assert_eq(world.player().gear, Car.GEAR_NITRO, "in nitro")
 	_press(H1, "pause")
 	assert_eq(world.phase, World.PAUSED)
 	app.poll_steam()

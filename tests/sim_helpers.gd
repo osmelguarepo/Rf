@@ -11,7 +11,7 @@ const PlayerInput := preload("res://scripts/sim/player_input.gd")
 ## Common input bytes (player_input.gd): NONE has the steer bits at "none"; a zero byte would steer left.
 const NONE := PlayerInput.NONE
 const ACCEL := PlayerInput.ACCEL | PlayerInput.STEER_NONE
-const ACCEL_HIGH := PlayerInput.ACCEL | PlayerInput.HIGH_GEAR | PlayerInput.STEER_NONE
+const ACCEL_HIGH := PlayerInput.ACCEL | PlayerInput.NITRO | PlayerInput.STEER_NONE
 const BRAKE := PlayerInput.BRAKE | PlayerInput.STEER_NONE
 const LEFT := PlayerInput.STEER_LEFT
 const RIGHT := PlayerInput.STEER_RIGHT

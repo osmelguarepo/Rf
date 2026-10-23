@@ -43,7 +43,7 @@ func after_each() -> void:
 func test_the_input_map_is_built_in_code_with_physical_keys() -> void:
 	var expected := {
 		"kb_throttle": [KEY_UP, KEY_W, KEY_Z],
-		"kb_high_gear": [KEY_X],
+		"kb_nitro": [KEY_X],
 		"kb_brake": [KEY_DOWN, KEY_S],
 		"kb_left": [KEY_LEFT, KEY_A],
 		"kb_right": [KEY_RIGHT, KEY_D],
@@ -66,9 +66,9 @@ func test_the_input_map_is_built_in_code_with_physical_keys() -> void:
 	assert_eq(not_keys, [], "events that are not physical keys (no joypad events: pads are read per device)")
 
 
-func test_x_holds_high_gear_and_throttle() -> void:
+func test_x_holds_nitro_and_throttle() -> void:
 	_press_key(KEY_X)
-	assert_eq(Keyboard.held(), Held.ACCEL | Held.HIGH_GEAR)
+	assert_eq(Keyboard.held(), Held.ACCEL | Held.NITRO)
 	assert_eq(router.step_byte(), PlayerInput.encode(true, false, 0, true))
 
 
@@ -129,7 +129,7 @@ func test_key_repeats_and_releases_are_not_presses() -> void:
 
 func test_a_pad_is_read_on_its_own_device() -> void:
 	_send(_button(PAD, JOY_BUTTON_A, true))
-	assert_eq(Pads.held_of(PAD), Held.ACCEL | Held.HIGH_GEAR, "A: high gear and throttle")
+	assert_eq(Pads.held_of(PAD), Held.ACCEL | Held.NITRO, "A: nitro and throttle")
 	assert_eq(Pads.held_of(OTHER_PAD), 0, "another device sees nothing")
 	_send(_button(PAD, JOY_BUTTON_A, false))
 	_send(_button(PAD, JOY_BUTTON_B, true))
@@ -175,7 +175,7 @@ func test_every_pad_and_the_keyboard_drive_the_single_player() -> void:
 	_send(_button(PAD, JOY_BUTTON_A, true))
 	assert_true(router.pads.devices.has(PAD) and router.pads.devices.has(OTHER_PAD))
 	var byte := router.step_byte()
-	assert_true(PlayerInput.high_gear(byte) and PlayerInput.accel(byte))
+	assert_true(PlayerInput.nitro(byte) and PlayerInput.accel(byte))
 
 
 ## LocalInput.connection_changed() (the app forwards Input.joy_connection_changed there) keeps the polled devices.
@@ -192,7 +192,7 @@ func test_held_bits_make_the_byte() -> void:
 	assert_eq(Held.to_byte(0), PlayerInput.NONE)
 	assert_eq(Held.to_byte(Held.LEFT), PlayerInput.encode(false, false, -1, false))
 	assert_eq(Held.to_byte(Held.LEFT | Held.RIGHT), PlayerInput.NONE)
-	assert_eq(Held.to_byte(Held.ACCEL | Held.HIGH_GEAR, PlayerInput.PAUSE), PlayerInput.encode(true, false, 0, true, true))
+	assert_eq(Held.to_byte(Held.ACCEL | Held.NITRO, PlayerInput.PAUSE), PlayerInput.encode(true, false, 0, true, true))
 	assert_eq(Held.to_byte(0, PlayerInput.ACCEL), PlayerInput.NONE, "only presses come from the second argument")
 
 

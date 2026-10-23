@@ -8,7 +8,7 @@ extends RefCounted
 ## Mapping (Godot's SDL layout, which is the standard Gamepad layout the Phaser version used):
 ##
 ##   D-pad or left stick   steer, up = throttle, down = brake (stick threshold 0.5)
-##   A (bottom)            high gear and throttle (held); confirm (press)
+##   A (bottom)            nitro and throttle (held); confirm (press)
 ##   B (right)             throttle (held)
 ##   Start                 pause and confirm (press)
 
@@ -76,7 +76,7 @@ static func held_of(device: int) -> int:
 	if up or a or b:
 		mask |= Held.ACCEL
 	if a:
-		mask |= Held.HIGH_GEAR
+		mask |= Held.NITRO
 	if down:
 		mask |= Held.BRAKE
 	if left:

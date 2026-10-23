@@ -24,12 +24,12 @@ const K := 0.5625
 
 # --- Speed, in km/h. K does not change these (docs/PLAN.md §4).
 const LOW_GEAR_TOP := 198.0
-const HIGH_GEAR_TOP := 400.0
+const NITRO_TOP := 400.0
 const LOW_GEAR_ACCEL := 70.0
-## High gear is slow to start: below HIGH_GEAR_SLOW_BELOW it accelerates at HIGH_GEAR_SLOW_ACCEL.
-const HIGH_GEAR_SLOW_BELOW := 160.0
-const HIGH_GEAR_SLOW_ACCEL := 15.0
-const HIGH_GEAR_ACCEL := 45.0
+## Nitro is slow to start: below NITRO_SLOW_BELOW it accelerates at NITRO_SLOW_ACCEL.
+const NITRO_SLOW_BELOW := 160.0
+const NITRO_SLOW_ACCEL := 15.0
+const NITRO_ACCEL := 45.0
 const BRAKE := 120.0
 ## Coasting with no throttle.
 const DRAG := 25.0
@@ -149,8 +149,8 @@ const SEAT_SEED_STEP := 0x50000000
 # gear from 160 km/h with 150 px free ahead, the clearest adjacent lane, steer into skids, chase fuel cars one lane
 # away, react 12 ticks late. How a bot weighs the lanes is bot.gd's own; its px values are profile fields (bot_*),
 # measured with tools/bot_stats.gd (docs/HANDOFF.md, B1 part 2).
-## A bot takes high gear from this speed, while cfg.bot_free_ahead px ahead of it are free (plan §7).
-const BOT_HIGH_GEAR_KMH := 160.0
+## A bot takes nitro from this speed, while cfg.bot_free_ahead px ahead of it are free (plan §7).
+const BOT_NITRO_KMH := 160.0
 ## A bot's reaction time in ticks (plan §7: 12, 0.2 s): what it decides on one step drives its car 12 steps later.
 const BOT_REACTION_TICKS := 12
 ## A bot's own RNG stream is World.seat_seed(game_seed, slot + BOT_STREAM_SLOT_OFFSET): slots 6 to 11, apart from the
@@ -228,7 +228,7 @@ var edge_touch: float = 0.0
 var distance_step: float = 0.0
 ## The smallest car and oil gap the shrinking can reach.
 var versus_gap_min: float = 0.0
-## Bots (bot.gd), standard profile only, in the game's px. A bot keeps high gear only while this much road ahead of
+## Bots (bot.gd), standard profile only, in the game's px. A bot keeps nitro only while this much road ahead of
 ## its car is free (plan §7: 150).
 var bot_free_ahead: float = 0.0
 ## How far ahead of its car a bot weighs the lanes: a lane is as clear as the gap to its first obstacle, at most this.
@@ -276,7 +276,7 @@ static func standard() -> Self:
 	c.edge_touch = 351.5
 	c.distance_step = 100.0
 	c.versus_gap_min = 40.0
-	# Bots (bot.gd): 150 px free for high gear (plan §7). The rest are bot.gd's choices, measured with
+	# Bots (bot.gd): 150 px free for nitro (plan §7). The rest are bot.gd's choices, measured with
 	# tools/bot_stats.gd: a lane is weighed 168 px ahead (about 0.9 s at the top closing speed, 400 km/h on a 60 km/h
 	# truck); a truck counts 168 px nearer, so any truck in that reach ranks a lane below every lane without one (with
 	# 48, bots took a truck's lane over a car alongside and died for it); another player's car just ahead counts 96 px
