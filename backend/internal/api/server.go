@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"fuelrivals/backend/internal/config"
+	"fuelrivals/backend/internal/matchmaker"
 	"fuelrivals/backend/internal/steam"
 	"fuelrivals/backend/internal/store"
+	"fuelrivals/backend/internal/telemetry"
 )
 
 // Deps is everything the server needs from outside, so tests can replace Steam and the clock.
@@ -31,6 +33,8 @@ type Deps struct {
 	SteamHTTP steam.Doer
 	Log       *slog.Logger
 	Now       func() time.Time
+	// Metrics collects the counters of GET /metrics (nil: a new registry).
+	Metrics *telemetry.Registry
 }
 
 // Server is the API.
@@ -48,7 +52,18 @@ type Server struct {
 	publicIP  *keyedLimiter // public reads per IP
 	accountRL *keyedLimiter // authenticated endpoints per account
 	loginAcct *keyedLimiter // logins per SteamID
+	queueRL   *keyedLimiter // POST/DELETE /queue, /queue/ready per account
+	statusRL  *keyedLimiter // GET /queue/status per account
+
+	metrics *telemetry.Registry
+	mm      *matchmaker.Engine
 }
+
+// Matchmaker is the live queue (tests drive it with Tick; main runs it with RunMatchmaker).
+func (s *Server) Matchmaker() *matchmaker.Engine { return s.mm }
+
+// Metrics is the registry behind GET /metrics.
+func (s *Server) Metrics() *telemetry.Registry { return s.metrics }
 
 // New builds the server.
 func New(d Deps) *Server {
@@ -72,7 +87,19 @@ func New(d Deps) *Server {
 		publicIP:  newKeyedLimiter(120, time.Minute, 60, now),
 		accountRL: newKeyedLimiter(d.Config.AccountRatePerMin, time.Minute, d.Config.AccountRatePerMin, now),
 		loginAcct: newKeyedLimiter(d.Config.LoginRatePerMin, time.Minute, 5, now),
+		queueRL:   newKeyedLimiter(d.Config.QueueRatePerMin, time.Minute, max(d.Config.QueueRatePerMin/2, 3), now),
+		statusRL:  newKeyedLimiter(d.Config.StatusRatePerMin, time.Minute, max(d.Config.StatusRatePerMin/3, 5), now),
+		metrics:   d.Metrics,
 	}
+	if s.metrics == nil {
+		s.metrics = telemetry.New()
+	}
+	s.mm = matchmaker.NewEngine(matchmaker.Params{
+		MaxWait: d.Config.QueueMaxWait, SoloWait: d.Config.QueueSoloWait, BandStep: d.Config.QueueBandStep,
+		ReadyWindow: d.Config.ReadySeconds, MaxPingMS: d.Config.MaxPingMS,
+		PenaltyFree: d.Config.PenaltyFree, PenaltyBase: d.Config.PenaltyBase, PenaltyMax: d.Config.PenaltyMax,
+		PenaltyWindow: 24 * time.Hour,
+	}, d.Store, now, log, s.metrics)
 	s.openid = &steam.OpenID{
 		ReturnURL:   d.Config.PublicURL + d.Config.APIPrefix + "/auth/openid/return",
 		Realm:       d.Config.PublicURL,
@@ -108,11 +135,25 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /matches/{id}/result", s.serverAuth(s.handleResult))
 	mux.HandleFunc("POST /matches/{id}/replay", s.serverAuth(s.handleReplayUpload))
 
+	mux.HandleFunc("POST /queue", s.auth(s.handleQueueEnter))
+	mux.HandleFunc("GET /queue/status", s.auth(s.handleQueueStatus))
+	mux.HandleFunc("POST /queue/ready", s.auth(s.handleQueueReady))
+	mux.HandleFunc("DELETE /queue", s.auth(s.handleQueueLeave))
+	mux.HandleFunc("GET /match/{id}/join", s.auth(s.handleMatchJoin))
+	mux.HandleFunc("POST /match/{id}/leave", s.auth(s.handleMatchLeave))
+
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
+
 	mux.HandleFunc("POST /admin/matches", s.admin(s.handleAdminAssign))
+	mux.HandleFunc("GET /admin/matches", s.admin(s.handleAdminMatches))
 	mux.HandleFunc("GET /admin/matches/{id}", s.admin(s.handleAdminMatch))
 	mux.HandleFunc("POST /admin/matches/{id}/annul", s.admin(s.handleAdminAnnul))
 	mux.HandleFunc("GET /admin/matches/{id}/replay", s.admin(s.handleAdminReplay))
 	mux.HandleFunc("POST /admin/players/{id}/ban", s.admin(s.handleAdminBan))
+	mux.HandleFunc("POST /admin/players/{id}/unban", s.admin(s.handleAdminUnban))
+	mux.HandleFunc("GET /admin/servers", s.admin(s.handleAdminServers))
+	mux.HandleFunc("POST /admin/servers/{id}/drain", s.admin(s.handleAdminDrain))
+	mux.HandleFunc("GET /admin/queue", s.admin(s.handleAdminQueue))
 
 	return s.recoverer(s.logRequests(s.secureHeaders(mux)))
 }
@@ -153,6 +194,11 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(sw, r)
 		s.log.Info("request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "ms", s.now().Sub(start).Milliseconds())
+		route := r.Pattern // "GET /queue/status"; empty when nothing matched (kept out of the labels: unbounded)
+		if route == "" {
+			route = "unmatched"
+		}
+		s.metrics.Inc("fr_http_requests_total", "HTTP requests by route and status.", "route", route, "status", itoa(sw.status))
 	})
 }
 

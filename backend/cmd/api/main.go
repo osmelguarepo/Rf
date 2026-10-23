@@ -73,6 +73,7 @@ func main() {
 	}
 
 	go background(ctx, st, cfg, log)
+	go srv.RunMatchmaker(ctx)
 
 	errc := make(chan error, 1)
 	go func() {

@@ -65,7 +65,7 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request, sv stor
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "lease_seconds": int(s.cfg.LeaseTTL.Seconds())})
+	writeJSON(w, 200, s.heartbeatReply(r, sv))
 }
 
 type resultRequest struct {
@@ -110,6 +110,9 @@ func (s *Server) handleResult(w http.ResponseWriter, r *http.Request, sv store.S
 		}
 		s.fail(w, r, err)
 		return
+	}
+	if !res.Already {
+		s.mm.Finished(res.MatchID, len(res.Players), 6-len(res.Players))
 	}
 	players := make([]map[string]any, 0, len(res.Players))
 	for _, p := range res.Players {

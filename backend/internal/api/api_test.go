@@ -55,6 +55,7 @@ type env struct {
 	persona *steam.FakePersona
 	steam   *steamDouble
 	cfg     config.Config
+	srv     *api.Server
 }
 
 func newEnv(t *testing.T, tweak func(m map[string]string)) *env {
@@ -67,6 +68,7 @@ func newEnv(t *testing.T, tweak func(m map[string]string)) *env {
 		"MASTER_KEY": hex.EncodeToString(testdb.MasterKey), "BAN_SALT": string(testdb.BanSalt),
 		"ADMIN_TOKEN": adminToken, "SERVER_REGISTER_TOKEN": registerToken,
 		"RATE_LOGIN_PER_MIN": "1000", "RATE_GUEST_PER_HOUR": "1000", "RATE_ACCOUNT_PER_MIN": "1000",
+		"RATE_QUEUE_PER_MIN": "1000", "RATE_STATUS_PER_MIN": "1000",
 	}
 	if tweak != nil {
 		tweak(m)
@@ -79,6 +81,7 @@ func newEnv(t *testing.T, tweak func(m map[string]string)) *env {
 	e.persona = &steam.FakePersona{Names: map[string]string{}}
 	srv := api.New(api.Deps{Config: cfg, Store: e.st, Verifier: steam.FakeVerifier{}, Persona: e.persona,
 		SteamHTTP: e.steam, Now: func() time.Time { return e.now }})
+	e.srv = srv
 	e.ts = httptest.NewServer(srv.Handler())
 	t.Cleanup(e.ts.Close)
 	return e

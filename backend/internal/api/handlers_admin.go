@@ -93,9 +93,18 @@ func (s *Server) handleAdminMatch(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	humans, err := s.store.MatchHumans(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	ids := make([]string, len(humans))
+	for i, h := range humans {
+		ids[i] = itoa64(h)
+	}
 	writeJSON(w, 200, map[string]any{
 		"match_id": itoa64(m.MatchID), "server_id": itoa64(m.ServerID), "status": m.Status, "ranked": m.Ranked,
-		"rank_reason": m.Reason, "released": m.Released, "players": m.Players,
+		"rank_reason": m.Reason, "released": m.Released, "players": m.Players, "player_ids": ids,
 	})
 }
 
