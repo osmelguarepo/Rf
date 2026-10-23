@@ -18,6 +18,8 @@ const BUTTONS: Array[JoyButton] = [
 static func boot(seed_value: int) -> App:
 	var app := (load(BOOT) as PackedScene).instantiate() as App
 	app.seed_override = seed_value
+	# The start countdown of a race is tested on its own: screen tests race from the first step.
+	app.tuning.set_value("race_start_ticks", 0.0)
 	(Engine.get_main_loop() as SceneTree).root.add_child(app)
 	app.start()
 	return app

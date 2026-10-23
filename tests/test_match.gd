@@ -19,7 +19,7 @@ const H := preload("res://tests/sim_helpers.gd")
 const BOT := PlayerInput.BOT
 const NO_WINNER := Match.NO_WINNER
 ## Match fields that to_array() writes as arrays rather than as SCALARS.
-const COMPOSITE_FIELDS := ["world", "wins", "totals", "distances", "round_winners"]
+const COMPOSITE_FIELDS := ["world", "wins", "totals", "distances", "round_winners", "race_points", "race_order"]
 
 var std := Config.standard()
 

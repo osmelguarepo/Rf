@@ -25,16 +25,19 @@ extends Node2D
 const App := preload("res://scripts/app/app.gd")
 const Config := preload("res://scripts/sim/config.gd")
 const World := preload("res://scripts/sim/world.gd")
+const Car := preload("res://scripts/sim/car.gd")
 const Match := preload("res://scripts/sim/match.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const Nav := preload("res://scripts/input/nav.gd")
 const Seats := preload("res://scripts/input/seats.gd")
+const Ranking := preload("res://scripts/sim/ranking.gd")
+const PlayerColours := preload("res://scripts/view/player_colours.gd")
 const Road := preload("res://scripts/view/road.gd")
 const Cars := preload("res://scripts/view/cars.gd")
 const VersusHud := preload("res://scripts/view/versus_hud.gd")
 
 var app: App
-var cfg: Config = Config.standard()
+var cfg: Config = Config.game()
 var seats: Seats
 ## The match being played, and its world (the same object from round to round).
 var game_match: Match
@@ -46,12 +49,16 @@ var matches: int = 0
 var road: Road
 var cars: Cars
 var hud: VersusHud
+## The ranking change of each person when the match ended (or was left): slot -> {before, after, delta}.
+var ranking_results: Dictionary = {}
+var _settled := false
 
 
 ## Builds the screen and starts the first match. The app calls it before adding the screen to the tree, after
 ## seats.lock().
 func setup(p_app: App) -> void:
 	app = p_app
+	app.tuning.apply(cfg)
 	seats = app.seats
 	road = $Road
 	cars = $Cars
@@ -68,6 +75,8 @@ func new_match() -> void:
 	game_match = Match.create(cfg, app.next_seed(), lineup.size(), seats.humans_mask())
 	world = game_match.world
 	matches += 1
+	ranking_results = {}
+	_settled = false
 	cars.seat_colours = lineup
 	app.input.clear_presses()
 	app.nav.clear()
@@ -75,18 +84,21 @@ func new_match() -> void:
 	render()
 
 
-func frame(steps: int, _delta: float) -> void:
+func frame(steps: int, delta: float) -> void:
 	for command: Vector2i in app.nav.take():
 		if handle(command.x, command.y):
 			return
 	for i in steps:
 		step_once(seats.step_bytes(lineup.size()))
 	render()
+	hud.animate(delta)
 
 
 ## One step of the match with one byte per seat.
 func step_once(bytes: PackedByteArray) -> void:
 	game_match.step(bytes)
+	if game_match.phase == Match.MATCH_OVER:
+		settle_ranking()
 
 
 ## One menu command from a device. Returns true when it ended this frame: another screen, or a new match.
@@ -104,17 +116,17 @@ func handle(device: int, command: int) -> bool:
 			new_match()
 			return true
 		if command == Nav.BACK or (not keyboard and command == Nav.SELECT):
-			app.show_join()
+			leave_to(app.show_join)
 			return true
 		return false
 	if game_match.phase == Match.ROUND_OVER:
 		if keyboard and command == Nav.BACK:
-			app.show_title()
+			leave_to(app.show_title)
 			return true
 		return false
 	if world.phase == World.PAUSED:
 		if (keyboard and not plays_keyboard and command == Nav.BACK) or (command == Nav.SELECT):
-			app.show_title()
+			leave_to(app.show_title)
 			return true
 		return false
 	if keyboard and command == Nav.BACK and _racing() and seats.pad_count() == 0:
@@ -143,4 +155,40 @@ func pads_here() -> Array[bool]:
 func render() -> void:
 	road.set_scroll(Cars.camera_px(world))
 	cars.show_world(world)
-	hud.show_match(game_match, lineup, pads_here())
+	hud.show_match(game_match, lineup, pads_here(), seats.seat_of(seats.KEYBOARD_DEVICE) >= 0, ranking_results, slot_names())
+
+
+## Goes to another screen. A race match that is not over is left: every person in it counts as having left, last in
+## the ranking.
+func leave_to(screen: Callable) -> void:
+	if game_match.world.is_race() and game_match.phase != Match.MATCH_OVER:
+		for p: Car in world.players:
+			game_match.abandon(p.slot)
+		settle_ranking()
+	screen.call()
+
+
+## Applies the match's result to the ranking (docs/SPEC_RANKING.md §6), once: each person gains or loses points by their
+## place among all the cars; bots have no ranking.
+func settle_ranking() -> void:
+	if _settled or not world.is_race():
+		return
+	_settled = true
+	var order := game_match.ranking_order()
+	for place in order.size():
+		var slot := order[place]
+		if world.players[slot].human == 0:
+			continue
+		var seat := lineup[slot]
+		var player_name := app.names.name_of(seat)
+		var result := app.ranking.apply("seat:%d" % seat, player_name, Ranking.delta(order.size(), place))
+		result["name"] = player_name
+		ranking_results[slot] = result
+
+
+## What the race tower calls each slot: a person's name from the join screen, BOT for a bot.
+func slot_names() -> Array[String]:
+	var out: Array[String] = []
+	for p: Car in world.players:
+		out.append(app.names.name_of(lineup[p.slot]) if p.human != 0 else "BOT")
+	return out

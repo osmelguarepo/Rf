@@ -42,7 +42,7 @@ func set_choice(p_choice: int) -> void:
 
 ## The buttons of the choices, in ViewConfig.TITLE_CHOICES order.
 static func choice_buttons() -> Array[Rect2i]:
-	return [ViewConfig.START_BUTTON, ViewConfig.VERSUS_BUTTON]
+	return [ViewConfig.START_BUTTON, ViewConfig.VERSUS_BUTTON, ViewConfig.RANKING_BUTTON]
 
 
 ## The dark band under the versus note, so the lane dashes do not cut through it.

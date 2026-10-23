@@ -107,6 +107,8 @@ const FLAME_FLICKER := 4
 const FLAME_STEP_TICKS := 2
 const FLAME_OUTER := Color("#ae2633")
 const FLAME_INNER := Color("#f1bb3b")
+## A race's finish line: its height in px.
+const FINISH_H := 8
 ## The fuel car's hue turns 4 degrees a tick: a full circle every 1.5 s (Phaser: time x 240).
 const RAINBOW_DEGREES_PER_TICK := 4
 
@@ -152,8 +154,8 @@ const CONTROLS_LINE_STEP := 16
 const CONTROLS_KEYBOARD := [
 	"UP W Z  throttle",
 	"X       nitro",
-	"        400 km/h,",
-	"        slow start",
+	"        2x accel,",
+	"        6 s tank",
 	"DOWN S  brake",
 	"LEFT A  steer",
 	"RIGHT D steer",
@@ -163,24 +165,26 @@ const CONTROLS_KEYBOARD := [
 const CONTROLS_PAD := [
 	"B       throttle",
 	"A       nitro",
-	"        400 km/h,",
-	"        slow start",
+	"        2x accel,",
+	"        6 s tank",
 	"DOWN    brake",
 	"STICK   steer",
 	"D-PAD   steer",
 	"START   pause",
 	"A START start",
 ]
-## The two modes, top to bottom: LOCAL (the join screen: people on this machine, bots in the empty seats) and ONLINE (humans
-## only, not built yet: it shows COMING SOON and cannot be started). Up and Down move between them; the one shown is
+## The choices, top to bottom: LOCAL (the join screen: people on this machine, bots in the empty seats) and ONLINE (humans
+## only, not built yet: it shows COMING SOON and cannot be started) and RANKING (the leaderboard). Up and Down move between them; the one shown is
 ## drawn lit. A click or tap on a button picks it too.
-const TITLE_CHOICES := ["LOCAL", "ONLINE"]
+const TITLE_CHOICES := ["LOCAL", "ONLINE", "RANKING"]
 ## The LOCAL button (the name it had when it was the only one, START).
-const START_BUTTON := Rect2i(240, 100, 160, 28)
-const VERSUS_BUTTON := Rect2i(240, 136, 160, 28)
+const START_BUTTON := Rect2i(240, 68, 160, 28)
+const VERSUS_BUTTON := Rect2i(240, 102, 160, 28)
+## The RANKING button: the leaderboard of the session (docs/SPEC_RANKING.md).
+const RANKING_BUTTON := Rect2i(240, 162, 160, 28)
 ## Under the ONLINE button, in small type.
 const VERSUS_NOTE := "COMING SOON: HUMANS ONLY"
-const VERSUS_NOTE_Y := 172
+const VERSUS_NOTE_Y := 140
 ## The player's car, still, in its start lane.
 const TITLE_CAR_TOP := 208
 ## Footer lines, each on a dark band so the lane dashes behind do not cut through the text: y of the band's top.

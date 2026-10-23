@@ -29,8 +29,9 @@ const Collision := preload("res://scripts/sim/collision.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const Bot := preload("res://scripts/sim/bot.gd")
 
-## Layout version of to_array(). 2: the versus fields (World.winner, and Car.human to Car.rng). 3: the bots.
-const FORMAT := 3
+## Layout version of to_array(). 2: the versus fields (World.winner, and Car.human to Car.rng). 3: the bots. 4: the nitro
+## tank (Car.nitro_tank and nitro_progress). 5: the finish (World.finish_clock, Car.finish_place). 6: the start countdown (World.countdown).
+const FORMAT := 6
 
 ## Single-player stages: the Phaser game.
 const MODE_STAGES := 0
@@ -73,7 +74,7 @@ const NO_WINNER := -1
 ## The scalar fields, in to_array() order. tests/test_world_state.gd checks that to_array() covers every field.
 const SCALARS := [
 	"game_seed", "mode", "tick", "phase", "stage", "goal", "gap_scale", "stage_ticks", "camera_y", "anchor",
-	"high_score", "events", "winner"
+	"high_score", "events", "winner", "finish_clock", "countdown"
 ]
 
 var cfg: Config
@@ -103,6 +104,11 @@ var events: int = 0
 ## Versus: the seat that won the round, once phase is ROUND_OVER; NO_WINNER until then, or if nobody won. Always a
 ## human seat.
 var winner: int = NO_WINNER
+## Race: steps since the first car crossed the finish line, -1 until one has. The round ends when every car has crossed
+## or Config.race_finish_grace_ticks have passed.
+var finish_clock: int = -1
+## Race: steps left before the green light. Nothing moves while it counts down (cfg.race_start_ticks at the start of each race).
+var countdown: int = 0
 var players: Array[Car] = []
 var traffic: Array[Traffic] = []
 var spawner: Traffic.Spawner
@@ -211,11 +217,16 @@ func start_round() -> void:
 		p.events = 0
 		p.distance = 0.0
 		p.touching_edge = 0
+		p.nitro_tank = 1.0
+		p.nitro_progress = 0.0
+		p.finish_place = 0
 	phase = RUNNING
 	camera_y = 0.0
 	gap_scale = 1.0
 	stage_ticks = 0
 	winner = NO_WINNER
+	finish_clock = -1
+	countdown = cfg.race_start_ticks if is_race() else 0
 	events = 0
 	traffic = []
 	spawner = _versus_spawner()
@@ -283,7 +294,8 @@ func step(inputs: PackedByteArray) -> void:
 ## A versus step. Only human seats pause, and never with the bot byte: a pause press from any human seat pauses a
 ## running round and resumes a paused one; a non-human seat's byte never pauses. The world takes no confirm press,
 ## and no input at all once the round is over. On a step that runs, and only then, each live seat whose byte is
-## 0xFF gets its byte from _bot_byte(), once, in seat order, before anything moves: never while paused, on the step
+## 0xFF gets its byte from _bot_byte(), once, in seat order, before anything moves: never while paused, or while the start
+## countdown runs (nothing moves then), on the step
 ## that pauses or resumes, or after the round. So a bot that draws random numbers or keeps a reaction delay sees
 ## exactly the running steps, however long the game is paused.
 func _step_versus(inputs: PackedByteArray) -> void:
@@ -312,6 +324,9 @@ func _step_versus(inputs: PackedByteArray) -> void:
 	if pause_pressed:
 		phase = PAUSED
 		events = EV_PAUSE
+		return
+	if countdown > 0:
+		countdown -= 1
 		return
 
 	for p: Car in players:
@@ -347,19 +362,30 @@ func _run(bytes: PackedByteArray) -> void:
 		if p.alive == 0:
 			continue
 		var byte := bytes[p.slot]
-		p.gear = Car.GEAR_NITRO if PlayerInput.nitro(byte) else Car.GEAR_LOW
-		p.speed = Car.step_speed(p.speed, p.gear, PlayerInput.accel(byte), PlayerInput.brake(byte))
+		# Nitro burns the tank, when the profile has one; an empty tank is the low gear, the throttle still held.
+		var tank := cfg.nitro_tank_seconds > 0.0
+		var burning := PlayerInput.nitro(byte) and (not tank or p.nitro_tank > 0.0)
+		p.gear = Car.GEAR_NITRO if burning else Car.GEAR_LOW
+		if burning and tank:
+			p.nitro_tank = maxf(0.0, p.nitro_tank - 1.0 / (cfg.nitro_tank_seconds * Config.TICKS_PER_SECOND))
+			if p.nitro_tank < 1.0e-9:
+				p.nitro_tank = 0.0
+		p.speed = Car.step_speed(p.speed, p.gear, PlayerInput.accel(byte), PlayerInput.brake(byte), cfg)
 		var hit_roadside := Car.step_lateral(cfg, p, PlayerInput.steer_of(byte))
-		p.fuel = Fuel.drain(p.fuel)
+		if not is_race():
+			p.fuel = Fuel.drain(p.fuel)
 		if hit_roadside and p.invulnerable <= 0:
 			Car.apply_crash(p)
-			p.fuel = Fuel.apply_crash(p.fuel, _seat_rng(p))
+			if not is_race():
+				p.fuel = Fuel.apply_crash(p.fuel, _seat_rng(p))
 			p.events |= EV_SPIN | EV_CRASH
 		Car.tick_invulnerable(p)
 		# 2. Road distance.
 		var scroll := p.speed * cfg.px_per_kmh * Config.DT
 		scrolls[p.slot] = scroll
 		p.y_world += scroll
+		if tank and p.nitro_tank < 1.0:
+			p.nitro_progress += scroll
 	var camera_before := camera_y
 	var road_scroll := _advance_camera(prev_y, scrolls)
 	# 2b. Versus: the bottom edge, and distance points.
@@ -380,8 +406,13 @@ func _run(bytes: PackedByteArray) -> void:
 			out_mask |= 1 << p.slot
 	# 6. So does an empty tank.
 	for p: Car in players:
-		if p.alive != 0 and Fuel.is_empty(p.fuel):
+		if p.alive != 0 and not is_race() and Fuel.is_empty(p.fuel):
 			out_mask |= 1 << p.slot
+	# 6b. Nitro: an accident this step (roadside crash, bump or oil skid) empties the tank and loses the road driven
+	#     towards the refill; enough road without one refills it.
+	if cfg.nitro_tank_seconds > 0.0:
+		for p: Car in players:
+			_settle_nitro(p)
 	# 7. Versus: every seat out this step leaves at once, before oil patches count who is left.
 	if versus_mode:
 		_eliminate(out_mask)
@@ -475,7 +506,8 @@ func _bottom_edge(camera_moved: float, scrolls: PackedFloat64Array) -> void:
 			p.speed = maxf(p.speed, camera_moved / (cfg.px_per_kmh * Config.DT))
 		p.touching_edge = 1 if held or screen_y(p.y_world) + p.h >= cfg.edge_touch else 0
 		if p.touching_edge != 0:
-			p.fuel = maxf(0.0, p.fuel - Config.EDGE_FUEL_DRAIN_PER_SEC * Config.DT)
+			if not is_race():
+				p.fuel = maxf(0.0, p.fuel - Config.EDGE_FUEL_DRAIN_PER_SEC * Config.DT)
 			continue
 		var paid := floori(p.distance / cfg.distance_step)
 		p.distance += scrolls[p.slot]
@@ -696,7 +728,10 @@ func _award_fuel_cars() -> void:
 				best_distance = distance
 		if best != null:
 			c.consumed_mask = 1 << best.slot
-			best.fuel = Fuel.collect(best.fuel)
+			if is_race():
+				best.nitro_tank = minf(1.0, best.nitro_tank + cfg.fuel_car_nitro)
+			else:
+				best.fuel = Fuel.collect(best.fuel)
 			best.score += Config.FUEL_CAR_POINTS
 			best.events |= EV_PICKUP
 
@@ -729,7 +764,12 @@ func _collide(p: Car) -> bool:
 			continue
 
 		if c.kind == Config.KIND_TRUCK:
-			return true
+			if not is_race():
+				return true
+			# A race: a truck is a crash (speed lost, an empty nitro tank, invulnerability), not the end of the car.
+			Car.apply_crash(p)
+			p.events |= EV_SPIN | EV_CRASH
+			continue
 
 		# Yellow, red and blue: a bump, at most once per car and seat. No fuel or speed is lost.
 		if (c.struck_mask & bit) != 0:
@@ -783,6 +823,9 @@ func _eliminate(out_mask: int) -> void:
 ## human seat, so does the last bot out. The step's eliminations are all applied by now, so the winner is chosen on
 ## the state after every one of them.
 func _end_versus_step(out_mask: int) -> void:
+	if is_race():
+		_end_race_step()
+		return
 	var humans := 0
 	var bots_alive := 0
 	var human_out := false
@@ -922,3 +965,73 @@ func clone() -> Self:
 	for b: Bot in bots:
 		w.bots.append(b.clone())
 	return w
+
+
+## Nitro refill, after a step's contacts: see step 6b of _run().
+func _settle_nitro(p: Car) -> void:
+	if p.alive == 0:
+		return
+	if (p.events & (EV_CRASH | EV_BUMP | EV_SKID)) != 0:
+		p.nitro_tank = 0.0
+		p.nitro_progress = 0.0
+	elif p.nitro_progress >= cfg.nitro_recharge_px:
+		p.nitro_tank = 1.0
+		p.nitro_progress = 0.0
+	if p.nitro_tank >= 1.0:
+		p.nitro_progress = 0.0
+
+
+## True for a versus round that is a race to the finish line (Config.race_finish_px > 0), the game's own rules: no
+## fuel, no car put out (a truck is a crash), fuel cars refill the nitro tank, and the first car to reach the finish
+## line wins the round, a bot as well as a person. Config.standard() keeps the elimination rules of the first versus.
+func is_race() -> bool:
+	return mode == MODE_VERSUS and cfg.race_finish_px > 0.0
+
+
+## Race end of step. A car that has driven race_finish_px crosses the line: it takes the next place (the furthest over
+## the line first, the lowest seat on a tie) and is no longer alive, so it leaves the race. The first crossing starts
+## finish_clock. The round is over when every car has crossed, or cfg.race_finish_grace_ticks after the first;
+## `winner` is the first across the line.
+func _end_race_step() -> void:
+	var crossed: Array[Car] = []
+	var placed := 0
+	for p: Car in players:
+		if p.finish_place > 0:
+			placed += 1
+		elif p.alive != 0 and p.y_world >= cfg.race_finish_px:
+			crossed.append(p)
+	crossed.sort_custom(func(a: Car, b: Car) -> bool:
+		return a.y_world > b.y_world or (a.y_world == b.y_world and a.slot < b.slot))
+	for p: Car in crossed:
+		placed += 1
+		p.finish_place = placed
+		p.alive = 0
+		p.touching_edge = 0
+	if finish_clock >= 0:
+		finish_clock += 1
+	elif placed > 0:
+		finish_clock = 0
+	if placed == 0:
+		return
+	if placed < players.size() and finish_clock < cfg.race_finish_grace_ticks:
+		return
+	phase = ROUND_OVER
+	events |= EV_ROUND_OVER
+	winner = standings()[0]
+
+
+## The seats in finishing order, best first: the cars that crossed the line by place, then the others by how far they
+## got (the lowest seat on a tie). Meant for a race, at its end.
+func standings() -> Array[int]:
+	var order: Array[Car] = []
+	order.append_array(players)
+	order.sort_custom(func(a: Car, b: Car) -> bool:
+		if a.finish_place > 0 or b.finish_place > 0:
+			if a.finish_place > 0 and b.finish_place > 0:
+				return a.finish_place < b.finish_place
+			return a.finish_place > 0
+		return a.y_world > b.y_world or (a.y_world == b.y_world and a.slot < b.slot))
+	var slots: Array[int] = []
+	for p: Car in order:
+		slots.append(p.slot)
+	return slots

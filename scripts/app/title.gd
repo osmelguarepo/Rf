@@ -17,6 +17,7 @@ const TitleView := preload("res://scripts/view/title_view.gd")
 ## The choices, top to bottom (ViewConfig.TITLE_CHOICES).
 const CHOICE_LOCAL := 0
 const CHOICE_ONLINE := 1
+const CHOICE_RANKING := 2
 
 var app: App
 var cfg: Config = Config.standard()
@@ -36,7 +37,7 @@ func setup(p_app: App) -> void:
 	view = $TitleView
 	road.beside_panels = false
 	road.setup(app.atlas, cfg)
-	choice = clampi(app.title_choice, CHOICE_LOCAL, CHOICE_ONLINE)
+	choice = clampi(app.title_choice, CHOICE_LOCAL, CHOICE_RANKING)
 	view.setup(app.atlas, cfg, app.high_score)
 	view.set_choice(choice)
 
@@ -46,9 +47,9 @@ func frame(_steps: int, delta: float) -> void:
 	view.set_prompt_bright(floori(time / ViewConfig.PROMPT_BLINK_SECONDS) % 2 == 0)
 	for command: Vector2i in app.nav.take():
 		if command.y == Nav.UP:
-			select(CHOICE_LOCAL)
+			select(maxi(CHOICE_LOCAL, choice - 1))
 		elif command.y == Nav.DOWN:
-			select(CHOICE_ONLINE)
+			select(mini(CHOICE_RANKING, choice + 1))
 	if PlayerInput.confirm(app.input.take_presses()):
 		start()
 
@@ -64,7 +65,7 @@ func select(p_choice: int) -> void:
 	view.set_choice(choice)
 
 
-## Picks the choice shown: the join screen of LOCAL. ONLINE is not built yet and does nothing.
+## Picks the choice shown: the join screen of LOCAL, or the leaderboard. ONLINE is not built yet and does nothing.
 func start() -> void:
 	if _starting:
 		return
@@ -72,7 +73,10 @@ func start() -> void:
 	if choice == CHOICE_ONLINE:
 		return
 	_starting = true
-	app.show_join()
+	if choice == CHOICE_RANKING:
+		app.show_ranking()
+	else:
+		app.show_join()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -88,4 +92,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		start()
 	elif Rect2(ViewConfig.VERSUS_BUTTON).has_point(at):
 		select(CHOICE_ONLINE)
+		start()
+	elif Rect2(ViewConfig.RANKING_BUTTON).has_point(at):
+		select(CHOICE_RANKING)
 		start()

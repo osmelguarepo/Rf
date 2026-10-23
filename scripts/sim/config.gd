@@ -165,9 +165,38 @@ const MATCH_WINS := 2
 const MATCH_ROUNDS_MAX := 5
 ## With a single human, rounds the human does not win (a bot ahead or level) that end the match.
 const MATCH_LONE_LOSSES := 2
+## A race match: points for each finishing place in a race, best first (a field of n cars uses the first n).
+const RACE_POINTS: Array[int] = [10, 7, 5, 3, 2, 1]
 ## Steps after a round ends before a confirm press counts (1 s). On a pad, A shifts gear and confirms, so presses made
 ## while racing must not skip the round's results (to tune).
 const MATCH_CONFIRM_TICKS := 60
+
+# --- Speed rules of a game, in km/h and km/h per second. They start at the constants above (the game's rules); the
+# developer dashboard (scripts/app/tuning.gd) changes them for a game. Car.step_speed() reads them.
+var low_gear_top: float = LOW_GEAR_TOP
+var nitro_top: float = NITRO_TOP
+var low_gear_accel: float = LOW_GEAR_ACCEL
+var nitro_slow_below: float = NITRO_SLOW_BELOW
+var nitro_slow_accel: float = NITRO_SLOW_ACCEL
+var nitro_accel: float = NITRO_ACCEL
+var brake_decel: float = BRAKE
+var drag_decel: float = DRAG
+var overspeed_fall: float = OVERSPEED_FALL
+## Nitro tank (the standard profile only; 0 seconds = no tank, nitro unlimited as in Phaser). A full tank burns in
+## nitro_tank_seconds of nitro; every nitro_recharge_px of road driven without an accident refills it (Car.nitro_progress).
+var nitro_tank_seconds: float = 0.0
+var nitro_recharge_px: float = 0.0
+## A race (the game's versus rules; 0 = the first versus's elimination rules): the round goes to the first car to drive
+## race_finish_px; there is no fuel, and a fuel car gives fuel_car_nitro of a full nitro tank.
+var race_finish_px: float = 0.0
+var fuel_car_nitro: float = 0.0
+## A race: steps from the first car across the line to the end of the round (0 = the round ends with the first car).
+## Cars still racing then are placed by distance.
+var race_finish_grace_ticks: int = 0
+## A race: steps from the start of each race (the cars stand still) to the green light; 0 = no countdown.
+var race_start_ticks: int = 0
+## A race match: the races that make it. The most race points over them wins.
+var match_races: int = 3
 
 # --- Profile fields.
 var profile: int = PROFILE_STANDARD
@@ -268,7 +297,6 @@ static func standard() -> Self:
 	# density per lane. Fuel cars keep their gap per road (x K only).
 	_scale(c, K, 3.0 / 6.0)
 	c.adjacent_lanes = 1
-	# Versus mode (docs/GODOT_PLAN.md §3, §7): the leader's top at y = 192; a car's bottom edge at most at 352 (8 px
 	# above the screen's bottom), touching from 351.5; 10 points per 100 px of world (to tune); car and oil gaps
 	# shrink to 40 px at least, which the car gap reaches after 9 shrinks (180 s).
 	c.anchor_versus = 192.0
@@ -289,6 +317,26 @@ static func standard() -> Self:
 	c.bot_lane_margin = 24.0
 	c.bot_fuel_reach = 160.0
 	c.bot_side_margin = 2.0
+	return c
+
+
+## The game as played: standard() with the game's own speed rules (not Phaser's, which standard() keeps for the golden
+## tests). Both gears reach 400 km/h, the low gear in 12 s and nitro in 6 s. Nitro has a tank of 6 s, and 3000 px of
+## road without an accident refill it.
+static func game() -> Self:
+	var c := standard()
+	c.low_gear_top = 400.0
+	c.low_gear_accel = 400.0 / 12.0
+	c.nitro_accel = 400.0 / 6.0
+	c.nitro_slow_accel = c.nitro_accel
+	c.nitro_slow_below = 0.0
+	c.nitro_tank_seconds = 6.0
+	c.nitro_recharge_px = 3000.0
+	# One stage of road (24 000 Phaser px x K) to the finish; a fuel car refills half the nitro tank.
+	c.race_finish_px = STAGE_FIRST_GOAL * K
+	c.fuel_car_nitro = 0.5
+	c.race_finish_grace_ticks = 10 * TICKS_PER_SECOND
+	c.race_start_ticks = 3 * TICKS_PER_SECOND
 	return c
 
 

@@ -39,7 +39,7 @@ func setup(p_app: App) -> void:
 	road.beside_panels = false
 	road.setup(app.atlas, cfg)
 	view.setup(app.atlas, cfg)
-	view.show_seats(seats, time)
+	view.show_seats(seats, time, app.names)
 
 
 func frame(_steps: int, delta: float) -> void:
@@ -51,7 +51,7 @@ func frame(_steps: int, delta: float) -> void:
 	if _leaving:
 		return
 	seats.clear_presses()
-	view.show_seats(seats, time)
+	view.show_seats(seats, time, app.names)
 
 
 func on_focus_lost() -> void:
@@ -72,12 +72,16 @@ func handle(device: int, command: int) -> void:
 				seats.join_keyboard()
 		elif command == Nav.SELECT:
 			seats.leave(Seats.KEYBOARD_DEVICE)
+		else:
+			edit_name(seats.seat_of(Seats.KEYBOARD_DEVICE), command)
 		return
 	if seats.seat_of(device) < 0:
 		if command == Nav.ACCEPT:
 			seats.join(device)
 		return
-	if command == Nav.BACK:
+	if command == Nav.UP or command == Nav.DOWN or command == Nav.LEFT or command == Nav.RIGHT:
+		edit_name(seats.seat_of(device), command)
+	elif command == Nav.BACK:
 		seats.leave(device)
 	elif command == Nav.START:
 		if seats.can_start():
@@ -90,3 +94,19 @@ func handle(device: int, command: int) -> void:
 func _leave_to_title() -> void:
 	_leaving = true
 	app.show_title()
+
+
+## Up and down change the last letter of a seat's name, right adds one, left takes one away (names.gd). A seat that holds
+## nobody has no name to edit.
+func edit_name(seat: int, command: int) -> void:
+	if seat < 0:
+		return
+	match command:
+		Nav.UP:
+			app.names.cycle(seat, 1)
+		Nav.DOWN:
+			app.names.cycle(seat, -1)
+		Nav.RIGHT:
+			app.names.extend(seat)
+		Nav.LEFT:
+			app.names.shorten(seat)

@@ -131,14 +131,15 @@ func test_the_keyboard_plays_a_local_race_against_five_bots() -> void:
 	var race: Node = app.current_screen()
 	assert_eq(race.game_match.world.players.size(), 6)
 	assert_eq(race.game_match.world.players[0].human, 1)
+	var car: Car = race.game_match.world.players[0]
 	S.key(app, KEY_X, true)
+	S.frame(app, 5)
+	assert_eq(car.gear, 1, "X holds nitro")
 	S.key(app, KEY_LEFT, true)
-	S.frame(app, 30)
+	S.frame(app, 25)
 	S.key(app, KEY_X, false)
 	S.key(app, KEY_LEFT, false)
-	var car: Car = race.game_match.world.players[0]
 	assert_gt(car.speed, 0.0, "the keyboard drives seat 0")
-	assert_eq(car.gear, 1, "X holds nitro")
 	S.key_tap(app, KEY_ESCAPE)
 	S.frame(app, 1)
 	assert_eq(race.game_match.world.phase, 1, "Esc pauses the keyboard player's race")

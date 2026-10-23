@@ -41,13 +41,19 @@ const Nav := preload("res://scripts/input/nav.gd")
 const Keyboard := preload("res://scripts/input/keyboard.gd")
 const SteamInput := preload("res://scripts/input/steam_input.gd")
 const FixedStep := preload("res://scripts/app/fixed_step.gd")
+const Tuning := preload("res://scripts/app/tuning.gd")
+const RankingStore := preload("res://scripts/app/ranking_store.gd")
+const Names := preload("res://scripts/app/names.gd")
+const Admin := preload("res://scripts/app/admin.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
+const Car := preload("res://scripts/sim/car.gd")
 const Match := preload("res://scripts/sim/match.gd")
 
 const TITLE_SCENE := "res://scenes/title.tscn"
 const GAME_SCENE := "res://scenes/game.tscn"
 const JOIN_SCENE := "res://scenes/join.tscn"
+const RANKING_SCENE := "res://scenes/ranking.tscn"
 const VERSUS_SCENE := "res://scenes/versus.tscn"
 const SELFTEST_TICKS := 600
 const SELFTEST_FRAMES := 120
@@ -114,6 +120,15 @@ var title_choice: int = 0
 ## never changes mode on a screen.
 var fullscreen_window: Window = null
 var clock := FixedStep.new()
+## The developer dashboard (admin.gd): on with --admin on the command line, shown and hidden with F1. Its values (tuning.gd)
+## are given to every new game's Config and to the running one.
+var admin_enabled: bool = OS.get_cmdline_user_args().has("--admin")
+var tuning := Tuning.new()
+## The ranking of this session (LOCAL): gone when the game closes. ONLINE will use a store backed by a database.
+var ranking := RankingStore.new()
+## What the six seats are called, from the join screen (docs/SPEC_RANKING.md §8).
+var names := Names.new()
+var admin: Admin = null
 ## Best score this session. A new game starts with it as its high score.
 var high_score: int = 0
 ## The first game's seed when >= 0 (--seed=N, or set by a tool before the node enters the tree); random otherwise.
@@ -254,6 +269,14 @@ func show_join() -> Node:
 	return _switch_to(JOIN_SCENE)
 
 
+## The leaderboard (docs/SPEC_RANKING.md §9): this session's ranking.
+func show_ranking() -> Node:
+	if seats != null:
+		seats.reset()
+	input = solo
+	return _switch_to(RANKING_SCENE)
+
+
 ## A versus race of the join screen's seats: locks their line-up and opens the race screen. Returns null, and leaves
 ## the current screen alone, when the seats cannot make a match (World.versus_valid()).
 func start_versus() -> Node:
@@ -308,6 +331,9 @@ func _switch_to(path: String) -> Node:
 
 
 func _input(event: InputEvent) -> void:
+	if admin_enabled and is_admin_key(event):
+		toggle_admin()
+		return
 	if is_fullscreen_key(event):
 		toggle_fullscreen()
 		return
@@ -325,7 +351,9 @@ func _process(delta: float) -> void:
 		return
 	if _screen == null:
 		return
-	_screen.frame(clock.advance(delta), delta)
+	# The dashboard is a full-screen page: the game waits behind it.
+	var paused_by_admin := admin != null and admin.visible
+	_screen.frame(0 if paused_by_admin else clock.advance(delta * tuning.value(Tuning.TIME_SCALE)), delta)
 	# Menu commands live for one frame: a screen takes them in frame(), and a screen without menus (the game) never
 	# does, so they must not pile up there.
 	nav.clear()
@@ -635,11 +663,42 @@ func selftest_versus_problems() -> PackedStringArray:
 		replay.step(step)
 	if replay.checksum() != game_match.checksum():
 		problems.append("versus: a replay of the same inputs differs")
-	world.players[0].fuel = 0.01
+	if world.is_race():
+		# Seat 1 is first across the finish line, the camera on it and the other cars just behind it, over the line too.
+		world.camera_y = world.cfg.race_finish_px
+		for p: Car in world.players:
+			p.y_world = world.cfg.race_finish_px + (3000.0 if p.slot == 1 else 2000.0 - 100.0 * p.slot)
+	else:
+		world.players[0].fuel = 0.01
 	race.step_once(seats.step_bytes(slots))
 	if game_match.phase != Match.ROUND_OVER or game_match.last_round_winner() != 1:
-		problems.append("versus: the round did not end with the seat that ran dry")
+		problems.append("versus: the round did not end with the seat that reached the finish line")
 	race.render()
 	if show_title() == null or seats.people() != 0:
 		problems.append("versus: could not go back to the title")
 	return problems
+
+
+# --- Developer dashboard ---------------------------------------------------------------------------------------------
+
+
+## True for F1 going down, not a repeat.
+static func is_admin_key(event: InputEvent) -> bool:
+	var key := event as InputEventKey
+	return key != null and key.pressed and not key.echo and key.physical_keycode == KEY_F1
+
+
+## Shows or hides the dashboard, building it the first time.
+func toggle_admin() -> void:
+	if admin == null:
+		admin = Admin.new()
+		admin.setup(self)
+		add_child(admin)
+	admin.toggle()
+
+
+## Gives the running game (the screen's world) the dashboard's values. A screen with no world has nothing to change.
+func retune() -> void:
+	var world: Object = _screen.get("world") if _screen != null else null
+	if world != null:
+		tuning.apply(world.cfg)

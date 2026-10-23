@@ -84,7 +84,12 @@ func _draw_right_panel(car: Car) -> void:
 	Draw.text_centred(self, font, cx, rows[0], "SPEED", small, ViewConfig.YELLOW)
 	Draw.text(self, font, x, value_top, speed, medium, ViewConfig.WHITE)
 	Draw.text(self, font, x + speed_w + small, value_top + medium - small, unit, small, ViewConfig.GREY)
-	draw_row(self, font, cx, rows[1], "NITRO", "ON" if car.gear == Car.GEAR_NITRO else "OFF", ViewConfig.YELLOW)
+	if world.cfg.nitro_tank_seconds > 0.0:
+		# The tank, in percent: it turns red when it is empty.
+		var tank_colour := ViewConfig.LIGHT_RED if car.nitro_tank <= 0.0 else ViewConfig.YELLOW
+		draw_row(self, font, cx, rows[1], "NITRO", "%3d%%" % floori(car.nitro_tank * 100.0 + 0.5), tank_colour)
+	else:
+		draw_row(self, font, cx, rows[1], "NITRO", "ON" if car.gear == Car.GEAR_NITRO else "OFF", ViewConfig.YELLOW)
 	var low := car.fuel < ViewConfig.LOW_FUEL
 	var fuel_colour := ViewConfig.LIGHT_RED if low else ViewConfig.WHITE
 	draw_row(self, font, cx, rows[2], "FUEL", "%3d" % floori(car.fuel + 0.5), fuel_colour)

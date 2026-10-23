@@ -41,6 +41,13 @@ var distance: float = 0.0
 ## Versus: 1 if the car touched the bottom edge in the last running step (held on it, or its bottom edge at
 ## Config.edge_touch or lower). It then earns no pass or distance points and loses extra fuel.
 var touching_edge: int = 0
+## Nitro tank, 0 (empty) to 1 (full), and the px of road driven without an accident since it last filled up or was
+## emptied (Config.nitro_tank_seconds, nitro_recharge_px; all unused while the profile has no tank).
+var nitro_tank: float = 1.0
+var nitro_progress: float = 0.0
+## Race: the place at the finish line, 1 for the first car across, 0 while the car has not crossed it. A car that has
+## crossed is no longer alive (it takes no more part in the race).
+var finish_place: int = 0
 ## The seat's own RNG stream, seeded by World.seat_seed(). In versus mode the seat's oil-skid direction, roadside
 ## crash cost and centre-bump direction come from it, so a seat never moves the world RNG that makes the traffic.
 ## Single-player mode draws them from the world RNG, as Phaser did.
@@ -51,25 +58,29 @@ func is_skidding() -> bool:
 	return slide_vx != 0.0
 
 
-## Top speed of a gear, km/h.
-static func gear_top(p_gear: int) -> float:
-	return Config.NITRO_TOP if p_gear == GEAR_NITRO else Config.LOW_GEAR_TOP
+## Top speed of a gear, km/h. `cfg` is the game's Config; without one, the rules' own constants.
+static func gear_top(p_gear: int, cfg: Config = null) -> float:
+	if cfg == null:
+		return Config.NITRO_TOP if p_gear == GEAR_NITRO else Config.LOW_GEAR_TOP
+	return cfg.nitro_top if p_gear == GEAR_NITRO else cfg.low_gear_top
 
 
 ## Advances speed (km/h) by one step. Brake beats everything. Above the gear's top the car falls back at
 ## OVERSPEED_FALL. Otherwise the throttle accelerates (nitro is slow below 160 km/h); with no throttle it coasts.
-static func step_speed(p_speed: float, p_gear: int, accel: bool, brake: bool) -> float:
-	var top := gear_top(p_gear)
+## The rates are `cfg`'s (a game's, which the developer dashboard may have changed), or the constants without one.
+static func step_speed(p_speed: float, p_gear: int, accel: bool, brake: bool, cfg: Config = null) -> float:
+	var rules := cfg if cfg != null else Config.new()
+	var top := gear_top(p_gear, rules)
 	if brake:
-		return maxf(0.0, p_speed - Config.BRAKE * Config.DT)
+		return maxf(0.0, p_speed - rules.brake_decel * Config.DT)
 	if p_speed > top:
-		return maxf(top, p_speed - Config.OVERSPEED_FALL * Config.DT)
+		return maxf(top, p_speed - rules.overspeed_fall * Config.DT)
 	if accel:
-		var rate := Config.LOW_GEAR_ACCEL
+		var rate := rules.low_gear_accel
 		if p_gear == GEAR_NITRO:
-			rate = Config.NITRO_SLOW_ACCEL if p_speed < Config.NITRO_SLOW_BELOW else Config.NITRO_ACCEL
+			rate = rules.nitro_slow_accel if p_speed < rules.nitro_slow_below else rules.nitro_accel
 		return minf(top, p_speed + rate * Config.DT)
-	return maxf(0.0, p_speed - Config.DRAG * Config.DT)
+	return maxf(0.0, p_speed - rules.drag_decel * Config.DT)
 
 
 ## Lateral steering rate in px/s: zero while stopped, full from 30 km/h, slower at high speed.
@@ -148,6 +159,9 @@ func clone() -> Self:
 	c.human = human
 	c.distance = distance
 	c.touching_edge = touching_edge
+	c.nitro_tank = nitro_tank
+	c.nitro_progress = nitro_progress
+	c.finish_place = finish_place
 	c.rng = rng.clone()
 	return c
 
@@ -156,7 +170,7 @@ func clone() -> Self:
 func to_array() -> Array:
 	return [
 		slot, x, y_world, w, h, speed, gear, slide_vx, invulnerable, fuel, score, alive, events, human, distance,
-		touching_edge, rng.state
+		touching_edge, nitro_tank, nitro_progress, finish_place, rng.state
 	]
 
 
@@ -178,5 +192,8 @@ static func from_array(a: Array) -> Self:
 	c.human = a[13]
 	c.distance = a[14]
 	c.touching_edge = a[15]
-	c.rng = Rng.new(a[16])
+	c.rng = Rng.new(a[19])
+	c.nitro_tank = a[16]
+	c.nitro_progress = a[17]
+	c.finish_place = a[18]
 	return c

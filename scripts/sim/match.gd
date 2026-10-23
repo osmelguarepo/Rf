@@ -22,6 +22,11 @@ extends RefCounted
 ## A round nobody won (World.winner NO_WINNER) counts for nobody: no win for anyone, one round more played (and, with a
 ## single human, a round the human did not win).
 ##
+## A race match (World.is_race(), the game's rules; docs/SPEC_RANKING.md) is Config.match_races races. Each race gives every seat
+## Config.RACE_POINTS by its place (World.standings()); the most race points win the match, a tie going to the better place
+## in the last race, so some seat, a bot's too, always does. A person given the bot byte 0xFF leaves the match
+## (abandoned_mask) and ranks last in ranking_order().
+##
 ## Each round starts afresh (World.start_round()): points, distance, fuel, traffic, gaps, the difficulty clock and the
 ## bots. The world's RNG, the seats' and the bots' streams go on from the round before, so every round is new and the
 ## whole match still follows from its seed.
@@ -33,7 +38,7 @@ const Car := preload("res://scripts/sim/car.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 
 ## Layout version of to_array().
-const FORMAT := 1
+const FORMAT := 2
 
 const PLAYING := 0
 const ROUND_OVER := 1
@@ -53,7 +58,7 @@ const EVENT_NAMES := ["round_over", "match_over", "round_start"]
 const NO_WINNER := World.NO_WINNER
 
 ## The scalar fields, in to_array() order.
-const SCALARS := ["phase", "round_number", "winner", "phase_ticks", "events"]
+const SCALARS := ["phase", "round_number", "winner", "phase_ticks", "events", "abandoned_mask"]
 
 ## The world of the round being played (or just played). Its fields are what the race screen draws.
 var world: World
@@ -73,6 +78,13 @@ var totals: Array[int] = []
 var distances: Array[float] = []
 ## The winner of each round finished so far, in order, NO_WINNER for a round nobody won.
 var round_winners: Array[int] = []
+## Race match, per seat: race points over the races finished (Config.RACE_POINTS by place).
+var race_points: Array[int] = []
+## Race match: the seats in finishing order, best first, of each race finished so far, one race after the other (so
+## `players` seats per race).
+var race_order: Array[int] = []
+## Race match: the seats (a bit each) of people who left the match. They rank last in it, whatever they scored.
+var abandoned_mask: int = 0
 
 
 ## A match of p_seats seats, seat s a person's if p_humans has its bit (1 << s): World.versus() and its rules. null
@@ -89,6 +101,7 @@ static func create(p_cfg: Config, p_seed: int, p_seats: int, p_humans: int) -> S
 		m.wins.append(0)
 		m.totals.append(0)
 		m.distances.append(0.0)
+		m.race_points.append(0)
 	return m
 
 
@@ -99,6 +112,10 @@ static func create(p_cfg: Config, p_seed: int, p_seats: int, p_humans: int) -> S
 func step(inputs: PackedByteArray) -> void:
 	events = 0
 	phase_ticks += 1
+	if world.is_race() and phase != MATCH_OVER:
+		for p: Car in world.players:
+			if p.human != 0 and p.slot < inputs.size() and PlayerInput.is_bot(inputs[p.slot]):
+				abandon(p.slot)
 	world.step(inputs)
 	if phase == PLAYING:
 		if world.phase == World.ROUND_OVER:
@@ -145,6 +162,8 @@ func human_seats() -> Array[int]:
 func _end_round() -> void:
 	var round_winner := world.winner
 	round_winners.append(round_winner)
+	if world.is_race():
+		_score_race()
 	if round_winner != NO_WINNER:
 		wins[round_winner] += 1
 	for p: Car in world.players:
@@ -161,6 +180,8 @@ func _end_round() -> void:
 
 ## True when the match is decided after the rounds so far; sets `winner`.
 func _decide() -> bool:
+	if world.is_race():
+		return _decide_race()
 	var humans := human_seats()
 	if humans.size() == 1:
 		var lone := humans[0]
@@ -216,7 +237,7 @@ func to_array() -> Array:
 	var a: Array = [FORMAT]
 	for field: String in SCALARS:
 		a.append(get(field))
-	for values: Array in [wins, totals, distances, round_winners]:
+	for values: Array in [wins, totals, distances, round_winners, race_points, race_order]:
 		var plain: Array = []
 		plain.append_array(values)
 		a.append(plain)
@@ -226,7 +247,7 @@ func to_array() -> Array:
 
 ## Rebuilds a match from to_array(). p_cfg must be the profile the array was made with.
 static func from_array(p_cfg: Config, a: Array) -> Self:
-	if a.size() != 6 + SCALARS.size() or a[0] != FORMAT:
+	if a.size() != 8 + SCALARS.size() or a[0] != FORMAT:
 		push_error("Match.from_array: wrong format")
 		return null
 	var m := Self.new()
@@ -237,7 +258,9 @@ static func from_array(p_cfg: Config, a: Array) -> Self:
 	m.totals.assign(a[at + 1])
 	m.distances.assign(a[at + 2])
 	m.round_winners.assign(a[at + 3])
-	m.world = World.from_array(p_cfg, a[at + 4])
+	m.race_points.assign(a[at + 4])
+	m.race_order.assign(a[at + 5])
+	m.world = World.from_array(p_cfg, a[at + 6])
 	return m
 
 
@@ -254,5 +277,66 @@ func clone() -> Self:
 	m.totals = totals.duplicate()
 	m.distances = distances.duplicate()
 	m.round_winners = round_winners.duplicate()
+	m.race_points = race_points.duplicate()
+	m.race_order = race_order.duplicate()
 	m.world = world.clone()
 	return m
+
+
+## A race match (World.is_race()): decided after cfg.match_races races, by the most race points; a tie goes to the one
+## who placed better in the last race, so some seat, a bot's too, always wins it.
+func _decide_race() -> bool:
+	if round_winners.size() < world.cfg.match_races:
+		return false
+	winner = ranking_order()[0]
+	return true
+
+
+## Counts the race that just ended: its places and their race points.
+func _score_race() -> void:
+	var order := world.standings()
+	race_order.append_array(order)
+	for place in order.size():
+		race_points[order[place]] += Config.RACE_POINTS[mini(place, Config.RACE_POINTS.size() - 1)]
+
+
+## Race match: the seats by race points, best first; level seats by their place in the last race.
+func points_order() -> Array[int]:
+	var seats := world.players.size()
+	var last: Array = race_order.slice(race_order.size() - seats) if race_order.size() >= seats else []
+	var order: Array[int] = []
+	for p: Car in world.players:
+		order.append(p.slot)
+	order.sort_custom(func(a: int, b: int) -> bool:
+		if race_points[a] != race_points[b]:
+			return race_points[a] > race_points[b]
+		return last.find(a) < last.find(b))
+	return order
+
+
+## Race match: the order the ranking uses, best first. As points_order(), but a person who left the match is last.
+func ranking_order() -> Array[int]:
+	var order: Array[int] = []
+	var left: Array[int] = []
+	for slot: int in points_order():
+		if (abandoned_mask & (1 << slot)) != 0:
+			left.append(slot)
+		else:
+			order.append(slot)
+	order.append_array(left)
+	return order
+
+
+## A person leaves the match for good (their seat's bot drives on): in the ranking they take the last place.
+func abandon(slot: int) -> void:
+	if world.players[slot].human != 0:
+		abandoned_mask |= 1 << slot
+
+
+## Race match: the place (1 for the first) of a seat in race number `race` (0 for the first); 0 for a race not played.
+func race_place(race: int, slot: int) -> int:
+	var seats := world.players.size()
+	for place in seats:
+		if (race + 1) * seats <= race_order.size() and race_order[race * seats + place] == slot:
+			return place + 1
+	return 0

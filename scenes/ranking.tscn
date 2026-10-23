@@ -1,0 +1,14 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/app/ranking_screen.gd" id="1_ranking"]
+[ext_resource type="Script" path="res://scripts/view/road.gd" id="2_road"]
+[ext_resource type="Script" path="res://scripts/view/ranking_view.gd" id="3_view"]
+
+[node name="Ranking" type="Node2D"]
+script = ExtResource("1_ranking")
+
+[node name="Road" type="Node2D" parent="."]
+script = ExtResource("2_road")
+
+[node name="RankingView" type="Node2D" parent="."]
+script = ExtResource("3_view")

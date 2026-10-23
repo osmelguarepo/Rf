@@ -12,6 +12,7 @@ extends "res://tests/test_case.gd"
 const SteamInput := preload("res://scripts/input/steam_input.gd")
 const FakeSteam := preload("res://tests/fake_steam.gd")
 const S := preload("res://tests/screen_helpers.gd")
+const SimHelpers := preload("res://tests/sim_helpers.gd")
 const App := preload("res://scripts/app/app.gd")
 const Held := preload("res://scripts/input/held.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
@@ -671,9 +672,9 @@ func test_the_results_panels_through_steam() -> void:
 		if m.phase == Match.MATCH_OVER:
 			break
 		S.frame(app, 5)
-		m.world.players[0].fuel = 0.01
+		SimHelpers.arrive(m.world, 1)
 		S.frame(app, 1)
-		assert_ne(m.phase, Match.PLAYING, "P1 ran dry: the round is over")
+		assert_ne(m.phase, Match.PLAYING, "P2 reached the finish line: the round is over")
 		app.poll_steam()
 		assert_eq(fake.active_set[H1], fake.set_handles["menus"], "the menus set on the results")
 		if m.phase == Match.ROUND_OVER:

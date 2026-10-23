@@ -40,7 +40,7 @@ func test_the_title_opens_on_local() -> void:
 	assert_eq(S.screen_name(app), "Title")
 	assert_eq(title.choice, Title.CHOICE_LOCAL)
 	assert_eq(title.get_node("TitleView").choice, Title.CHOICE_LOCAL)
-	assert_eq(ViewConfig.TITLE_CHOICES, ["LOCAL", "ONLINE"])
+	assert_eq(ViewConfig.TITLE_CHOICES, ["LOCAL", "ONLINE", "RANKING"])
 
 
 ## The single-player game (stages) is no longer on the title, but the app can still start it: the keyboard-and-every-pad
@@ -107,13 +107,13 @@ func test_a_click_on_a_button_picks_it() -> void:
 	assert_eq(S.screen_name(app), "Join")
 
 
-## The title's layout: two buttons on the road, apart, clear of the car, the note band and the footer.
+## The title's layout: three buttons on the road, apart, clear of the car, the note band and the footer.
 func test_the_two_buttons_fit_between_the_title_and_the_car() -> void:
 	var buttons := TitleView.choice_buttons()
 	var car := TitleView.car_box(Config.standard())
 	var band := TitleView.note_band(app.atlas.font)
 	assert_eq(buttons.size(), ViewConfig.TITLE_CHOICES.size())
-	assert_false(buttons[0].intersects(buttons[1]))
+	assert_false(buttons[0].intersects(buttons[1]) or buttons[1].intersects(buttons[2]))
 	for button: Rect2i in buttons:
 		assert_false(button.intersects(car), "%s clear of the car" % button)
 		assert_false(button.intersects(band), "%s clear of the note" % button)

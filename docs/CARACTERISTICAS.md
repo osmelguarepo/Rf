@@ -9,29 +9,41 @@ Formato: **Característica** y, debajo, **Cómo**.
 
 ## Sección 1. Modos de juego
 
-1. **El juego tiene dos modos: LOCAL y ONLINE.**
+1. **El juego tiene tres opciones en el título: LOCAL, ONLINE y RANKING.**
    - 1.1 Cómo: en la pantalla de título se elige con Arriba/Abajo (flechas, W/S, cruceta o palanca izquierda) y se confirma
      con Enter, Espacio, A o Start. También sirve un clic o toque sobre la opción.
    - 1.2 **LOCAL** funciona hoy: humanos en la misma pantalla, y bots en los puestos vacíos.
    - 1.3 **ONLINE** (solo humanos) todavía no está construido: aparece como "COMING SOON" y no se puede iniciar.
+   - 1.4 **RANKING** abre la clasificación de la sesión (ver 3.4).
 
-2. **LOCAL: hasta 6 autos en una sola pantalla, con una partida al mejor de 3 rondas.**
-   - 2.1 Cómo: cada persona se une con su mando (A) o, si juega sola, con el teclado (Enter). Gana la partida el primero en
-     llegar a 2 rondas ganadas.
+2. **LOCAL: hasta 6 autos en una sola pantalla, con una partida de 3 carreras.**
+   - 2.1 Cómo: cada persona se une con su mando (A) o, si juega sola, con el teclado (Enter). Una partida son 3 carreras hasta la
+     meta (13 500 px). En la pantalla de unión, Arriba/Abajo cambian la última letra del nombre de quien tiene el asiento,
+     Derecha añade una letra (hasta 8) y Izquierda la quita (mínimo 3; por debajo vuelve a P1 a P6).
    - 2.2 El antiguo juego de un jugador por etapas (metas de 13 500, 15 750, 18 000 y 20 250 px, con el tanque lleno en cada
      etapa) ya no está en el menú; su código y sus pruebas siguen en el repositorio.
 
-3. **LOCAL: empate y resultados.**
-   - 3.2 Con 3 o más jugadores puede haber empate 1-1-1: tras 5 rondas gana quien tenga más rondas, luego más puntos totales y
-     luego más distancia. Si siguen iguales, nadie gana.
-   - 3.3 Con un solo jugador, la partida termina al ganar 2 rondas o al no ganar 2.
+3. **LOCAL: carreras, puntos de carrera y ranking** (`docs/SPEC_RANKING.md`).
+   - 3.1 Cada carrera: al cruzar el primero la meta empieza una cuenta atrás de 10 s. Quien cruza queda clasificado por orden
+     de llegada y sale de la pista; al acabar la cuenta, los que siguen se clasifican por distancia. Si todos cruzan antes, la
+     carrera acaba al instante.
+   - 3.2 Puntos de carrera por puesto: 10, 7, 5, 3, 2, 1. Gana la partida quien más puntos suma tras las 3 carreras; el empate
+     lo decide el mejor puesto en la última carrera. Un bot también puede ganar la partida.
+   - 3.3 Ranking: al acabar la partida cada persona gana o pierde puntos según su puesto final entre todos los coches (con
+     3 coches, +25, 0, -25; con 6, +30, +18, +8, -8, -18, -30). Nunca baja de 0. Los bots no tienen ranking. Quien se
+     desconecta o abandona la partida (Esc, o su mando se va) queda último.
+   - 3.4 Divisiones por puntos: BRONZE 0, SILVER 300, GOLD 700, PLATINUM 1200, DIAMOND 1800. La pantalla de fin de partida
+     muestra los puestos, los puntos y el cambio de ranking (+18 / -8) con su división y UP o DOWN si cambió. La pantalla
+     RANKING del título lista a los jugadores de la sesión; todo se pierde al cerrar el juego.
+   - 3.5 Los números (tablas, umbrales, 3 carreras, cuenta atrás) son propuestas; el panel F1 (`--admin`) cambia las carreras
+     por partida y la cuenta atrás.
 
 4. **Los bots rellenan automáticamente todos los puestos vacíos.**
    - 4.1 Cómo: no hay selector. Con un humano hay 5 bots, con dos humanos 4, y así hasta 6 autos en total. Cuando alguien se
      une, un bot le cede el puesto; si se va, el bot vuelve.
    - 4.2 Los bots aceleran siempre, pasan a marcha alta desde 160 km/h si hay 150 px libres delante, buscan el carril vecino más
      despejado, corrigen los derrapes, persiguen los autos arcoíris y reaccionan con 12 pasos de retraso.
-   - 4.3 Los bots nunca ganan una ronda ni la partida.
+   - 4.3 Los bots ocupan puestos y pueden ganar carreras y la partida, pero no tienen ranking.
 
 ---
 
@@ -120,14 +132,15 @@ Formato: **Característica** y, debajo, **Cómo**.
 24. **Los jugadores se atraviesan entre sí.**
     - 24.1 Cómo: los coches de los jugadores no chocan entre ellos; solo chocan con el tráfico.
 
-25. **Una ronda termina cuando un jugador humano es eliminado.**
-    - 25.1 Cómo: se elimina por camión o por tanque vacío. Un bot eliminado desaparece y la ronda sigue.
-    - 25.2 Gana la ronda el humano vivo con más puntos (luego más distancia, luego más combustible). Si hay un solo humano, gana
-      solo si supera a cada bot vivo. Si todos los bots quedan eliminados con un solo humano, la ronda termina y gana el humano.
+25. **Una carrera termina con la cuenta atrás tras el primer coche en la meta, o cuando todos han cruzado.**
+    - 25.1 Cómo: no hay eliminados en LOCAL: un camión es un choque (pierdes velocidad y el nitro) y solo una desconexión saca a
+      un jugador. Quien cruza la meta sale de la pista.
+    - 25.2 La carrera la gana el primero en cruzar (persona o bot). Las reglas antiguas de eliminación siguen en
+      `Config.standard()`, que usan las pruebas de Phaser.
 
-26. **Cada ronda empieza de cero.**
-    - 26.1 Cómo: se reinician puntos, distancia, combustible, tráfico y dificultad. Los resultados se muestran en un panel; tras 1 s
-      se continúa con A o Start.
+26. **Cada carrera empieza de cero.**
+    - 26.1 Cómo: se reinician puntos, distancia, nitro, tráfico y dificultad. Los resultados se muestran en un panel (puesto,
+      puntos de la carrera y total); tras 1 s se continúa con A o Start.
 
 27. **Al terminar la partida se puede hacer revancha.**
     - 27.1 Cómo: A o Start dan la revancha con los mismos asientos y tráfico nuevo; B o Back vuelve a la pantalla de unión con los

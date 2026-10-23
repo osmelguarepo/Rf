@@ -36,6 +36,7 @@ You need the Godot 4.7.2 editor, the standard build (not .NET): the `Godot_v4.7.
   godot --headless --path . --import   # once per clone: imports the art into .godot/
   godot --path .                       # the game
   godot --path . -- --seed=42          # the first game uses seed 42, the next ones 43, 44, ...
+  godot --path . -- --admin           # developer dashboard: F1 shows sliders for game speed and the car speed rules
   ```
 
   Without the import the art does not load. Without `--seed` the first game's seed is random; every new game uses

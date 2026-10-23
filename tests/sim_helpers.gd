@@ -35,11 +35,12 @@ static func quiet_versus(cfg: Config, seed_value: int, seats: int, humans: int) 
 	return w
 
 
-## Stops a world's spawner: nothing new comes onto the road.
+## Stops a world's spawner: nothing new comes onto the road. Also skips the start countdown of a race.
 static func quiet(w: World) -> void:
 	w.spawner.car_gap = INF
 	w.spawner.oil_gap = INF
 	w.spawner.fuel_gap = INF
+	w.countdown = 0
 
 
 ## Puts a seat's car with its hitbox's top-left corner at screen (x, screen_top).
@@ -110,3 +111,22 @@ static func find(w: World, id: int) -> Traffic:
 		if c.id == id:
 			return c
 	return null
+
+
+## A race round (World.is_race()) in which the car in `slot` is the first across the finish line now, the camera on it
+## and every other car 60 px behind, as a real round has them: the others have not crossed, so the finish countdown
+## starts.
+static func arrive_alone(w: World, slot: int) -> void:
+	var line := w.cfg.race_finish_px
+	w.camera_y = line
+	for p: Car in w.players:
+		p.y_world = line if p.slot == slot else line - 60.0
+
+
+## A race round that ends in the next step with `slot` the winner: that car is across the line, and every other car
+## well over it, behind in the places in seat order (the camera on the line, so the bottom edge moves no one).
+static func arrive(w: World, slot: int) -> void:
+	var line := w.cfg.race_finish_px
+	w.camera_y = line
+	for p: Car in w.players:
+		p.y_world = line + 3000.0 if p.slot == slot else line + 2000.0 - 100.0 * p.slot

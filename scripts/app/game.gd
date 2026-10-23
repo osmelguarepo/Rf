@@ -19,7 +19,7 @@ const Cars := preload("res://scripts/view/cars.gd")
 const Hud := preload("res://scripts/view/hud.gd")
 
 var app: App
-var cfg: Config = Config.standard()
+var cfg: Config = Config.game()
 var world: World
 ## Games started on this screen, counting the first.
 var games: int = 0
@@ -34,6 +34,7 @@ var hud: Hud
 ## Builds the screen and starts the first game. The app calls it before adding the screen to the tree.
 func setup(p_app: App) -> void:
 	app = p_app
+	app.tuning.apply(cfg)
 	road = $Road
 	cars = $Cars
 	hud = $Hud

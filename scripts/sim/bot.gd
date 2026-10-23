@@ -173,7 +173,8 @@ func decide(cfg: Config, car: Car, players: Array[Car], traffic: Array[Traffic],
 		var dx := corridor[target - first] - ghost_x
 		if absf(dx) > Car.steer_rate(cfg, car.speed) * Config.DT / 2.0:
 			steer = 1 if dx > 0.0 else -1
-	var high := car.speed >= Config.BOT_NITRO_KMH and free_ahead >= cfg.bot_free_ahead
+	# Nitro only while there is speed to gain: both gears end at the same top.
+	var high := car.speed >= Config.BOT_NITRO_KMH and (cfg.nitro_tank_seconds <= 0.0 or car.speed < cfg.nitro_top - 1.0) and free_ahead >= cfg.bot_free_ahead
 	return PlayerInput.encode(true, false, steer, high)
 
 

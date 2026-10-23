@@ -161,6 +161,7 @@ func _draw() -> void:
 	for c: Traffic in world.traffic:
 		if c.kind != Config.KIND_OIL:
 			_draw_traffic(c, rainbow(ticks) if c.kind == Config.KIND_FUEL_CAR else Color.WHITE)
+	_draw_finish_line()
 	_draw_tunnel_mouths()
 	var twin := tunnel.active(world)
 	if twin:
@@ -193,3 +194,19 @@ func _draw_traffic(c: Traffic, modulate: Color) -> void:
 	if c.kind == Config.KIND_FUEL_CAR:
 		fallback = modulate
 	Draw.sprite_on_hitbox(self, atlas, ViewConfig.TRAFFIC[c.kind], box, Vector2i(roundi(c.w), roundi(c.h)), fallback, modulate)
+
+
+## A race's finish line: a chequered band across the road where the leading car has to arrive.
+func _draw_finish_line() -> void:
+	if not world.is_race():
+		return
+	var y := screen_top(world, world.cfg.race_finish_px)
+	if y < -ViewConfig.FINISH_H or y > ViewConfig.VIEW_H:
+		return
+	var left := int(world.cfg.road_left)
+	var width := int(world.cfg.road_right) - left
+	var cell := floori(ViewConfig.FINISH_H / 2.0)
+	for row in 2:
+		for column in ceili(width / float(cell)):
+			var colour := ViewConfig.WHITE if (row + column) % 2 == 0 else ViewConfig.BLACK
+			Draw.rect(self, Rect2i(left + column * cell, y - ViewConfig.FINISH_H + row * cell, mini(cell, width - column * cell), cell), colour)

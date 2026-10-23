@@ -13,6 +13,7 @@ const Atlas := preload("res://scripts/view/atlas.gd")
 const Draw := preload("res://scripts/view/draw.gd")
 const PlayerColours := preload("res://scripts/view/player_colours.gd")
 const Seats := preload("res://scripts/input/seats.gd")
+const Names := preload("res://scripts/app/names.gd")
 const Config := preload("res://scripts/sim/config.gd")
 
 const TITLE := "LOCAL"
@@ -37,6 +38,7 @@ const STATUS_TOP := 236
 const HINTS := [
 	"A JOIN    B LEAVE    BOTS FILL THE EMPTY SEATS",
 	"START  RACE    BACK / ESC  TITLE",
+	"NAME: UP / DOWN  LETTER    RIGHT  ADD    LEFT  DELETE",
 ]
 const HINTS_TOP := 288
 const HINTS_STEP := 16
@@ -57,6 +59,8 @@ var can_start: bool = false
 var cars: int = 0
 ## Seconds since the screen opened, for the blink.
 var time: float = 0.0
+## The seats' names (the app's); null: P1 to P6.
+var names: Names = null
 
 
 func setup(p_atlas: Atlas, p_cfg: Config) -> void:
@@ -67,7 +71,8 @@ func setup(p_atlas: Atlas, p_cfg: Config) -> void:
 
 
 ## Takes what to draw from the seats.
-func show_seats(seats: Seats, p_time: float = 0.0) -> void:
+func show_seats(seats: Seats, p_time: float = 0.0, p_names: Names = null) -> void:
+	names = p_names
 	kinds = []
 	for seat in Seats.SEATS:
 		kinds.append(seats.kind_of(seat))
@@ -150,8 +155,11 @@ func draw_card(seat: int, kind: int, lit: bool) -> void:
 	var badge := Rect2i(inner.position, Vector2i(inner.size.x, CARD_BADGE_H))
 	Draw.rect(self, badge, FREE_BADGE if free else colour)
 	var name := PlayerColours.label(seat, kind != Seats.BOT)
+	if names != null and kind == Seats.PERSON:
+		name = names.name_of(seat)
+	var name_size := ViewConfig.TEXT_MEDIUM if Draw.text_width(font, name, ViewConfig.TEXT_MEDIUM) <= inner.size.x - 4 else ViewConfig.TEXT_SMALL
 	var ink := ViewConfig.GREY if free else PlayerColours.ink(seat)
-	Draw.text_centred(self, font, cx, r.position.y + CARD_LABEL_DY, name, ViewConfig.TEXT_MEDIUM, ink)
+	Draw.text_centred(self, font, cx, r.position.y + CARD_LABEL_DY + ((ViewConfig.TEXT_MEDIUM - name_size) >> 1), name, name_size, ink)
 	var size := Vector2i(roundi(cfg.player_w), roundi(cfg.player_h))
 	var box := Vector2i(cx - (size.x >> 1), r.position.y + CARD_CAR_DY)
 	Draw.sprite_on_hitbox(self, atlas, PlayerColours.seat_sprite(ViewConfig.PLAYER, seat), box, size, colour)

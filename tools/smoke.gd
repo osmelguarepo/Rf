@@ -190,6 +190,7 @@ func _initialize() -> void:
 	if scenario == "versus":
 		frames = user_arg("frames", str(VS_FRAMES)).to_int()
 		start_app(SEED)
+		_phaser_speed_rules()
 		return
 	frames = user_arg("frames", str(frames)).to_int()
 	if scenario != "1p":
@@ -304,6 +305,9 @@ func _do(action: String) -> void:
 			coasted_without_keys = Keyboard.held() == 0 and w != null and w.player().gear == Car.GEAR_LOW
 			if not coasted_without_keys:
 				_fail("the car did not drop to low gear when the keys went up (frame %d)" % frame)
+			# The keyboard's long nitro has emptied the tank: a full one for the pad's A to burn.
+			if w != null:
+				w.player().nitro_tank = 1.0
 			pad_button(PAD, JOY_BUTTON_A, true)
 		"check A held":
 			var both := Held.ACCEL | Held.NITRO
@@ -324,6 +328,9 @@ func _do(action: String) -> void:
 		"tap a":
 			# A is held while the pad drives: it goes up and down again, and stays down.
 			pad_button(PAD, JOY_BUTTON_A, false)
+			# The keyboard's long nitro has emptied the tank: a full one for the pad's A to burn.
+			if w != null:
+				w.player().nitro_tank = 1.0
 			pad_button(PAD, JOY_BUTTON_A, true)
 		"start from title":
 			app.start_game()
@@ -770,3 +777,14 @@ func _vs_report() -> void:
 	if not ok:
 		print("smoke: FAIL")
 	finish(0 if ok else 1, "smoke: PASS")
+
+
+## The versus scenario was written for Phaser's speed rules (low gear 198 km/h, slow nitro, no tank): its autopilot
+## pads and its timed fuel cuts keep the cars alive for that long. The game's own rules (Config.game()) are played by
+## the 1p scenario and the tests.
+func _phaser_speed_rules() -> void:
+	for pair: Array in [
+		["low_gear_top", 198.0], ["low_gear_accel", 70.0], ["nitro_accel", 45.0], ["nitro_slow_accel", 15.0],
+		["nitro_slow_below", 160.0], ["nitro_tank_seconds", 0.0], ["race_finish_px", 0.0],
+	]:
+		app.tuning.set_value(pair[0], pair[1])
