@@ -102,6 +102,32 @@ func test_input_events_reach_the_app() -> void:
 	assert_eq(app.input.pending, PlayerInput.CONFIRM)
 
 
+## The volume keys work on every screen and never reach it: minus lowers, plus raises, M mutes, and the readout shows.
+func test_the_volume_keys_change_the_volume_and_show_it() -> void:
+	_boot()
+	var bus_db := AudioServer.get_bus_volume_db(0)
+	var bus_mute := AudioServer.is_bus_mute(0)
+	var before: int = app.audio.volume
+	var pending_before: int = app.input.pending
+	for code: Key in [KEY_MINUS, KEY_EQUAL, KEY_EQUAL, KEY_KP_SUBTRACT]:
+		var key := InputEventKey.new()
+		key.physical_keycode = code
+		key.pressed = true
+		app._input(key)
+	assert_eq(app.audio.volume, before, "two down, two up")
+	assert_true(app.volume_view.visible)
+	assert_eq(app.volume_view.text, "VOL %d/10" % before)
+	var m := InputEventKey.new()
+	m.physical_keycode = KEY_M
+	m.pressed = true
+	app._input(m)
+	assert_true(app.audio.muted)
+	assert_eq(app.volume_view.text, "MUTE")
+	assert_eq(app.input.pending, pending_before, "the keys never reach the screen")
+	AudioServer.set_bus_volume_db(0, bus_db)
+	AudioServer.set_bus_mute(0, bus_mute)
+
+
 ## Joypad events take the keys' road: Input's state, and App._input(), which the engine calls with every event (here
 ## the test calls it, as the runner's tree delivers no events; tools/smoke.gd sends pad events through the engine). A
 ## on the title starts a game, A held is nitro and throttle, the stick steers, and Start pauses.

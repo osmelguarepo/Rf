@@ -25,6 +25,11 @@ Every file under `assets/` ships with the game: Godot imports it and packs it in
 | `assets/audio/menu_move.wav` | `tools/gen_audio.gd` (short square tick) | This project | Own work | Moving in a menu |
 | `assets/audio/menu_confirm.wav` | `tools/gen_audio.gd` (two rising square tones) | This project | Own work | Confirm in a menu |
 | `assets/audio/menu_back.wav` | `tools/gen_audio.gd` (two falling square tones) | This project | Own work | Back in a menu |
+| `assets/audio/cheer.wav` | `tools/gen_audio.gd` (low-passed noise swelling, with a flutter) | This project | Own work | A distant crowd when a car crosses the line |
+| `assets/audio/car_pass.wav` | `tools/gen_audio.gd` (noise with a rising and falling low-pass) | This project | Own work | Passing a traffic car |
+| `assets/audio/nitro_low.wav` | `tools/gen_audio.gd` (short square tone, 740 Hz) | This project | Own work | Low-nitro warning (tank under 20 %) |
+| `assets/audio/music_menu.wav` | `tools/gen_audio.gd` (square lead and triangle bass, A minor, 19 s loop) | This project | Own work | Music of the title, join and ranking screens |
+| `assets/audio/music_race.wav` | `tools/gen_audio.gd` (square lead, triangle bass, kick and hat, A minor, 10 s loop) | This project | Own work | Music of a race |
 | `assets/audio/kenney/powerUp2.ogg` | Kenney, [Digital Audio](https://kenney.nl/assets/digital-audio), unmodified | Kenney Vleugels (Kenney.nl) | CC0-1.0 | Picking up a fuel car |
 | `assets/audio/kenney/powerUp5.ogg` | Kenney, Digital Audio, unmodified | Kenney Vleugels (Kenney.nl) | CC0-1.0 | The nitro tank is full again |
 | `assets/audio/kenney/phaserUp5.ogg` | Kenney, Digital Audio, unmodified | Kenney Vleugels (Kenney.nl) | CC0-1.0 | Overtaking a car |

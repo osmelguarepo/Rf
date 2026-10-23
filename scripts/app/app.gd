@@ -45,6 +45,7 @@ const Tuning := preload("res://scripts/app/tuning.gd")
 const RankingStore := preload("res://scripts/app/ranking_store.gd")
 const Names := preload("res://scripts/app/names.gd")
 const Audio := preload("res://scripts/app/audio.gd")
+const VolumeView := preload("res://scripts/view/volume_view.gd")
 const Admin := preload("res://scripts/app/admin.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
@@ -59,6 +60,8 @@ const VERSUS_SCENE := "res://scenes/versus.tscn"
 const SELFTEST_TICKS := 600
 ## The screens whose menu commands make a sound (audio.gd).
 const MENU_SCREENS: Array[StringName] = [&"Title", &"Join", &"Ranking"]
+## Where the volume is saved (the game only: tests leave settings alone).
+const SETTINGS_PATH := "user://settings.cfg"
 const SELFTEST_FRAMES := 120
 ## Frames of the join screen and of a versus race the self test draws after the game's (B2).
 const SELFTEST_JOIN_FRAMES := 30
@@ -133,6 +136,7 @@ var ranking := RankingStore.new()
 var names := Names.new()
 ## The sound (docs/AUDIO.md); a node, so it is in the tree for its players.
 var audio: Audio = null
+var volume_view: VolumeView = null
 var admin: Admin = null
 ## Best score this session. A new game starts with it as its high score.
 var high_score: int = 0
@@ -153,6 +157,8 @@ var _selftest_problems := PackedStringArray()
 func _ready() -> void:
 	start()
 	start_steam()
+	audio.settings_path = SETTINGS_PATH
+	audio.load_settings()
 
 
 ## Boots and opens the title, or runs the self test and quits. _ready() calls it. Code that adds the app to a tree
@@ -230,6 +236,9 @@ func boot() -> bool:
 	if audio == null:
 		audio = Audio.new()
 		add_child(audio)
+	if volume_view == null:
+		volume_view = VolumeView.new()
+		add_child(volume_view)
 	solo = LocalInput.new()
 	seats = Seats.new()
 	seats.guid_of = guid_of
@@ -238,6 +247,7 @@ func boot() -> bool:
 	atlas = Atlas.new()
 	booted = atlas.load_all()
 	PlayerColours.add_frames(atlas)
+	volume_view.setup(atlas)
 	return booted
 
 
@@ -294,6 +304,28 @@ func start_versus() -> Node:
 	return _switch_to(VERSUS_SCENE)
 
 
+## The volume keys, on every screen: minus lowers, plus raises, M mutes (and again unmutes). True if `event` was one; it
+## never reaches the screens.
+func _volume_key(event: InputEvent) -> bool:
+	var key := event as InputEventKey
+	if key == null or not key.pressed:
+		return false
+	var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
+	if code != KEY_MINUS and code != KEY_KP_SUBTRACT and code != KEY_EQUAL and code != KEY_KP_ADD and code != KEY_M:
+		return false
+	if key.echo or audio == null:
+		return true
+	if code == KEY_M:
+		audio.toggle_mute()
+	elif code == KEY_MINUS or code == KEY_KP_SUBTRACT:
+		audio.volume_down()
+	else:
+		audio.volume_up()
+	if volume_view != null:
+		volume_view.show_text(audio.volume_text())
+	return true
+
+
 ## F11 and Alt+Enter: fullscreen, or back to a window (whose size and place the platform restores).
 func toggle_fullscreen() -> void:
 	var window := fullscreen_window
@@ -335,6 +367,8 @@ func _switch_to(path: String) -> Node:
 	_screen = scene.instantiate()
 	_screen.setup(self)
 	add_child(_screen)
+	if audio != null:
+		audio.music("music_menu" if _screen.name in MENU_SCREENS else "")
 	return _screen
 
 
@@ -344,6 +378,8 @@ func _input(event: InputEvent) -> void:
 		return
 	if is_fullscreen_key(event):
 		toggle_fullscreen()
+		return
+	if _volume_key(event):
 		return
 	if steam != null and steam.drops(event):
 		return

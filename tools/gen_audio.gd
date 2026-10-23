@@ -9,6 +9,22 @@ const RATE := 22050
 const OUT := "res://assets/audio/"
 var _noise_state := 12345
 
+## A song: its chords (each three tones, in semitones from A4), the bass root of each chord, the lead patterns (indices into
+## the chord, -1 a rest; the bars alternate between them), the seconds of a step (an eighth note), the volumes and whether
+## the drums play. Eight chords of eight steps: a seamless loop of 64 steps.
+const MENU_SONG := {
+	"chords": [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5], [0, 3, 7], [-4, 0, 3], [-2, 2, 5], [0, 3, 7]],
+	"roots": [-24, -28, -21, -26, -24, -28, -26, -24],
+	"patterns": [[0, -1, 1, -1, 2, -1, 1, -1], [2, -1, 1, -1, 0, -1, 1, 2]],
+	"step": 0.3, "lead": 0.22, "bass": 0.3, "drums": false,
+}
+const RACE_SONG := {
+	"chords": [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5], [0, 3, 7], [-4, 0, 3], [-2, 2, 5], [-2, 2, 5]],
+	"roots": [-24, -28, -21, -26, -24, -28, -26, -26],
+	"patterns": [[0, 1, 2, 1, 0, 1, 2, 2], [2, 1, 0, 1, 2, 2, 1, 0]],
+	"step": 0.16, "lead": 0.2, "bass": 0.34, "drums": true,
+}
+
 
 func _init() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
@@ -25,6 +41,11 @@ func _init() -> void:
 	_save("menu_move", _beep(660.0, 0.045, 0.1))
 	_save("menu_confirm", _two_tone(660.0, 990.0, 0.06))
 	_save("menu_back", _two_tone(660.0, 440.0, 0.06))
+	_save("cheer", _cheer())
+	_save("car_pass", _pass())
+	_save("nitro_low", _beep(740.0, 0.09, 0.16))
+	_save("music_menu", _song(MENU_SONG))
+	_save("music_race", _song(RACE_SONG))
 	quit()
 
 
@@ -155,6 +176,75 @@ func _fanfare() -> PackedFloat32Array:
 	for freq: float in [523.25, 659.25, 783.99]:
 		out.append_array(_beep(freq, 0.13, 0.3))
 	out.append_array(_beep(1046.5, 0.55, 0.32))
+	return out
+
+
+static func _triangle(phase: float) -> float:
+	return 4.0 * absf(fposmod(phase, 1.0) - 0.5) - 1.0
+
+
+static func _hz(semitones: int) -> float:
+	return 440.0 * pow(2.0, semitones / 12.0)
+
+
+## A chiptune loop: a square lead plucking the chord's tones, a triangle bass on the root, and (if asked) a kick and a hat.
+func _song(song: Dictionary) -> PackedFloat32Array:
+	var chords: Array = song["chords"]
+	var roots: Array = song["roots"]
+	var patterns: Array = song["patterns"]
+	var step_len := int(float(song["step"]) * RATE)
+	var out := PackedFloat32Array()
+	for bar in chords.size():
+		var chord: Array = chords[bar]
+		var pattern: Array = patterns[bar % patterns.size()]
+		for step in 8:
+			var idx: int = pattern[step]
+			var lead_hz := 0.0
+			if idx >= 0:
+				lead_hz = _hz(int(chord[idx]) + (12 if bar % 4 == 3 else 0))
+			var bass_hz := _hz(int(roots[bar]) + (12 if step % 4 == 2 else 0))
+			for i in step_len:
+				var t := float(i) / RATE
+				var p := float(i) / step_len
+				var v := 0.0
+				if lead_hz > 0.0:
+					v += _square(t * lead_hz, 0.25) * float(song["lead"]) * minf(1.0, t / 0.003) * (1.0 - 0.65 * p)
+				v += _triangle(t * bass_hz) * float(song["bass"]) * minf(1.0, t / 0.003) * (1.0 - 0.3 * p)
+				if bool(song["drums"]):
+					if step % 4 == 0:
+						v += sin(TAU * (110.0 - 60.0 * minf(1.0, t / 0.08)) * t) * 0.35 * maxf(0.0, 1.0 - t / 0.08)
+					elif step % 2 == 1:
+						v += _noise() * 0.12 * maxf(0.0, 1.0 - t / 0.04)
+				out.append(v)
+	return out
+
+
+## A crowd far away: low-passed noise swelling and falling, with a flutter.
+func _cheer() -> PackedFloat32Array:
+	var n := int(1.6 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var y := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var p := float(i) / n
+		y += 0.3 * (_noise() - y)
+		var flutter := 0.75 + 0.25 * sin(t * TAU * 9.0) * sin(t * TAU * 5.0)
+		out[i] = y * 1.4 * sin(p * PI) * flutter * 0.5
+	return out
+
+
+## A car going by: noise whose brightness rises and falls, loudest in the middle.
+func _pass() -> PackedFloat32Array:
+	var n := int(0.3 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var y := 0.0
+	for i in n:
+		var p := float(i) / n
+		var a := clampf((300.0 + 2200.0 * sin(p * PI)) / RATE * TAU, 0.0, 1.0)
+		y += a * (_noise() - y)
+		out[i] = y * 1.5 * sin(p * PI) * 0.5
 	return out
 
 

@@ -1,6 +1,6 @@
 # Audio
 
-Fuel Rivals has retro sound, all of it free: CC0 files from Kenney's Digital Audio pack, and effects the project makes itself with `tools/gen_audio.gd` (square waves, noise and sweeps, released as CC0). Every file and its licence is listed in `ASSETS.md`. There is no volume control or mute (a deliberate choice).
+Fuel Rivals has retro sound, all of it free: CC0 files from Kenney's Digital Audio pack, and effects and music the project makes itself with `tools/gen_audio.gd` (square and triangle waves, noise and sweeps, released as CC0). Every file and its licence is listed in `ASSETS.md`.
 
 ## What plays, and when
 
@@ -24,6 +24,14 @@ Fuel Rivals has retro sound, all of it free: CC0 files from Kenney's Digital Aud
 | Division up / down | a person's division changed, a second after the match ends | `kenney/zapThreeToneUp.ogg`, `kenney/zapThreeToneDown.ogg` |
 | Pause / resume | pause and resume | `pause.wav` |
 | Menu | tick on a move, blip on confirm, blip on back (title, join screen, ranking) | `menu_move.wav`, `menu_confirm.wav`, `menu_back.wav` |
+| Crowd | a person's car crosses the line (with the finish fanfare) | `cheer.wav` |
+| Car pass | a person's car passes a traffic car | `car_pass.wav` |
+| Low nitro | a person burns nitro with the tank under 20 %: a beep at once, then every half second | `nitro_low.wav` |
+| Music | a menu song on the title, join and ranking screens; a race song from the green light until the race ends | `music_menu.wav`, `music_race.wav` |
+
+## Volume
+
+On every screen: `-` (or numpad minus) lowers the volume, `+` (`=` or numpad plus) raises it, in tenths, and `M` mutes and unmutes. A tick plays at the new level and "VOL 7/10" or "MUTE" shows in the top right corner for a moment. Zero is silent. The master bus is what changes, so effects and music move together. The level is kept in `user://settings.cfg` (only the game writes it, never the tests) and the default is 7.
 
 ## Making the generated sounds
 

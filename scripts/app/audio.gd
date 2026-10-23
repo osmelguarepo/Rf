@@ -35,6 +35,9 @@ const STREAMS := {
 	"menu_move": preload("res://assets/audio/menu_move.wav"),
 	"menu_confirm": preload("res://assets/audio/menu_confirm.wav"),
 	"menu_back": preload("res://assets/audio/menu_back.wav"),
+	"cheer": preload("res://assets/audio/cheer.wav"),
+	"car_pass": preload("res://assets/audio/car_pass.wav"),
+	"nitro_low": preload("res://assets/audio/nitro_low.wav"),
 	"pickup": preload("res://assets/audio/kenney/powerUp2.ogg"),
 	"nitro_ready": preload("res://assets/audio/kenney/powerUp5.ogg"),
 	"overtake": preload("res://assets/audio/kenney/phaserUp5.ogg"),
@@ -44,10 +47,25 @@ const STREAMS := {
 	"rank_up": preload("res://assets/audio/kenney/zapThreeToneUp.ogg"),
 	"rank_down": preload("res://assets/audio/kenney/zapThreeToneDown.ogg"),
 }
+## The songs (loops, under the effects): the menus' and the race's.
+const MUSIC := {
+	"music_menu": preload("res://assets/audio/music_menu.wav"),
+	"music_race": preload("res://assets/audio/music_race.wav"),
+}
 ## Names that loop: the engine and the nitro burn.
 const LOOPS := ["engine", "nitro_loop"]
 ## Volume of each sound, in dB (the engine and nitro sit under the effects).
-const VOLUME_DB := {"engine": -12.0, "nitro_loop": -14.0, "nitro_start": -8.0, "skid": -8.0, "menu_move": -10.0, "bump": -4.0}
+const VOLUME_DB := {
+	"engine": -12.0, "nitro_loop": -14.0, "nitro_start": -8.0, "skid": -8.0, "menu_move": -10.0, "bump": -4.0,
+	"cheer": -12.0, "car_pass": -14.0, "nitro_low": -10.0,
+}
+const MUSIC_DB := -16.0
+## Master volume, in steps of a tenth (volume_up(), volume_down(), toggle_mute()), saved to settings_path.
+const VOLUME_STEPS := 10
+const DEFAULT_VOLUME := 7
+## Ticks between the beeps of the low-nitro warning, and the tank level that starts it.
+const LOW_NITRO_TANK := 0.2
+const LOW_NITRO_TICKS := 30
 const DEFAULT_DB := -6.0
 ## The engine's pitch scale: idle, and at the top speed.
 const ENGINE_PITCH_IDLE := 0.6
@@ -60,7 +78,17 @@ const LOG_SIZE := 64
 ## The last sounds asked for, oldest first.
 var played: Array[String] = []
 
+## Where the volume is kept ("" keeps nothing: the tests; App sets it for the game).
+var settings_path := ""
+## The volume in tenths (0 to VOLUME_STEPS), and whether sound is muted.
+var volume := DEFAULT_VOLUME
+var muted := false
+## The song playing ("" none).
+var music_playing := ""
+
 var _players: Dictionary = {}
+var _music_players: Dictionary = {}
+var _low_ticks := LOW_NITRO_TICKS
 # Race memory, for what changed since the last step.
 var _lights := 0
 var _countdown := -1
@@ -81,11 +109,81 @@ func _init() -> void:
 		player.max_polyphony = 1 if LOOPS.has(sound_name) else 3
 		add_child(player)
 		_players[sound_name] = player
+	for sound_name: String in MUSIC:
+		var player := AudioStreamPlayer.new()
+		player.stream = MUSIC[sound_name]
+		player.volume_db = MUSIC_DB
+		add_child(player)
+		_music_players[sound_name] = player
 	for sound_name: String in LOOPS:
-		var wav: AudioStreamWAV = STREAMS[sound_name]
-		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		wav.loop_begin = 0
-		wav.loop_end = wav.data.size() >> 1
+		_loop(STREAMS[sound_name])
+	for sound_name: String in MUSIC:
+		_loop(MUSIC[sound_name])
+
+
+static func _loop(wav: AudioStreamWAV) -> void:
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_begin = 0
+	wav.loop_end = wav.data.size() >> 1
+
+
+## Plays a song from its start ("" stops the music); the one already playing goes on.
+func music(song: String) -> void:
+	if song == music_playing:
+		return
+	if _music_players.has(music_playing):
+		(_music_players[music_playing] as AudioStreamPlayer).stop()
+	music_playing = song
+	if _music_players.has(song) and is_inside_tree():
+		(_music_players[song] as AudioStreamPlayer).play()
+
+
+## Reads the saved volume and applies it to the master bus.
+func load_settings() -> void:
+	if settings_path != "":
+		var file := ConfigFile.new()
+		if file.load(settings_path) == OK:
+			volume = clampi(int(file.get_value("audio", "volume", DEFAULT_VOLUME)), 0, VOLUME_STEPS)
+			muted = bool(file.get_value("audio", "muted", false))
+	_apply_volume()
+
+
+func volume_up() -> void:
+	muted = false
+	_set_volume(volume + 1)
+
+
+func volume_down() -> void:
+	_set_volume(volume - 1)
+
+
+func toggle_mute() -> void:
+	muted = not muted
+	_set_volume(volume)
+
+
+func _set_volume(steps: int) -> void:
+	volume = clampi(steps, 0, VOLUME_STEPS)
+	_apply_volume()
+	if settings_path != "":
+		var file := ConfigFile.new()
+		file.set_value("audio", "volume", volume)
+		file.set_value("audio", "muted", muted)
+		file.save(settings_path)
+	if not muted:
+		play("menu_move")
+
+
+## The master bus: silent when muted or at 0, else the volume's fraction in decibels.
+func _apply_volume() -> void:
+	var silent := muted or volume == 0
+	AudioServer.set_bus_mute(0, silent)
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(0.01, float(volume) / VOLUME_STEPS)))
+
+
+## The text of the volume for the screen: "VOL 7/10" or "MUTE".
+func volume_text() -> String:
+	return "MUTE" if muted else "VOL %d/%d" % [volume, VOLUME_STEPS]
 
 
 ## Plays a sound once from its start.
@@ -126,6 +224,7 @@ func begin_race() -> void:
 	_full.clear()
 	_burning = false
 	_delayed.clear()
+	_low_ticks = LOW_NITRO_TICKS
 
 
 func stop_loops() -> void:
@@ -159,6 +258,7 @@ func race_step(m: Match) -> void:
 	var standings := w.standings()
 	var crashed := false
 	var bumped := false
+	var low_nitro := false
 	for p: Car in w.players:
 		if p.human == 0:
 			continue
@@ -168,14 +268,19 @@ func race_step(m: Match) -> void:
 			bumped = true
 		if (p.events & World.EV_SKID) != 0:
 			play("skid")
+		if (p.events & World.EV_PASS) != 0:
+			play("car_pass")
 		if (p.events & World.EV_PICKUP) != 0:
 			play("pickup")
+		if p.alive != 0 and p.gear == Car.GEAR_NITRO and p.speed > 0.0 and p.nitro_tank < LOW_NITRO_TANK:
+			low_nitro = true
 		var full := p.nitro_tank >= 1.0
 		if full and not bool(_full.get(p.slot, true)):
 			play("nitro_ready")
 		_full[p.slot] = full
 		if p.finish_place > 0 and not bool(_finished.get(p.slot, false)):
 			play("finish")
+			play("cheer")
 		_finished[p.slot] = p.finish_place > 0
 		var place := standings.find(p.slot)
 		if w.countdown == 0 and place < int(_places.get(p.slot, place)):
@@ -185,6 +290,15 @@ func race_step(m: Match) -> void:
 		play("crash")
 	elif bumped:
 		play("bump")
+	# The low-nitro warning beeps at once, then every LOW_NITRO_TICKS while the tank stays low.
+	if low_nitro:
+		_low_ticks += 1
+		if _low_ticks >= LOW_NITRO_TICKS:
+			play("nitro_low")
+			_low_ticks = 0
+	else:
+		_low_ticks = LOW_NITRO_TICKS - 1
+	music("music_race" if m.phase == Match.PLAYING and w.countdown == 0 else "")
 
 
 ## The gantry's sounds: a beep as each red light comes on, a higher one when they go out.

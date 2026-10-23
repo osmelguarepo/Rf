@@ -183,7 +183,7 @@ Formato: **Característica** y, debajo, **Cómo**.
 
 35. **Arte con recursos libres.**
     - 35.1 Sprites de GrafxKid (CC0) y fuente Press Start 2P (OFL-1.1); el camión y la mancha de aceite están dibujados en código.
-      Sonido retro y libre (ver `docs/AUDIO.md`). Créditos y licencias en `ASSETS.md`.
+      Sonido y música retro y libres (ver `docs/AUDIO.md`). Créditos y licencias en `ASSETS.md`.
 
 ---
 
@@ -232,7 +232,7 @@ Formato: **Característica** y, debajo, **Cómo**.
 
 - No hay inicio de sesión (ni con Google ni con otra cuenta), ni cuentas de usuario.
 - No hay juego online ni servidor; el multijugador es solo local (LOCAL).
-- Hay efectos de sonido retro (ver `docs/AUDIO.md`), pero no música ni control de volumen.
+- Hay efectos de sonido y música retro (ver `docs/AUDIO.md`). El volumen se cambia con `-` y `+`, y `M` silencia; se guarda en `user://settings.cfg`.
 - No se guarda nada: la mejor puntuación dura solo mientras la sesión está abierta.
 - No hay controles táctiles, versión web ni potenciadores (las 30 ideas de power-ups están pendientes).
 - ONLINE aparece en el menú pero está bloqueado ("COMING SOON").

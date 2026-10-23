@@ -105,7 +105,7 @@ func test_crossing_the_line_and_overtaking() -> void:
 	m.world.players[0].alive = 0
 	audio.race_step(m)
 	audio.race_step(m)
-	assert_eq(audio.played, ["finish"] as Array[String], "once")
+	assert_eq(audio.played, ["finish", "cheer"] as Array[String], "once, with the crowd")
 
 
 func test_a_race_ending_a_pause_and_a_resume() -> void:
@@ -171,3 +171,107 @@ func test_a_match_result_plays_the_win_or_lose_jingle_and_the_division_sound_lat
 	assert_eq(audio.played, ["match_lose"] as Array[String], "the person ended last")
 	audio.advance(1.1)
 	assert_eq(audio.played, ["match_lose", "rank_down"] as Array[String])
+
+
+func test_a_person_passing_traffic_whooshes_and_a_bot_does_not() -> void:
+	var m := _match()
+	m.world.players[1].events = World.EV_PASS
+	audio.race_step(m)
+	assert_eq(audio.played, [] as Array[String])
+	m.world.players[0].events = World.EV_PASS
+	audio.race_step(m)
+	assert_eq(audio.played, ["car_pass"] as Array[String])
+
+
+func test_a_low_nitro_tank_beeps_at_once_and_then_every_half_second() -> void:
+	var m := _match()
+	var p := m.world.players[0]
+	p.gear = Car.GEAR_NITRO
+	p.speed = 200.0
+	p.nitro_tank = 0.5
+	audio.race_step(m)
+	assert_false(audio.played.has("nitro_low"), "a tank above the line is quiet")
+	p.nitro_tank = Audio.LOW_NITRO_TANK - 0.01
+	audio.race_step(m)
+	assert_eq(audio.played.count("nitro_low"), 1, "the first beep is at once")
+	for i in Audio.LOW_NITRO_TICKS - 1:
+		audio.race_step(m)
+	assert_eq(audio.played.count("nitro_low"), 1)
+	audio.race_step(m)
+	assert_eq(audio.played.count("nitro_low"), 2, "and the next one a half second on")
+	p.gear = Car.GEAR_LOW
+	audio.race_step(m)
+	assert_eq(audio.played.count("nitro_low"), 2, "none when nitro is not burning")
+
+
+func test_the_race_song_plays_once_the_lights_go_out_and_stops_when_the_race_ends() -> void:
+	var m := _match(true)
+	audio.race_step(m)
+	assert_eq(audio.music_playing, "", "silent while the lights count down")
+	for tick in 3 * Config.TICKS_PER_SECOND + 1:
+		_step(m)
+	assert_eq(audio.music_playing, "music_race")
+	H.arrive(m.world, 1)
+	_step(m)
+	assert_eq(audio.music_playing, "", "the jingle has the room")
+
+
+func test_the_music_switches_and_the_same_song_goes_on() -> void:
+	audio.music("music_menu")
+	assert_eq(audio.music_playing, "music_menu")
+	audio.music("music_menu")
+	audio.music("music_race")
+	assert_eq(audio.music_playing, "music_race")
+	audio.music("")
+	assert_eq(audio.music_playing, "")
+	assert_eq(audio.played, [] as Array[String], "songs are not in the log of effects")
+
+
+func test_the_songs_loop_over_their_whole_length() -> void:
+	for song: String in Audio.MUSIC:
+		var wav: AudioStreamWAV = Audio.MUSIC[song]
+		assert_eq(wav.loop_mode, AudioStreamWAV.LOOP_FORWARD, song)
+		assert_eq(wav.loop_end, wav.data.size() >> 1, song)
+		assert_gt(wav.get_length(), 8.0, song)
+
+
+func test_the_volume_goes_in_tenths_between_silence_and_full_and_mute_toggles() -> void:
+	var bus_db := AudioServer.get_bus_volume_db(0)
+	var bus_mute := AudioServer.is_bus_mute(0)
+	for i in 20:
+		audio.volume_up()
+	assert_eq(audio.volume, Audio.VOLUME_STEPS)
+	assert_almost_eq(AudioServer.get_bus_volume_db(0), 0.0, 1e-4)
+	assert_eq(audio.volume_text(), "VOL 10/10")
+	audio.volume_down()
+	assert_eq(audio.volume, Audio.VOLUME_STEPS - 1)
+	audio.toggle_mute()
+	assert_true(AudioServer.is_bus_mute(0))
+	assert_eq(audio.volume_text(), "MUTE")
+	audio.volume_up()
+	assert_false(audio.muted, "raising it unmutes")
+	for i in 20:
+		audio.volume_down()
+	assert_eq(audio.volume, 0)
+	assert_true(AudioServer.is_bus_mute(0), "zero is silent")
+	AudioServer.set_bus_volume_db(0, bus_db)
+	AudioServer.set_bus_mute(0, bus_mute)
+
+
+func test_the_volume_is_saved_and_read_back() -> void:
+	var path := "user://test_settings.cfg"
+	var bus_db := AudioServer.get_bus_volume_db(0)
+	var bus_mute := AudioServer.is_bus_mute(0)
+	audio.settings_path = path
+	audio.volume_down()
+	audio.volume_down()
+	audio.toggle_mute()
+	var other := Audio.new()
+	other.settings_path = path
+	other.load_settings()
+	assert_eq(other.volume, Audio.DEFAULT_VOLUME - 2)
+	assert_true(other.muted)
+	other.free()
+	DirAccess.remove_absolute(path)
+	AudioServer.set_bus_volume_db(0, bus_db)
+	AudioServer.set_bus_mute(0, bus_mute)
