@@ -1,0 +1,31 @@
+# Substrings refused in a display name (version 1, see names.BlocklistVersion). One per line, matched after the name is
+# upper-cased, also with look-alike digits (0 O, 1 I, 3 E, 4 A, 5 S, 7 T, 8 B). A starting list: extend it as reports arrive.
+FUCK
+SHIT
+CUNT
+BITCH
+ASSHOLE
+DICK
+COCK
+PUSSY
+WHORE
+SLUT
+RAPE
+NIGGER
+NIGGA
+FAGGOT
+RETARD
+NAZI
+HITLER
+PUTA
+PUTO
+MIERDA
+PENDEJO
+CABRON
+CONCHA
+JODER
+MARICON
+GILIPOLLAS
+CULO
+VERGA
+COJONES

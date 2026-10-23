@@ -1,0 +1,6 @@
+# Build output and local data of the backend
+/bin/
+/api
+/api.exe
+*.test
+.env

@@ -1,0 +1,134 @@
+# Fuel Rivals on one machine (Oracle Cloud Always Free, ARM64 Ampere): API, PostgreSQL, Caddy and game servers.
+# Copy this file, Caddyfile and .env.example to /opt/fuelrivals on the machine (docs/DEPLOY_ORACLE.md); the deploy
+# workflow does it. Only Caddy publishes ports; everything else talks on the private compose network.
+#
+#   docker compose up -d                       # postgres, api, caddy
+#   docker compose --profile game up -d        # also the game servers (once their image exists)
+#   docker compose logs -f api
+#
+# Updating without cutting matches off: the API restarts in seconds (players keep their sessions in PostgreSQL). Game
+# servers drain: `docker compose stop gameserver1` sends SIGTERM, the server stops taking new matches, finishes the rooms
+# in progress and exits; stop_grace_period is longer than a match. Bring the new image up afterwards. Caddy keeps open
+# WebSockets across a reload for `stream_close_delay` (see Caddyfile).
+
+name: fuelrivals
+
+x-game-server: &game-server
+  image: ghcr.io/${GHCR_OWNER}/fuelrivals-gameserver:${GAME_TAG:-latest}
+  profiles: ["game"]
+  restart: unless-stopped
+  # Longer than a match of three races plus results screens: Docker must not SIGKILL a server that is draining.
+  stop_grace_period: 20m
+  stop_signal: SIGTERM
+  depends_on:
+    api:
+      condition: service_healthy
+  networks: [internal]
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  # One process per vCPU (SPEC_ONLINE 16.1.10): about 1 CPU each on a 4 OCPU Ampere machine.
+  cpus: 1.0
+  mem_limit: 3g
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fuelrivals
+      POSTGRES_USER: fuelrivals
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuelrivals -d fuelrivals"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [internal]
+    security_opt: ["no-new-privileges:true"]
+    # Backups: see docs/DEPLOY_ORACLE.md (pg_dump to a second place, daily). Not exposed to the host or the internet.
+
+  api:
+    image: ghcr.io/${GHCR_OWNER}/fuelrivals-api:${API_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://fuelrivals:${POSTGRES_PASSWORD}@postgres:5432/fuelrivals?sslmode=disable
+      PUBLIC_URL: https://${DOMAIN:?set DOMAIN in .env}
+      API_PREFIX: /api
+      TRUST_PROXY: "true"
+      LISTEN_ADDR: ":8080"
+      MASTER_KEY: ${MASTER_KEY:?set MASTER_KEY in .env}
+      BAN_SALT: ${BAN_SALT:?set BAN_SALT in .env}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      SERVER_REGISTER_TOKEN: ${SERVER_REGISTER_TOKEN:?set SERVER_REGISTER_TOKEN in .env}
+      STEAM_APP_ID: ${STEAM_APP_ID:-480}
+      STEAM_TICKET_IDENTITY: ${STEAM_TICKET_IDENTITY:-fuelrivals}
+      STEAM_PARTNER_API_KEY: ${STEAM_PARTNER_API_KEY:-}
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    networks: [internal]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 512m
+    stop_grace_period: 30s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${WEB_DIR:-./web}:/srv/web:ro # the Godot web export, pre-compressed (docs/DEPLOY_ORACLE.md)
+      - caddy_data:/data # certificates: keep this volume
+      - caddy_config:/config
+    networks: [internal]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+
+  gameserver1:
+    <<: *game-server
+    environment: &game-env
+      FR_API_URL: http://api:8080
+      FR_SERVER_ID: ${GAME1_ID:-}
+      FR_SERVER_KEY: ${GAME1_KEY:-}
+      FR_PORT: "9080"
+      FR_MAX_ROOMS: ${GAME_MAX_ROOMS:-40}
+      FR_MAILBOX_DIR: /var/lib/fuelrivals/mailbox
+    volumes:
+      - mailbox1:/var/lib/fuelrivals/mailbox
+
+  # A second process for a second vCPU: its own id, key, mailbox and Caddy path (/ws/2). Add more the same way.
+  gameserver2:
+    <<: *game-server
+    environment:
+      <<: *game-env
+      FR_SERVER_ID: ${GAME2_ID:-}
+      FR_SERVER_KEY: ${GAME2_KEY:-}
+    volumes:
+      - mailbox2:/var/lib/fuelrivals/mailbox
+
+networks:
+  internal:
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+  mailbox1:
+  mailbox2:

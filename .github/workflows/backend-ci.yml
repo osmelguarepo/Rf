@@ -1,0 +1,105 @@
+# CI of the Go API (backend/): formatting, vet, tests with a real PostgreSQL, and a check that the container builds for
+# both architectures. The ranking tables are compared with scripts/sim/ranking.gd by the tests themselves (they read the
+# file from the checkout), so a change to the Godot tables fails this workflow until backend/internal/ranking is updated.
+
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - "deploy/**"
+      - "scripts/sim/ranking.gd"
+      - "scripts/sim/config.gd"
+      - "tools/export_ranking_tables.gd"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "deploy/**"
+      - "scripts/sim/ranking.gd"
+      - "scripts/sim/config.gd"
+      - "tools/export_ranking_tables.gd"
+      - ".github/workflows/backend-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go tests (PostgreSQL 17)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then echo "::error::gofmt needed on:"; echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: go mod tidy leaves go.mod and go.sum unchanged
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+      - name: Tests (with the race detector; the PostgreSQL tests must not be skipped)
+        run: |
+          go test -race -count=1 -v ./... 2>&1 | tee test.log
+          if grep -q -- '--- SKIP' test.log; then echo "::error::a test was skipped"; grep -- '--- SKIP' test.log; exit 1; fi
+
+  image:
+    name: Container image builds (arm64 and amd64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build without pushing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  caddy:
+    name: Caddyfile validates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: caddy validate
+        run: |
+          docker run --rm -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e DOMAIN=play.example.com -e ACME_EMAIL=ci@example.com \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
