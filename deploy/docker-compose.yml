@@ -72,6 +72,12 @@ services:
       STEAM_PARTNER_API_KEY: ${STEAM_PARTNER_API_KEY:-}
       STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Matchmaking (docs/MATCHMAKING.md). METRICS_TOKEN empty: GET /api/metrics answers 404.
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      QUEUE_MAX_WAIT: ${QUEUE_MAX_WAIT:-30}
+      QUEUE_SOLO_WAIT: ${QUEUE_SOLO_WAIT:-30}
+      READY_SECONDS: ${READY_SECONDS:-15}
+      MAX_PING_MS: ${MAX_PING_MS:-250}
     networks: [internal]
     read_only: true
     security_opt: ["no-new-privileges:true"]

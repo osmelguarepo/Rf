@@ -27,6 +27,36 @@ func TestValidConfigAndDefaults(t *testing.T) {
 	}
 }
 
+func TestMatchmakingDefaultsAndOverrides(t *testing.T) {
+	c, err := FromLookup(env(valid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.QueueMaxWait != 30*time.Second || c.QueueSoloWait != 30*time.Second || c.ReadySeconds != 15*time.Second ||
+		c.QueueBandStep != 10*time.Second || c.MaxPingMS != 250 || c.QueueRatePerMin != 20 || c.StatusRatePerMin != 90 ||
+		c.PenaltyFree != 2 || c.PenaltyBase != 5*time.Minute || c.PenaltyMax != 2*time.Hour || c.MetricsToken != "" {
+		t.Errorf("%+v", c)
+	}
+	m := valid()
+	m["READY_SECONDS"] = "20" // plain seconds
+	m["QUEUE_MAX_WAIT"] = "45s"
+	m["QUEUE_SOLO_WAIT"] = "1m"
+	m["MAX_PING_MS"] = "180"
+	m["METRICS_TOKEN"] = strings.Repeat("m", 16)
+	c, err = FromLookup(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ReadySeconds != 20*time.Second || c.QueueMaxWait != 45*time.Second || c.QueueSoloWait != time.Minute || c.MaxPingMS != 180 || c.MetricsToken == "" {
+		t.Errorf("%+v", c)
+	}
+	m["METRICS_TOKEN"] = "short"
+	m["READY_SECONDS"] = "soon"
+	if _, err = FromLookup(env(m)); err == nil || !strings.Contains(err.Error(), "METRICS_TOKEN") || !strings.Contains(err.Error(), "READY_SECONDS") {
+		t.Errorf("%v", err)
+	}
+}
+
 func TestInvalidValuesAreAllReported(t *testing.T) {
 	m := valid()
 	m["MASTER_KEY"] = "short"

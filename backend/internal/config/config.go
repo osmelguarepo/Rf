@@ -40,6 +40,21 @@ type Config struct {
 	LoginRatePerMin   int // RATE_LOGIN_PER_MIN: per IP on /auth/* (default 20)
 	GuestRatePerHour  int // RATE_GUEST_PER_HOUR: guests created per IP (default 10)
 	AccountRatePerMin int // RATE_ACCOUNT_PER_MIN: per account on authenticated endpoints (default 120)
+	QueueRatePerMin   int // RATE_QUEUE_PER_MIN: POST/DELETE /queue and /queue/ready per account (default 20)
+	StatusRatePerMin  int // RATE_STATUS_PER_MIN: GET /queue/status per account (default 90; clients poll about once a second)
+
+	// Matchmaking (docs/MATCHMAKING.md).
+	QueueMaxWait      time.Duration // QUEUE_MAX_WAIT: a group of 2 or more launches when its oldest ticket waited this long (30s)
+	QueueSoloWait     time.Duration // QUEUE_SOLO_WAIT: a lone human gets a bot-filled race after this (30s)
+	QueueBandStep     time.Duration // QUEUE_BAND_STEP: the compatibility band grows one division per step (10s)
+	ReadySeconds      time.Duration // READY_SECONDS: time to confirm a found match (15s)
+	MaxPingMS         int           // MAX_PING_MS: above this a group waits QUEUE_MAX_WAIT before accepting the server (250)
+	MatchmakerTick    time.Duration // MATCHMAKER_TICK: how often the matching loop runs (1s)
+	PenaltyFree       int           // PENALTY_FREE_STRIKES: strikes per day that do not ban (2)
+	PenaltyBase       time.Duration // PENALTY_BASE: the first queue ban, doubled with each further strike (5m)
+	PenaltyMax        time.Duration // PENALTY_MAX: the longest queue ban (2h)
+	MetricsToken      string        // METRICS_TOKEN: bearer token of GET /metrics; without it /metrics answers 404
+	DisableMatchmaker bool          // MATCHMAKER=off: no matching loop (tests that drive POST /admin/matches only)
 }
 
 // FromEnv builds the configuration from os.Getenv and validates it.
@@ -104,12 +119,40 @@ func FromLookup(get func(string) string) (Config, error) {
 	}
 	for _, v := range []struct {
 		name string
+		def  time.Duration
+		dst  *time.Duration
+	}{
+		{"QUEUE_MAX_WAIT", 30 * time.Second, &c.QueueMaxWait},
+		{"QUEUE_SOLO_WAIT", 30 * time.Second, &c.QueueSoloWait},
+		{"QUEUE_BAND_STEP", 10 * time.Second, &c.QueueBandStep},
+		{"READY_SECONDS", 15 * time.Second, &c.ReadySeconds},
+		{"MATCHMAKER_TICK", time.Second, &c.MatchmakerTick},
+		{"PENALTY_BASE", 5 * time.Minute, &c.PenaltyBase},
+		{"PENALTY_MAX", 2 * time.Hour, &c.PenaltyMax},
+	} {
+		d, err := dur(get, v.name, v.def)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		*v.dst = d
+	}
+	c.MetricsToken = get("METRICS_TOKEN")
+	if c.MetricsToken != "" && len(c.MetricsToken) < 16 {
+		errs = append(errs, errors.New("METRICS_TOKEN must be at least 16 characters"))
+	}
+	c.DisableMatchmaker = get("MATCHMAKER") == "off"
+	for _, v := range []struct {
+		name string
 		def  int
 		dst  *int
 	}{
 		{"RATE_LOGIN_PER_MIN", 20, &c.LoginRatePerMin},
 		{"RATE_GUEST_PER_HOUR", 10, &c.GuestRatePerHour},
 		{"RATE_ACCOUNT_PER_MIN", 120, &c.AccountRatePerMin},
+		{"RATE_QUEUE_PER_MIN", 20, &c.QueueRatePerMin},
+		{"RATE_STATUS_PER_MIN", 90, &c.StatusRatePerMin},
+		{"MAX_PING_MS", 250, &c.MaxPingMS},
+		{"PENALTY_FREE_STRIKES", 2, &c.PenaltyFree},
 	} {
 		n, err := integer(get, v.name, v.def)
 		if err != nil {
@@ -138,6 +181,9 @@ func dur(get func(string) string, name string, d time.Duration) (time.Duration, 
 		return d, nil
 	}
 	x, err := time.ParseDuration(v)
+	if n, aerr := strconv.Atoi(v); aerr == nil { // a plain number is seconds: READY_SECONDS=15
+		x, err = time.Duration(n)*time.Second, nil
+	}
 	if err != nil || x <= 0 {
 		return d, fmt.Errorf("%s: not a positive duration: %q", name, v)
 	}

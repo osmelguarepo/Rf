@@ -32,6 +32,7 @@ func (s *Server) newSession(w http.ResponseWriter, r *http.Request, p store.Play
 		s.fail(w, r, err)
 		return
 	}
+	s.metrics.Inc("fr_funnel_total", "Players that reached each stage of the funnel.", "stage", "session")
 	writeJSON(w, 200, sessionResponse{Token: token, ExpiresAt: exp.UTC(), Profile: prof})
 }
 
