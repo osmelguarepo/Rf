@@ -12,6 +12,12 @@ extends RefCounted
 ## - Ticks. TICKS feed the confirmed state in order (rollback.gd). The tick numbers are checked: a gap, or a CHECKSUM that
 ##   differs from the confirmed state's at the same tick, asks the server for a SNAPSHOT (`resyncs` counts those; with a healthy
 ##   run it stays 0).
+## - Lost connections. With `reconnect_factory` set (a Callable that returns a new Transport) a connection that drops in a match is
+##   made again by itself for `reconnect_window_ms` (the server's grace window; the API ticket, or the private room's secret,
+##   takes the seat back): state RECONNECTING, a new HELLO each time the socket opens, then WELCOME and SNAPSHOT as for a rejoin.
+##   When the window runs out, or the server refuses (REJECTED), the session fails as before.
+## - Hidden tab (web). send_away(true) tells the server the page is hidden (the bot drives the seat); send_away(false) when it is
+##   back: the server sends the whole match again and the clock starts afresh.
 ## - What the screen may show. view_match(): the predicted match, but never in a later phase than the confirmed one (a round
 ##   or a match is over when the server says so, not when the prediction thinks so). Sounds come from on_predicted_tick, once
 ##   per tick; results come from the confirmed state and the EVENTs. view_offset() eases the jump a rollback gives a car, for
@@ -23,9 +29,10 @@ const NetConfig := preload("res://scripts/net/net_config.gd")
 const Rollback := preload("res://scripts/net/rollback.gd")
 const Config := preload("res://scripts/sim/config.gd")
 const Match := preload("res://scripts/sim/match.gd")
+const RoomCode := preload("res://scripts/net/room_code.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 
-enum State { IDLE, CONNECTING, HANDSHAKE, LOBBY, WAITING, PLAYING, ENDED, REJECTED, FAILED }
+enum State { IDLE, CONNECTING, HANDSHAKE, LOBBY, WAITING, PLAYING, ENDED, REJECTED, FAILED, RECONNECTING }
 
 const INPUT_LEAD_TICKS := 2.0
 const MARGIN_TARGET := 2
@@ -50,11 +57,19 @@ const MARGIN_CLIP_LOW := -8
 const MARGIN_CLIP_HIGH := 40
 ## An input this early is close to being refused as too far ahead.
 const MARGIN_TOO_EARLY := 22
+## The server keeps a seat for 45 s (room.gd grace_ms); the client tries a little less.
+const RECONNECT_WINDOW_MS := 40000
+const RECONNECT_RETRY_MS := 2000
 
 var state: State = State.IDLE
 var transport: Transport = null
 var ticket: String = ""
 var reject_reason: String = ""
+## Makes a new Transport to the same address when the connection drops in a match; invalid: no reconnection.
+var reconnect_factory: Callable = Callable()
+var reconnect_address: String = ""
+var reconnect_window_ms: int = RECONNECT_WINDOW_MS
+var reconnects: int = 0
 var failure: String = ""
 ## The waiting room of a private room: code, seat, owner, secret, names.
 var lobby: Dictionary = {}
@@ -103,6 +118,9 @@ var _margin_batches: int = 0
 var _checksums: Dictionary = {}
 var _offsets: Dictionary = {}
 var _asked_snapshot_at: int = -1
+var _reconnect_deadline_ms: int = 0
+var _reconnect_next_ms: int = 0
+var _hello_sent: bool = false
 
 
 ## Starts connecting. `address` is whatever the transport takes (a ws:// URL; anything for the loopback). The HELLO goes out
@@ -140,6 +158,9 @@ func update(now_ms: int, control: int = PlayerInput.NONE) -> void:
 	_now_ms = now_ms
 	var dt := now_ms - _last_ms if _last_ms >= 0 else 0
 	_last_ms = now_ms
+	if state == State.RECONNECTING:
+		_reconnect_step(now_ms)
+		return
 	if transport == null or state in [State.IDLE, State.REJECTED, State.FAILED]:
 		return
 	transport.poll()
@@ -158,7 +179,10 @@ func update(now_ms: int, control: int = PlayerInput.NONE) -> void:
 	if state in [State.REJECTED, State.FAILED]:
 		return
 	if transport.get_state() == Transport.State.CLOSED and state in [State.HANDSHAKE, State.LOBBY, State.WAITING, State.PLAYING]:
-		_fail("disconnected")
+		if _can_reconnect():
+			_begin_reconnect(now_ms)
+		else:
+			_fail("disconnected")
 		return
 	_ping(now_ms)
 	if state == State.PLAYING:
@@ -169,6 +193,23 @@ func update(now_ms: int, control: int = PlayerInput.NONE) -> void:
 ## The owner of a private room starts the match.
 func send_start() -> void:
 	_send(Protocol.encode_start())
+
+
+## The page's tab went hidden or came back (web). Hidden: the server hands the seat to the bot. Back: the server sends the match
+## again (WELCOME, SNAPSHOT) and the clock restarts, so the time spent hidden is not run as ticks.
+func send_away(hidden: bool) -> void:
+	if state not in [State.WAITING, State.PLAYING]:
+		return
+	_send(Protocol.encode_away(hidden))
+	if not hidden:
+		_last_ms = -1
+
+
+## Seconds left to get the connection back, 0 outside RECONNECTING.
+func reconnect_left_s() -> int:
+	if state != State.RECONNECTING:
+		return 0
+	return maxi(ceili(float(_reconnect_deadline_ms - _now_ms) / 1000.0), 0)
 
 
 ## Leaves: closes the connection.
@@ -475,6 +516,43 @@ func _decay(dt: int) -> void:
 			_offsets.erase(slot)
 		else:
 			_offsets[slot] = v
+
+
+func _can_reconnect() -> bool:
+	return reconnect_factory.is_valid() and has_match() and state in [State.WAITING, State.PLAYING] and rollback.confirmed.phase != Match.MATCH_OVER
+
+
+func _begin_reconnect(now_ms: int) -> void:
+	state = State.RECONNECTING
+	_reconnect_deadline_ms = now_ms + reconnect_window_ms
+	_reconnect_next_ms = now_ms
+	_hello_sent = false
+	reconnects += 1
+	if not lobby.is_empty() and not lobby.get("secret", "").is_empty():
+		ticket = RoomCode.rejoin_ticket(lobby["code"], lobby["seat"], lobby["secret"])
+
+
+func _reconnect_step(now_ms: int) -> void:
+	if now_ms > _reconnect_deadline_ms:
+		_fail("disconnected")
+		return
+	if transport == null or transport.get_state() == Transport.State.CLOSED:
+		if now_ms < _reconnect_next_ms:
+			return
+		_reconnect_next_ms = now_ms + RECONNECT_RETRY_MS
+		_hello_sent = false
+		if transport != null:
+			transport.close()
+		transport = reconnect_factory.call()
+		if transport == null or transport.connect_to(reconnect_address) != OK:
+			transport = null
+		return
+	transport.poll()
+	if transport.get_state() == Transport.State.OPEN and not _hello_sent:
+		_hello_sent = true
+		transport.send(Protocol.encode_hello(NetConfig.GAME_VERSION, NetConfig.sim_hash(), ticket))
+	while transport.get_available_packet_count() > 0:
+		_handle(Protocol.decode(transport.get_packet()))
 
 
 func _send(packet: PackedByteArray) -> void:

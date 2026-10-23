@@ -5,8 +5,11 @@ extends RefCounted
 ##
 ## - the protocol version (in the HELLO decoding) and the simulation hash must be the server's, or the client is told to
 ##   update (EVENT_REJECT with the reason as text);
-## - a match ticket (ticket.gd): the first valid one for a match creates its room, the others join it, a ticket that
-##   comes again after a lost connection takes its seat back;
+## - a match ticket: the first valid one for a match creates its room, the others join it, a ticket that comes again after a
+##   lost connection takes its seat back (also after it has expired: the signature still proves it, and the seat must be that
+##   person's). The API's ticket (match_ticket.gd, backend/docs/TICKET.md: base64url, signed with this server's key) is what
+##   production takes; the stand-in text ticket of ticket.gd (it has dots: "v1.MATCH.SEAT...", "dev....") is for tools and tests
+##   and is refused unless `legacy_enabled` (the server sets it only with --dev);
 ## - a private-room ticket (room_code.gd): "new:NAME" makes a room with a six-character code and no ranking points,
 ##   "join:CODE:NAME" sits at its first free seat, "rejoin:CODE:SEAT:SECRET" comes back to a seat.
 ## Every room is polled with the same monotonic `now_ms`. A room that ends leaves its result record and replay in
@@ -18,6 +21,7 @@ const Protocol := preload("res://scripts/net/protocol.gd")
 const Transport := preload("res://scripts/net/transport.gd")
 const NetConfig := preload("res://scripts/net/net_config.gd")
 const Ticket := preload("res://scripts/net/ticket.gd")
+const MatchTicket := preload("res://scripts/net/match_ticket.gd")
 const RoomCode := preload("res://scripts/net/room_code.gd")
 
 const HELLO_TIMEOUT_MS := 2000
@@ -31,6 +35,7 @@ const REJECT_NO_ROOM := "no_room"
 const REJECT_SEAT := "seat"
 const REJECT_MISMATCH := "mismatch"
 const REJECT_PRIVATE_OFF := "private_off"
+const REJECT_DRAINING := "draining"
 
 
 class Pending extends RefCounted:
@@ -38,7 +43,13 @@ class Pending extends RefCounted:
 	var since_ms: int = 0
 
 
+## The stand-in text ticket's verifier (tools and tests), used only while `legacy_enabled`.
 var verifier: Ticket = Ticket.new()
+var legacy_enabled: bool = true
+## The API ticket's verifier. Without a key every API ticket is refused.
+var match_verifier: MatchTicket = MatchTicket.new()
+## True once the API asked this server to drain: matches under way finish, no new match starts.
+var draining: bool = false
 var region: String = ""
 var allow_private: bool = true
 ## Options every new room gets besides its own (grace_ms, bot_after_ms, cfg ...): Room.create() keys.
@@ -111,6 +122,11 @@ func pending_count() -> int:
 	return _pending.size()
 
 
+## Matches under way (rooms that have not been forgotten).
+func active_matches() -> int:
+	return rooms.size()
+
+
 func _hello(p: Pending, msg: Dictionary, now_ms: int) -> void:
 	if Protocol.is_error(msg):
 		_reject(p, REJECT_VERSION if msg["error"] == Protocol.ERR_VERSION else REJECT_BAD_HELLO)
@@ -126,25 +142,47 @@ func _hello(p: Pending, msg: Dictionary, now_ms: int) -> void:
 	if not wish.is_empty():
 		_private(p, wish, now_ms)
 		return
-	var checked := verifier.verify(ticket, _unix_now())
+	var checked := _check(ticket)
 	if not checked["ok"]:
 		_reject(p, checked["error"])
 		return
 	var room: Room = _by_match.get(checked["match_id"])
 	if room == null:
+		if draining:
+			_reject(p, REJECT_DRAINING)
+			return
 		if rooms.size() >= MAX_ROOMS:
 			_reject(p, REJECT_FULL)
 			return
 		room = _make_room({
 			"match_id": checked["match_id"], "code": checked["match_id"], "seed_value": checked["seed"],
-			"seat_count": checked["seats"], "expected_humans": checked["humans"],
+			"seat_count": checked["seats"], "expected_humans": checked["humans"], "open_humans": checked.get("open", false),
 		})
 		_by_match[room.match_id] = room
-	elif room.seed_value != checked["seed"] or room.seat_count != checked["seats"] or room.expected_humans != checked["humans"]:
+	elif room.seed_value != checked["seed"] or room.seat_count != checked["seats"]  or (not room.open_humans and room.expected_humans != checked["humans"]):
 		_reject(p, REJECT_MISMATCH)
 		return
-	if not room.join_ticketed(checked["seat"], checked["steam_id"], p.transport, now_ms):
+	if not room.join_ticketed(checked["seat"], checked["steam_id"], p.transport, now_ms, checked.get("who", {})):
 		_reject(p, REJECT_SEAT)
+
+
+## Checks a ticket of either kind. An API ticket that has expired still passes when its match's room exists and the seat is that
+## person's: they are coming back to it.
+func _check(ticket: String) -> Dictionary:
+	var now := _unix_now()
+	if ticket.contains("."):
+		if not legacy_enabled:
+			return {"ok": false, "error": Ticket.ERR_FORMAT}
+		return verifier.verify(ticket, now)
+	var checked := match_verifier.verify(ticket, now)
+	if not checked["ok"] and checked["error"] == MatchTicket.ERR_EXPIRED:
+		var fields: Dictionary = checked["fields"]
+		var room: Room = _by_match.get(fields["match_id"])
+		if room != null and room.owns_seat(int(fields["seat"]), str(fields["player_id"])):
+			checked = MatchTicket.accepted(fields)
+	if checked["ok"]:
+		checked["who"] = {"player_id": checked["player_id"], "name": checked["name"], "guest": checked["guest"]}
+	return checked
 
 
 func _private(p: Pending, wish: Dictionary, now_ms: int) -> void:

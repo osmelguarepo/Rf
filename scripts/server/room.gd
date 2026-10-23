@@ -60,6 +60,12 @@ class Seat extends RefCounted:
 	var index: int = 0
 	var human: bool = false
 	var steam_id: String = ""
+	## The API's player id (text), "" in a private room or a development ticket; and who the seat belongs to: it, or the SteamID.
+	var player_id: String = ""
+	var identity: String = ""
+	var guest: bool = false
+	## What the other clients are told this seat is called (WELCOME's player list); the SteamID when empty.
+	var label: String = ""
 	var player_name: String = ""
 	## What lets the person come back to the seat of a private room.
 	var secret: String = ""
@@ -102,6 +108,10 @@ var grace_ms: int = 45000
 var bot_after_ms: int = 1500
 var idle_ms: int = 15000
 var join_timeout_ms: int = 15000
+## A room from the API's tickets does not know how many people come (a ticket names only its own seat): it takes the humans
+## as their tickets arrive and starts `gather_ms` after the first, or when all six seats have a person.
+var open_humans: bool = false
+var gather_ms: int = 6000
 var linger_ms: int = 5000
 ## Offsets the checksum schedule of this room from the others' (the host sets it).
 var stagger: int = 0
@@ -158,19 +168,41 @@ static func create(options: Dictionary) -> Self:
 
 ## A ticketed person arrives at a seat: the first time (the lobby), or again after losing the connection. False when the
 ## seat is not theirs, is taken, or has been given up for good.
-func join_ticketed(seat_index: int, steam_id: String, transport: Transport, now_ms: int) -> bool:
+## `who` has the API ticket's {"player_id", "name", "guest"}.
+func join_ticketed(seat_index: int, steam_id: String, transport: Transport, now_ms: int, who: Dictionary = {}) -> bool:
 	if phase == Phase.ENDED or seat_index < 0 or seat_index >= seat_count:
 		return false
 	var seat := seats[seat_index]
+	var identity := str(who.get("player_id", steam_id))
+	if open_humans and phase == Phase.LOBBY and not seat.human and not seat.joined:
+		seat.human = true
+		expected_humans |= 1 << seat_index
 	if not seat.human or seat.final or seat.connected:
 		return false
-	if seat.joined and seat.steam_id != steam_id:
+	if seat.joined and seat.identity != identity:
 		return false
 	seat.steam_id = steam_id
+	seat.identity = identity
+	seat.player_id = str(who.get("player_id", ""))
+	seat.guest = bool(who.get("guest", false))
+	if who.has("player_id"):
+		seat.player_name = str(who.get("name", ""))
+		seat.label = seat.player_name if not seat.player_name.is_empty() else "P%d" % (seat_index + 1)
 	_attach(seat, transport, now_ms)
-	if phase == Phase.LOBBY and _all_arrived():
+	if phase == Phase.LOBBY and not open_humans and _all_arrived():
+		start(now_ms)
+	elif phase == Phase.LOBBY and open_humans and connected_count() >= seat_count:
 		start(now_ms)
 	return true
+
+
+## True when the seat has been taken by the person `identity` (their player id, or SteamID): a ticket that has expired may
+## still bring them back to it.
+func owns_seat(seat_index: int, identity: String) -> bool:
+	if seat_index < 0 or seat_index >= seat_count:
+		return false
+	var seat := seats[seat_index]
+	return seat.human and seat.joined and seat.identity == identity
 
 
 ## A person sits at the first free seat of the lobby of a private room. Returns the seat, or -1 if the room is full or
@@ -282,7 +314,7 @@ func owner_start(seat_index: int, now_ms: int) -> void:
 ## Moves the room on to `now_ms`: runs the ticks that are due, reads what the clients sent, closes what is over.
 func poll(now_ms: int) -> void:
 	if phase == Phase.LOBBY:
-		if _first_join_ms >= 0 and not private_room and now_ms - _first_join_ms >= join_timeout_ms:
+		if _first_join_ms >= 0 and not private_room and now_ms - _first_join_ms >= (gather_ms if open_humans else join_timeout_ms):
 			start(now_ms)
 		elif private_room and connected_count() == 0 and _first_join_ms >= 0:
 			phase = Phase.ENDED
@@ -424,8 +456,25 @@ func _handle(seat: Seat, msg: Dictionary, now_ms: int) -> void:
 				_send_snapshot(seat, now_ms, false)
 		Protocol.START:
 			owner_start(seat.index, now_ms)
+		Protocol.AWAY:
+			_on_away(seat, msg["hidden"], now_ms)
 		_:
 			_violation(seat, "bad_packets")
+
+
+## A web client's tab went hidden (the bot drives the seat from now) or came back (it gets the whole match again, as after a lost
+## connection, and the bot drives until its first input).
+func _on_away(seat: Seat, hidden: bool, now_ms: int) -> void:
+	if phase != Phase.RUNNING or not seat.human:
+		return
+	_count("away_hidden" if hidden else "away_back", 1)
+	seat.awaiting_input = true
+	seat.max_tick = tick - 1
+	seat.queue.clear()
+	if not hidden:
+		seat.last_input_ms = now_ms
+		_send_welcome(seat)
+		_send_snapshot(seat, now_ms, true)
 
 
 func _violation(seat: Seat, counter: String) -> void:
@@ -516,7 +565,7 @@ func _broadcast(packet: PackedByteArray) -> void:
 func _players() -> PackedStringArray:
 	var out := PackedStringArray()
 	for seat in seats:
-		out.append(seat.steam_id if seat.human else "")
+		out.append((seat.label if not seat.label.is_empty() else seat.steam_id) if seat.human else "")
 	return out
 
 
@@ -606,6 +655,7 @@ func result() -> Dictionary:
 		for seat in seats:
 			rows.append({
 				"seat": seat.index, "steam_id": seat.steam_id if seat.human else "", "bot": not seat.human,
+					"player_id": seat.player_id if seat.human else "", "guest": seat.guest,
 				"name": seat.player_name, "place": order.find(seat.index) + 1,
 				"race_points": game.race_points[seat.index],
 				"abandoned": (game.abandoned_mask & (1 << seat.index)) != 0,
@@ -613,7 +663,7 @@ func result() -> Dictionary:
 	return {
 		"match_id": match_id, "code": code, "seed": seed_value, "complete": _complete, "ranked": false,
 		"private": private_room, "ticks": maxi(tick - start_tick, 0), "seats": rows, "cfg_digest": cfg_digest,
-		"winner": game.winner if game != null else -1,
+		"winner": game.winner if game != null else -1, "final_checksum": _final_checksum,
 	}
 
 

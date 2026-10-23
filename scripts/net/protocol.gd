@@ -18,6 +18,8 @@ const ACK_SNAPSHOT := 4
 ## The owner of a private room starts the match (M2); a client asks for a SNAPSHOT after a CHECKSUM mismatch (M2).
 const START := 5
 const SNAPSHOT_REQ := 6
+## A web client tells the server its tab is hidden (flag 1: the seat goes to the bot) or visible again (flag 0: it gets the match back).
+const AWAY := 7
 const WELCOME := 16
 const TICKS := 17
 const SNAPSHOT := 18
@@ -83,6 +85,12 @@ static func encode_start() -> PackedByteArray:
 
 static func encode_snapshot_req() -> PackedByteArray:
 	return _start(SNAPSHOT_REQ)
+
+
+static func encode_away(hidden: bool) -> PackedByteArray:
+	var out := _start(AWAY)
+	out.append(1 if hidden else 0)
+	return out
 
 
 static func encode_ack_snapshot(tick: int) -> PackedByteArray:
@@ -201,6 +209,11 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 			msg["client_time"] = r.u32()
 		ACK_SNAPSHOT:
 			msg["tick"] = r.u32()
+		AWAY:
+			var flag := r.u8()
+			if r.ok and flag > 1:
+				return _err(ERR_BAD_VALUE, {"field": "away"})
+			msg["hidden"] = flag == 1
 		START, SNAPSHOT_REQ:
 			pass
 		WELCOME:
