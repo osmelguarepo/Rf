@@ -1,0 +1,2 @@
+# Keep line endings stable on every platform (SQL, JSON test data and Dockerfiles are read by tools).
+* text=auto eol=lf

@@ -6,6 +6,18 @@ import (
 	"sync"
 )
 
+// Unavailable is what the service uses for a Steam dependency whose key is not configured: every call fails with
+// ErrUnavailable.
+type Unavailable struct{}
+
+// VerifyTicket implements Verifier.
+func (Unavailable) VerifyTicket(context.Context, string) (Verified, error) {
+	return Verified{}, ErrUnavailable
+}
+
+// PersonaName implements Persona.
+func (Unavailable) PersonaName(context.Context, string) (string, error) { return "", ErrUnavailable }
+
 // FakeVerifier is a Verifier for tests and local development without Steam. A ticket "ok-<steamid>" verifies as that
 // SteamID, "banned-<steamid>" as a publisher-banned one, anything else is rejected, "down" simulates an outage.
 type FakeVerifier struct{}
