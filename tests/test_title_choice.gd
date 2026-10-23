@@ -1,7 +1,6 @@
 extends "res://tests/test_case.gd"
-## The title's two modes and the fullscreen keys: Up and Down choose between LOCAL and ONLINE with keys, the D-pad or
-## the stick; a confirm press picks LOCAL (the join screen with the seats) and does nothing on ONLINE, which is not built
-## yet; the single-player game stays reachable from the code (App.start_game()), not from the title; a click picks a button; F11 and Alt+Enter
+## The title's modes and the fullscreen keys: Up and Down choose between LOCAL and ONLINE with keys, the D-pad or
+## the stick; a confirm press picks LOCAL (the join screen with the seats) or ONLINE (the private rooms: scripts/app/online.gd); the single-player game stays reachable from the code (App.start_game()), not from the title; a click picks a button; F11 and Alt+Enter
 ## switch fullscreen on every screen and never reach the screens. Each test boots a real App (tests/screen_helpers.gd).
 
 const S := preload("res://tests/screen_helpers.gd")
@@ -73,7 +72,11 @@ func test_up_and_down_choose_and_confirm_picks() -> void:
 	assert_eq(S.screen_name(app), "Title", "moving does not pick")
 	S.key_tap(app, KEY_ENTER)
 	S.frame(app, 0)
-	assert_eq(S.screen_name(app), "Title", "ONLINE is not built yet: confirming it does nothing")
+	assert_eq(S.screen_name(app), "Online", "confirming ONLINE opens the private rooms")
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 0)
+	assert_eq(S.screen_name(app), "Title", "and Esc comes back")
+	assert_eq(app.current_screen().choice, Title.CHOICE_ONLINE, "to the choice it left")
 	S.tap(app, 30, JOY_BUTTON_DPAD_UP)
 	S.frame(app, 0)
 	S.tap(app, 30, JOY_BUTTON_A)
@@ -101,8 +104,9 @@ func test_the_title_remembers_the_last_choice() -> void:
 
 func test_a_click_on_a_button_picks_it() -> void:
 	app.current_screen()._unhandled_input(_click(ViewConfig.VERSUS_BUTTON.get_center()))
-	assert_eq(S.screen_name(app), "Title", "ONLINE: a click selects it and starts nothing")
-	assert_eq(app.current_screen().choice, Title.CHOICE_ONLINE)
+	assert_eq(S.screen_name(app), "Online", "ONLINE: a click picks it")
+	assert_eq(app.title_choice, Title.CHOICE_ONLINE)
+	app.show_title()
 	app.current_screen()._unhandled_input(_click(ViewConfig.START_BUTTON.get_center()))
 	assert_eq(S.screen_name(app), "Join")
 

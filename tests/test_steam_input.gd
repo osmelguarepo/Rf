@@ -627,8 +627,8 @@ func test_a_steam_controller_plays_single_player() -> void:
 	assert_eq(fake.active_set[H1], fake.set_handles["racing"])
 
 
-## The menus and the race's commands with a Steam controller, as with a pad: on the title menu_down picks ONLINE (not
-## built: menu_confirm does nothing), menu_up picks LOCAL and menu_confirm opens the join screen; there menu_confirm
+## The menus and the race's commands with a Steam controller, as with a pad: on the title menu_down picks ONLINE (menu_confirm
+## opens the private rooms and menu_back returns), menu_up picks LOCAL and menu_confirm opens the join screen; there menu_confirm
 ## joins (the bots fill the empty seats), menu_right and menu_left change nothing, menu_back
 ## leaves the seat, menu_quit goes to the title; in a race pause pauses, and while paused (the menus set) menu_start
 ## resumes and menu_quit (Back) quits to the title.
@@ -638,7 +638,9 @@ func test_menus_and_race_commands_through_steam() -> void:
 	_press(H1, "menu_down")
 	assert_eq(app.current_screen().choice, 1, "ONLINE chosen")
 	_press(H1, "menu_confirm")
-	assert_eq(S.screen_name(app), "Title", "ONLINE is not built yet")
+	assert_eq(S.screen_name(app), "Online", "ONLINE opens the private rooms")
+	_press(H1, "menu_back")
+	assert_eq(S.screen_name(app), "Title")
 	_press(H1, "menu_up")
 	_press(H1, "menu_confirm")
 	assert_eq(S.screen_name(app), "Join")

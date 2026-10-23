@@ -54,15 +54,19 @@ const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
 const Car := preload("res://scripts/sim/car.gd")
 const Match := preload("res://scripts/sim/match.gd")
+const OnlineSession := preload("res://scripts/net/online_session.gd")
+const Transport := preload("res://scripts/net/transport.gd")
+const WsTransport := preload("res://scripts/net/ws_transport.gd")
 
 const TITLE_SCENE := "res://scenes/title.tscn"
 const GAME_SCENE := "res://scenes/game.tscn"
 const JOIN_SCENE := "res://scenes/join.tscn"
 const RANKING_SCENE := "res://scenes/ranking.tscn"
+const ONLINE_SCENE := "res://scenes/online.tscn"
 const VERSUS_SCENE := "res://scenes/versus.tscn"
 const SELFTEST_TICKS := 600
 ## The screens whose menu commands make a sound (audio.gd).
-const MENU_SCREENS: Array[StringName] = [&"Title", &"Join", &"Ranking"]
+const MENU_SCREENS: Array[StringName] = [&"Title", &"Join", &"Ranking", &"Online"]
 ## Where the volume is saved (the game only: tests leave settings alone).
 const SETTINGS_PATH := "user://settings.cfg"
 const SELFTEST_FRAMES := 120
@@ -152,6 +156,16 @@ var high_score: int = 0
 var seed_override: int = -1
 ## True when the atlas, every frame and the font loaded.
 var booted: bool = false
+## Online (docs/SPEC_ONLINE.md §16.4, M2): the game server the ONLINE screen connects to (--server=ws://host:port after the "--"),
+## the connection of the online race (set by the ONLINE screen, read by versus.gd; null for a local race), why the last one ended
+## and the room code last typed (both shown again on the ONLINE screen). Tests give `online_transport_factory` (a Callable that
+## returns a Transport) and `online_clock` (a Callable that returns milliseconds) instead of a real socket and the real time.
+var online_server: String = "ws://127.0.0.1:9080"
+var online_session: OnlineSession = null
+var online_message: String = ""
+var online_code: String = ""
+var online_transport_factory: Callable = Callable()
+var online_clock: Callable = Callable()
 var _screen: Node = null
 var _last_seed: int = -1
 var _started := false
@@ -194,6 +208,8 @@ func _read_arguments() -> bool:
 			selftest = true
 		elif argument.begins_with("--seed=") and argument.trim_prefix("--seed=").is_valid_int():
 			seed_override = argument.trim_prefix("--seed=").to_int()
+		elif argument.begins_with("--server=") and argument.length() > 9:
+			online_server = argument.trim_prefix("--server=")
 	return selftest
 
 
@@ -275,6 +291,7 @@ func current_screen() -> Node:
 
 ## The title screen. Every pad leaves its versus seat.
 func show_title() -> Node:
+	end_online()
 	if seats != null:
 		seats.reset()
 	input = solo
@@ -292,6 +309,50 @@ func show_join() -> Node:
 	seats.open()
 	input = seats
 	return _switch_to(JOIN_SCENE)
+
+
+## The ONLINE screen (private rooms; docs/SPEC_ONLINE.md §16.4). `message` says why the last connection ended, if it did.
+func show_online(message: String = "") -> Node:
+	end_online()
+	if seats != null:
+		seats.reset()
+	online_message = message
+	input = solo
+	return _switch_to(ONLINE_SCENE)
+
+
+## The race of an online match whose session is ready (it has been welcomed): versus.gd drives it with the session instead of
+## stepping a match of its own. The keyboard and every pad are one player, as in the single-player game.
+func start_online_race(session: OnlineSession) -> Node:
+	online_session = session
+	input = solo
+	return _switch_to(VERSUS_SCENE)
+
+
+## Closes the online connection, if there is one (every other screen calls it by way of show_title() and show_online()).
+func end_online() -> void:
+	if online_session != null:
+		online_session.close()
+		online_session = null
+
+
+## True when `session` is the one the online race holds.
+func online_session_is(session: OnlineSession) -> bool:
+	return online_session == session
+
+
+## The transport of a new online connection: a WebSocket unless a test gave another.
+func make_online_transport() -> Transport:
+	if online_transport_factory.is_valid():
+		return online_transport_factory.call()
+	return WsTransport.new()
+
+
+## The clock of the online session, in milliseconds.
+func online_now() -> int:
+	if online_clock.is_valid():
+		return online_clock.call()
+	return Time.get_ticks_msec()
 
 
 ## The leaderboard (docs/SPEC_RANKING.md §9): this session's ranking.
