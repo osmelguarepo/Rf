@@ -81,7 +81,10 @@ func test_every_seat_gets_recoloured_copies_of_the_three_frames() -> void:
 	fresh.load_all()
 	var before := fresh.frames.size()
 	assert_true(PlayerColours.add_frames(fresh))
-	assert_eq(fresh.frames.size(), before + PlayerColours.FRAMES.size() * PlayerColours.COUNT)
+	# One copy per seat, and one more in the twin silver (tunnel.gd).
+	assert_eq(fresh.frames.size(), before + PlayerColours.FRAMES.size() * (PlayerColours.COUNT + 1))
+	for spec: Dictionary in PlayerColours.FRAMES:
+		assert_not_null(fresh.frame(PlayerColours.twin_frame_name(spec["frame"])), "twin copy of %s" % spec["frame"])
 	var sheet := fresh.texture.get_image()
 	sheet.convert(Image.FORMAT_RGBA8)
 	for spec: Dictionary in PlayerColours.FRAMES:

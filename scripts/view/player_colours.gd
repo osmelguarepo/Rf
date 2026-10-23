@@ -41,6 +41,9 @@ const SHADES := [
 	[Color("#886000"), Color("#4a3200"), Color("#9c863c")],
 	[Color("#fb99b6"), Color("#d0628f"), Color("#ffcadb")],
 ]
+## The shades every car wears inside a tunnel (Túnel de los Gemelos, tunnel.gd): body, dark, light. A silver, the same
+## for all seats, so no car stands out. Not a seat colour: the set above, its tests and the join screen do not see it.
+const TWIN_SHADES := [Color("#c4c4cc"), Color("#6c6c78"), Color("#ececf4")]
 ## The frames that get a copy per seat: upright and turned 45 degrees each way (cars.gd player_sprite()).
 const FRAMES := [ViewConfig.PLAYER, ViewConfig.PLAYER_SKID_LEFT, ViewConfig.PLAYER_SKID_RIGHT]
 ## The least CIEDE2000 distances the set keeps (tests/test_seat_colours.gd measures them on the frames' pixels).
@@ -80,6 +83,16 @@ static func frame_name(frame: String, seat: int) -> String:
 	return "%s@p%d" % [frame, seat + 1]
 
 
+## The name of a frame's copy in the twin silver.
+static func twin_frame_name(frame: String) -> String:
+	return "%s@twin" % frame
+
+
+## A sprite ({frame, shadow}) in the twin silver.
+static func twin_sprite(spec: Dictionary) -> Dictionary:
+	return {"frame": twin_frame_name(spec["frame"]), "shadow": spec["shadow"]}
+
+
 ## A sprite ({frame, shadow}, as view_config.gd's) in a seat's colour.
 static func seat_sprite(spec: Dictionary, seat: int) -> Dictionary:
 	return {"frame": frame_name(spec["frame"], seat), "shadow": spec["shadow"]}
@@ -97,13 +110,18 @@ static func add_frames(atlas: Atlas) -> bool:
 			continue
 		for seat in COUNT:
 			atlas.frames[frame_name(name, seat)] = ImageTexture.create_from_image(recoloured(image, seat))
+		atlas.frames[twin_frame_name(name)] = ImageTexture.create_from_image(recoloured_to(image, TWIN_SHADES))
 	return ok
 
 
 ## A copy of an image with SOURCE's colours swapped for the seat's SHADES. Pixels are compared as bytes.
 static func recoloured(image: Image, seat: int) -> Image:
+	return recoloured_to(image, SHADES[seat])
+
+
+## A copy of an image with SOURCE's colours swapped for `shades` (body, dark, light).
+static func recoloured_to(image: Image, shades: Array) -> Image:
 	var out := image.duplicate() as Image
-	var shades: Array = SHADES[seat]
 	for y in out.get_height():
 		for x in out.get_width():
 			var pixel := out.get_pixel(x, y)

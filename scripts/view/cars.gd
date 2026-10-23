@@ -18,12 +18,15 @@ const Config := preload("res://scripts/sim/config.gd")
 const World := preload("res://scripts/sim/world.gd")
 const Car := preload("res://scripts/sim/car.gd")
 const Traffic := preload("res://scripts/sim/traffic.gd")
+const Tunnel := preload("res://scripts/view/tunnel.gd")
 
 var atlas: Atlas
 var world: World
 ## Versus (B2): the seat of each world slot (the match's line-up), so every car is drawn in its seat's colour
 ## (player_colours.gd). Empty in single player, whose car is car_red.
 var seat_colours: Array[int] = []
+## Túnel de los Gemelos: watches the world and says when every car looks the same.
+var tunnel := Tunnel.new()
 
 
 func setup(p_atlas: Atlas) -> void:
@@ -32,6 +35,7 @@ func setup(p_atlas: Atlas) -> void:
 
 func show_world(p_world: World) -> void:
 	world = p_world
+	tunnel.update(world)
 	queue_redraw()
 
 
@@ -64,7 +68,9 @@ static func player_sprite(car: Car) -> Dictionary:
 
 
 ## A seat's car sprite: player_sprite(), in the colour of its seat when `colours` (slot -> seat, versus) has one.
-static func seat_car_sprite(car: Car, colours: Array[int]) -> Dictionary:
+static func seat_car_sprite(car: Car, colours: Array[int], twin: bool = false) -> Dictionary:
+	if twin:
+		return PlayerColours.twin_sprite(player_sprite(car))
 	if car.slot < colours.size():
 		return PlayerColours.seat_sprite(player_sprite(car), colours[car.slot])
 	return player_sprite(car)
@@ -72,21 +78,23 @@ static func seat_car_sprite(car: Car, colours: Array[int]) -> Dictionary:
 
 ## How a player car looks: {sprite (seat_car_sprite()), fallback (the flat colour drawn on its hitbox if the frame is
 ## missing: its seat's colour in versus, ViewConfig.PLAYER_FALLBACK in single player)}.
-static func car_look(car: Car, colours: Array[int]) -> Dictionary:
+static func car_look(car: Car, colours: Array[int], twin: bool = false) -> Dictionary:
 	var fallback := ViewConfig.PLAYER_FALLBACK
-	if car.slot < colours.size():
+	if twin:
+		fallback = PlayerColours.TWIN_SHADES[PlayerColours.BODY]
+	elif car.slot < colours.size():
 		fallback = PlayerColours.colour(colours[car.slot])
-	return {"sprite": seat_car_sprite(car, colours), "fallback": fallback}
+	return {"sprite": seat_car_sprite(car, colours, twin), "fallback": fallback}
 
 
 ## The player cars _draw() draws, in slot order: each car on the road (alive, and not blinked off) as {slot, sprite,
 ## fallback (car_look()), box (its hitbox's top-left corner on screen), size (its hitbox's)}. _draw() draws exactly
-## these, so the tests see which car is drawn where, and in which seat's colour.
-static func car_draws(w: World, colours: Array[int]) -> Array[Dictionary]:
+## these, so the tests see which car is drawn where, and in which seat's colour (all in the twin silver when `twin`).
+static func car_draws(w: World, colours: Array[int], twin: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for p: Car in w.players:
 		if p.alive != 0 and player_visible(p, w.stage_ticks):
-			var look := car_look(p, colours)
+			var look := car_look(p, colours, twin)
 			look["slot"] = p.slot
 			look["box"] = hitbox_pos(w, p.x, p.y_world)
 			look["size"] = Vector2i(roundi(p.w), roundi(p.h))
@@ -132,8 +140,28 @@ func _draw() -> void:
 	for c: Traffic in world.traffic:
 		if c.kind != Config.KIND_OIL:
 			_draw_traffic(c, rainbow(ticks) if c.kind == Config.KIND_FUEL_CAR else Color.WHITE)
-	for car: Dictionary in car_draws(world, seat_colours):
+	_draw_tunnel_mouths()
+	var twin := tunnel.active(world)
+	if twin:
+		var left := int(world.cfg.road_left)
+		var road := Rect2i(left, 0, int(world.cfg.road_right) - left, ViewConfig.VIEW_H)
+		Draw.rect(self, road, Color(0, 0, 0, Tunnel.DARKNESS))
+	for car: Dictionary in car_draws(world, seat_colours, twin):
 		Draw.sprite_on_hitbox(self, atlas, car["sprite"], car["box"], car["size"], car["fallback"])
+
+
+## The tunnel mouths on screen: a dark lintel across the road on two posts.
+func _draw_tunnel_mouths() -> void:
+	var cam := camera_px(world)
+	var low := cam - (ViewConfig.VIEW_H - floori(world.anchor)) - Tunnel.LINTEL_H
+	var high := cam + floori(world.anchor) + Tunnel.LINTEL_H
+	var left := int(world.cfg.road_left)
+	var width := int(world.cfg.road_right) - left
+	for k in Tunnel.visible(world.game_seed, low, high):
+		var y := screen_top(world, Tunnel.entrance(world.game_seed, k))
+		Draw.rect(self, Rect2i(left, y - Tunnel.LINTEL_H, width, Tunnel.LINTEL_H), ViewConfig.BLACK)
+		Draw.rect(self, Rect2i(left, y, Tunnel.POST_W, Tunnel.LINTEL_H), ViewConfig.BLACK)
+		Draw.rect(self, Rect2i(left + width - Tunnel.POST_W, y, Tunnel.POST_W, Tunnel.LINTEL_H), ViewConfig.BLACK)
 
 
 func _draw_traffic(c: Traffic, modulate: Color) -> void:
