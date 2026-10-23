@@ -19,13 +19,16 @@ extends Node
 ##   (start_versus()). The active input is then `seats` (scripts/input/seats.gd: one byte per seat from each seat's
 ##   joypad) instead of `solo` (the keyboard and every pad as one player); going back to the title lets every pad go.
 ##   Menu commands (up, down, accept, back...) of every device go to `nav` (scripts/input/nav.gd) for the menus.
-## - F11 and Alt+Enter, on every screen, switch between a window and fullscreen (toggle_fullscreen()); the picture
+## - F11 and Alt+Enter (on the web also F), on every screen, switch between a window and fullscreen (toggle_fullscreen()); the picture
 ##   keeps its whole-number scale (project.godot's stretch settings). The key never reaches the screens.
 ## - Steam Input (B4, scripts/input/steam_input.gd): when GodotSteam is loaded and Steam runs, `steam` turns Steam's
 ##   controllers into virtual pads, read once a frame (poll_steam()) and parsed into Input like a pad driver's events,
 ##   so every screen reads them as pads. Once Steam has a controller, Godot's own pads are left out for the session.
 ##   Steam starts in _ready() (start_steam()), so only the game itself talks to Steam: tests boot apps with start(),
 ##   and the tools (tools/tool_base.gd) set no_steam.
+## - Web (docs/SPEC_ONLINE.md §12, M0): web_mode (OS.has_feature("web"), settable by tests) adds F as a fullscreen key, since the
+##   browser keeps F11 and Alt+Enter, and makes the title wait for a key or a click (audio_unlocked) before the menu music starts: browsers
+##   block sound until a gesture. Esc stays BACK. The browser may grab some keys (-, +, M, F11) for itself.
 ## - --selftest (after the "--" of the command line): boots, drives SELFTEST_TICKS steps through the real screens and
 ##   checks the result (selftest_problems(): among others, a pause press pauses the game and a second one resumes
 ##   it), then a versus race of SELFTEST_TICKS steps through the join and race screens (selftest_versus_problems(),
@@ -120,6 +123,10 @@ var steam: SteamInput
 ## True keeps Steam Input off, as --no-steam does (set before the node enters the tree, as seed_override is). The tools
 ## set it (tools/tool_base.gd): they drive synthetic pads, which Steam would drop once it took over on a PC with Steam.
 var no_steam: bool = false
+## True on the web export (the browser). Tests set it before show_title() to try the web paths.
+var web_mode: bool = OS.has_feature("web")
+## False on the web until the first key or click on the title: the menu music waits for it (a browser blocks sound before a gesture).
+var audio_unlocked: bool = not OS.has_feature("web")
 ## The title's last choice (title.gd CHOICE_LOCAL or CHOICE_ONLINE), shown again when it opens.
 var title_choice: int = 0
 ## The window that F11 and Alt+Enter switch: the game's own when null. Tests give another, since a headless window
@@ -342,13 +349,13 @@ static func toggled_window_mode(mode: Window.Mode) -> Window.Mode:
 	return Window.MODE_FULLSCREEN
 
 
-## True for F11, or Enter (either) with Alt, going down. A key repeat is not one.
-static func is_fullscreen_key(event: InputEvent) -> bool:
+## True for F11, or Enter (either) with Alt, going down; with `web` also F. A key repeat is not one.
+static func is_fullscreen_key(event: InputEvent, web: bool = false) -> bool:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
 		return false
 	var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
-	if code == KEY_F11:
+	if code == KEY_F11 or (web and code == KEY_F and not key.alt_pressed and not key.ctrl_pressed and not key.meta_pressed):
 		return true
 	return key.alt_pressed and (code == KEY_ENTER or code == KEY_KP_ENTER)
 
@@ -368,7 +375,7 @@ func _switch_to(path: String) -> Node:
 	_screen.setup(self)
 	add_child(_screen)
 	if audio != null:
-		audio.music("music_menu" if _screen.name in MENU_SCREENS else "")
+		audio.music("music_menu" if _screen.name in MENU_SCREENS and audio_unlocked else "")
 	return _screen
 
 
@@ -376,7 +383,7 @@ func _input(event: InputEvent) -> void:
 	if admin_enabled and is_admin_key(event):
 		toggle_admin()
 		return
-	if is_fullscreen_key(event):
+	if is_fullscreen_key(event, web_mode):
 		toggle_fullscreen()
 		return
 	if _volume_key(event):

@@ -26,6 +26,9 @@ var time: float = 0.0
 ## The choice shown: CHOICE_LOCAL or CHOICE_ONLINE.
 var choice: int = CHOICE_LOCAL
 var _starting := false
+## True on the web until a key or a click: the title waits for it (browsers block sound before a gesture), shows PRESS ANY KEY and
+## takes no input. A gamepad button is no gesture for Safari, so only a key or the mouse count.
+var waiting: bool = false
 var road: Road
 var view: TitleView
 
@@ -39,11 +42,19 @@ func setup(p_app: App) -> void:
 	road.setup(app.atlas, cfg)
 	choice = clampi(app.title_choice, CHOICE_LOCAL, CHOICE_RANKING)
 	view.setup(app.atlas, cfg, app.high_score)
+	waiting = app.web_mode and not app.audio_unlocked
+	view.set_waiting(waiting)
+	view.set_web(app.web_mode)
 	view.set_choice(choice)
 
 
 func frame(_steps: int, delta: float) -> void:
 	time += delta
+	if waiting:
+		app.nav.clear()
+		app.input.clear_presses()
+		view.set_prompt_bright(floori(time / ViewConfig.PROMPT_BLINK_SECONDS) % 2 == 0)
+		return
 	view.set_prompt_bright(floori(time / ViewConfig.PROMPT_BLINK_SECONDS) % 2 == 0)
 	for command: Vector2i in app.nav.take():
 		if command.y == Nav.UP:
@@ -79,7 +90,26 @@ func start() -> void:
 		app.show_join()
 
 
+## The gesture arrived: the menu music starts and the title takes input. The press that did it is not a menu command.
+func unlock() -> void:
+	if not waiting:
+		return
+	waiting = false
+	app.audio_unlocked = true
+	app.nav.clear()
+	app.input.clear_presses()
+	view.set_waiting(false)
+	if app.audio != null:
+		app.audio.music("music_menu")
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if waiting:
+		var key := event as InputEventKey
+		var click := event as InputEventMouseButton
+		if (key != null and key.pressed and not key.echo) or (click != null and click.pressed):
+			unlock()
+		return
 	var at := Vector2(-1, -1)
 	var mouse := event as InputEventMouseButton
 	if mouse != null and mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:

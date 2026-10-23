@@ -189,7 +189,7 @@ func test_the_export_presets_with_and_without_steam() -> void:
 			presets[config.get_value(section, "name")] = section
 	var names := presets.keys()
 	names.sort()
-	assert_eq(names, ["Linux", "Linux Steam", "Windows Desktop", "Windows Steam"])
+	assert_eq(names, ["Linux", "Linux Steam", "Web", "Windows Desktop", "Windows Steam"])
 	var pairs := {"Linux": "Linux Steam", "Windows Desktop": "Windows Steam"}
 	for plain: String in pairs:
 		var steam: String = pairs[plain]
@@ -210,6 +210,12 @@ func test_the_export_presets_with_and_without_steam() -> void:
 	assert_eq(config.get_value(presets["Windows Steam"], "export_path"), "build/windows_steam/fuel_rivals.exe")
 	assert_eq(config.get_value("runnable_presets", "Linux"), "Linux", "the runnable presets stay A3's")
 	assert_eq(config.get_value("runnable_presets", "Windows Desktop"), "Windows Desktop")
+	# The web build (SPEC_ONLINE.md M0): no GodotSteam, no threads (any static host serves it), index.html in build/web.
+	var web: String = presets["Web"]
+	assert_eq(config.get_value(web, "platform"), "Web")
+	assert_eq(config.get_value(web, "exclude_filter"), "tests/*, tools/*, docs/*, addons/godotsteam/*")
+	assert_eq(config.get_value(web, "export_path"), "build/web/index.html")
+	assert_false(config.get_value(web + ".options", "variant/thread_support"), "no threads")
 
 
 ## GodotSteam's .gdextension loads only the libraries shipped here: Linux and Windows x86_64, debug and release, each

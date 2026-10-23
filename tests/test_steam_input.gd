@@ -211,6 +211,19 @@ func test_without_godotsteam_one_warning_and_godot_pads() -> void:
 	adapter.lookup = Callable()
 
 
+## The web export has no GodotSteam: the app starts Steam Input anyway, gets UNAVAILABLE with one warning and plays on Godot's pads.
+func test_the_app_starts_without_the_addon() -> void:
+	app = S.boot(SEED)
+	var other := SteamInput.new()
+	other.lookup = func() -> Object: return null
+	app.use_steam(other)
+	app.no_steam = false
+	assert_eq(app.start_steam(PackedStringArray()), SteamInput.UNAVAILABLE)
+	assert_eq(warnings.taken().size(), 1)
+	assert_eq(other.frame(true), 0)
+	other.lookup = Callable()
+
+
 ## Plan §5: the handles are read when Steam has loaded a controller's configuration. Before that, no controller is
 ## read and Godot's pads are the source; then Steam takes over (once) and the controller gets the first device.
 func test_handles_are_read_when_a_configuration_loads() -> void:

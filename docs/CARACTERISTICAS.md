@@ -226,6 +226,12 @@ Formato: **Característica** y, debajo, **Cómo**.
 45. **Resolución del daltonismo en los colores de jugador.** Se midieron las distancias de color (CIEDE2000) con simulación de
     protanopia, deuteranopia y tritanopia; algunos pares siguen cercanos y por eso las etiquetas P1–P6 y BOT permanecen en pantalla.
 
+46. **Compilación web LOCAL (M0 de `SPEC_ONLINE.md`).**
+    - 46.1 Cómo: preset "Web" de `export_presets.cfg` (sin hilos, sin GodotSteam, salida `build/web/index.html`; hace falta la plantilla web de Godot 4.7.2 instalada).
+    - 46.2 Los navegadores bloquean el sonido hasta el primer gesto: en la web el título muestra "PRESS ANY KEY" y espera una tecla o un clic (un botón de mando
+      no vale) antes de empezar la música y de aceptar entradas. En escritorio no cambia nada.
+    - 46.3 Sin GodotSteam (web) `start_steam` queda en "desactivado" con un solo aviso y se leen los mandos de Godot (con prueba).
+
 ---
 
 ## Sección 9. Lo que el juego NO tiene
@@ -234,7 +240,7 @@ Formato: **Característica** y, debajo, **Cómo**.
 - No hay juego online ni servidor; el multijugador es solo local (LOCAL).
 - Hay efectos de sonido y música retro (ver `docs/AUDIO.md`). El volumen se cambia con `-` y `+`, y `M` silencia; se guarda en `user://settings.cfg`.
 - No se guarda nada: la mejor puntuación dura solo mientras la sesión está abierta.
-- No hay controles táctiles, versión web ni potenciadores (las 30 ideas de power-ups están pendientes).
+- No hay controles táctiles ni potenciadores; la versión web local solo se exporta (ver 46) (las 30 ideas de power-ups están pendientes).
 - ONLINE aparece en el menú pero está bloqueado ("COMING SOON").
 - El teclado solo juega en LOCAL cuando es la única persona.
 

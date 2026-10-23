@@ -195,6 +195,10 @@ const BAND_ALPHA := 0.7
 const PROMPT := "UP / DOWN CHOOSE    ENTER / SPACE / A / START GO"
 ## On the best score's band: the best on the left half, the fullscreen keys on the right half.
 const FULLSCREEN_HINT := "F11 / ALT+ENTER  FULLSCREEN"
+## The same in the browser, which keeps F11 and Alt+Enter for itself.
+const FULLSCREEN_HINT_WEB := "F  FULLSCREEN"
+## The web title waits for a key or a click before any sound (browsers block audio until then).
+const PROMPT_WEB := "PRESS ANY KEY"
 ## The prompt blinks between full and this alpha every half second.
 const PROMPT_DIM_ALPHA := 0.35
 const PROMPT_BLINK_SECONDS := 0.5

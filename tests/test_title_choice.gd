@@ -223,3 +223,75 @@ static func _plain_key(code: Key) -> InputEventKey:
 	event.physical_keycode = code
 	event.pressed = true
 	return event
+
+
+## On the web (App.web_mode) the title waits for a key or a click before the menu music and before it takes input:
+## browsers block sound until a gesture. A pad button is no gesture; nothing changes on the desktop.
+func test_the_web_title_waits_for_a_key_or_a_click() -> void:
+	assert_true(app.audio_unlocked, "desktop: nothing to wait for")
+	assert_false((app.current_screen() as Title).waiting)
+	app.web_mode = true
+	app.audio_unlocked = false
+	var title := app.show_title() as Title
+	assert_true(title.waiting)
+	assert_true(title.view.waiting)
+	assert_true(ViewConfig.PROMPT_WEB.length() > 0 and ViewConfig.TEXT_MEDIUM % 8 == 0)
+	# A pad button, Enter on the pad and a menu command are no gesture, and the title does not move.
+	S.pad(app, PADS[0], JOY_BUTTON_A, true)
+	S.pad(app, PADS[0], JOY_BUTTON_A, false)
+	S.frame(app, 1)
+	assert_eq(S.screen_name(app), "Title")
+	assert_true(title.waiting, "a gamepad is no gesture")
+	assert_false(app.audio_unlocked)
+	# A key unlocks, and that key does not also pick LOCAL.
+	S.key_tap(app, KEY_ENTER)
+	title._unhandled_input(_key_event(KEY_ENTER))
+	assert_false(title.waiting)
+	assert_true(app.audio_unlocked)
+	S.frame(app, 1)
+	assert_eq(S.screen_name(app), "Title", "the unlocking press is not a confirm")
+	S.key_tap(app, KEY_ENTER)
+	S.frame(app, 1)
+	assert_eq(S.screen_name(app), "Join", "then the title takes input")
+
+
+func test_the_web_title_unlocks_with_a_click_and_stays_unlocked() -> void:
+	app.web_mode = true
+	app.audio_unlocked = false
+	var title := app.show_title() as Title
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = Vector2(ViewConfig.START_BUTTON.position) + Vector2(2, 2)
+	title._unhandled_input(click)
+	assert_false(title.waiting)
+	assert_eq(S.screen_name(app), "Title", "the click only unlocks")
+	assert_eq(app.show_title().get("waiting"), false, "a second visit does not ask again")
+
+
+## F is a fullscreen key on the web only (the browser keeps F11 and Alt+Enter); Esc never is.
+func test_f_is_a_fullscreen_key_on_the_web_only() -> void:
+	assert_false(App.is_fullscreen_key(_key_event(KEY_F)))
+	assert_true(App.is_fullscreen_key(_key_event(KEY_F), true))
+	assert_false(App.is_fullscreen_key(_key_event(KEY_ESCAPE), true))
+	assert_true(App.is_fullscreen_key(_key_event(KEY_F11), true))
+	window = Window.new()
+	app.fullscreen_window = window
+	app.web_mode = true
+	S.key_tap(app, KEY_F)
+	assert_eq(window.mode, Window.MODE_FULLSCREEN)
+	S.key_tap(app, KEY_F)
+	assert_eq(window.mode, Window.MODE_WINDOWED)
+	S.key_tap(app, KEY_ESCAPE)
+	assert_eq(window.mode, Window.MODE_WINDOWED, "Esc is BACK")
+	for code: Key in [KEY_MINUS, KEY_EQUAL, KEY_M]:
+		S.key_tap(app, code)
+	assert_eq(window.mode, Window.MODE_WINDOWED, "the volume keys are not fullscreen")
+
+
+func _key_event(code: Key) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.physical_keycode = code
+	event.keycode = code
+	event.pressed = true
+	return event

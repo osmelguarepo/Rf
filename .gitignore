@@ -6,3 +6,5 @@ build/
 shots/
 *.log
 .DS_Store
+# GodotSteam leaves these when a debug library is replaced while the game runs
+addons/godotsteam/win64/~*.TMP

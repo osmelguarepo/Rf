@@ -344,6 +344,7 @@ Cuatro revisores (netcode, backend, plataformas, producto y seguridad) atacaron 
 
 ### 16.7 Hitos revisados
 - **M0 (ahora)**: demo web LOCAL pública, con enlace a la lista de deseos y un canal de Discord para probadores. **Puerta de decisión**: ¿es divertido jugar con personas contra bots? Si no, se vuelve al juego antes de M1.
+  - **M0: implementado** (compilación local): preset "Web" (sin hilos, sin GodotSteam; `build/web/index.html`; `index.wasm` ~39,5 MB sin comprimir, `index.pck` ~0,66 MB), título "PRESS ANY KEY" en la web (tecla o clic, no mando) antes de la música, tecla F como pantalla completa en la web (Esc sigue siendo VOLVER), prueba de `start_steam` sin el complemento, `build/` y `addons/godotsteam/win64/~*.TMP` en `.gitignore`. **Falta**: probarla en Chrome, Firefox y Safari, la suma de comprobación dorada en web y las teclas `-`, `+`, `M` en cada navegador; alojamiento público, enlace a la lista de deseos y canal de Discord son tareas de la persona responsable.
 - **M1**: protocolo y transporte loopback tipo TCP.
 - **M2**: servidor, cliente de dos estados y salas privadas sin puntos. Puertas de salida: tamaño de la corrección en píxeles, profundidad de resimulación, tiempo de fotograma en la web y una sesión con personas por internet real.
 - **M3**: Go + PostgreSQL, Steam Direct en marcha, ranking con la valoración oculta, repeticiones.

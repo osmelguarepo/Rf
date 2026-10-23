@@ -18,6 +18,10 @@ var best: int = 0
 var prompt_bright: bool = true
 ## The choice drawn lit: an index of ViewConfig.TITLE_CHOICES.
 var choice: int = 0
+## True on the web before the first key or click: the prompt band asks for it instead of the controls.
+var waiting: bool = false
+## True in the browser: the fullscreen hint names F, since the browser keeps F11.
+var web: bool = false
 
 
 func setup(p_atlas: Atlas, p_cfg: Config, p_best: int) -> void:
@@ -31,6 +35,18 @@ func setup(p_atlas: Atlas, p_cfg: Config, p_best: int) -> void:
 func set_prompt_bright(bright: bool) -> void:
 	if bright != prompt_bright:
 		prompt_bright = bright
+		queue_redraw()
+
+
+func set_web(p_web: bool) -> void:
+	if p_web != web:
+		web = p_web
+		queue_redraw()
+
+
+func set_waiting(p_waiting: bool) -> void:
+	if p_waiting != waiting:
+		waiting = p_waiting
 		queue_redraw()
 
 
@@ -81,11 +97,15 @@ func _draw() -> void:
 	for band_y: int in [ViewConfig.PROMPT_BAND_Y, ViewConfig.BEST_BAND_Y]:
 		Draw.rect(self, Rect2i(0, band_y, ViewConfig.VIEW_W, ViewConfig.BAND_H), Color(0, 0, 0, ViewConfig.BAND_ALPHA))
 	var prompt_colour := Color(ViewConfig.WHITE, 1.0 if prompt_bright else ViewConfig.PROMPT_DIM_ALPHA)
-	Draw.text_centred(self, font, centre, ViewConfig.PROMPT_BAND_Y + text_dy, ViewConfig.PROMPT, small, prompt_colour)
+	if waiting:
+		var medium := ViewConfig.TEXT_MEDIUM
+		Draw.text_centred(self, font, centre, ViewConfig.PROMPT_BAND_Y + ((ViewConfig.BAND_H - medium) >> 1), ViewConfig.PROMPT_WEB, medium, prompt_colour)
+	else:
+		Draw.text_centred(self, font, centre, ViewConfig.PROMPT_BAND_Y + text_dy, ViewConfig.PROMPT, small, prompt_colour)
 	var quarter := ViewConfig.VIEW_W >> 2
 	var best_top := ViewConfig.BEST_BAND_Y + text_dy
 	Draw.text_centred(self, font, quarter, best_top, "BEST THIS SESSION: %d" % best, small, ViewConfig.GREY)
-	Draw.text_centred(self, font, centre + quarter, best_top, ViewConfig.FULLSCREEN_HINT, small, ViewConfig.GREY)
+	Draw.text_centred(self, font, centre + quarter, best_top, (ViewConfig.FULLSCREEN_HINT_WEB if web else ViewConfig.FULLSCREEN_HINT), small, ViewConfig.GREY)
 
 
 ## A choice's button: lit (red with a light-red rim, white label) when it is the one shown, dark otherwise.
