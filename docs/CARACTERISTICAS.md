@@ -247,12 +247,27 @@ Formato: **Característica** y, debajo, **Cómo**.
     - 47.5 Pruebas y herramientas: `tests/test_net_*.gd`; `tools/net_sim.gd` (N clientes con latencia, jitter, pérdida y cortes; mide la corrección en píxeles, la profundidad
       de resimulación y el tiempo de fotograma); `tools/net_local.sh` (servidor y dos clientes reales en el mismo equipo, o dos ventanas con `--windows`).
 
+48. **Cuentas, cola de emparejamiento y ranking online (cliente de M4/M5 de `SPEC_ONLINE.md`).**
+    - 48.1 Entrada: con la API configurada, ONLINE abre primero el inicio de sesión: ENTRAR CON STEAM (escritorio con Steam: ticket web a `POST /auth/steam`; web:
+      redirección de página completa a Steam OpenID, vuelta con un código de un solo uso en el fragmento de la URL que se canjea con `POST /auth/exchange` y se borra
+      con `history.replaceState`), JUGAR COMO INVITADO (sin puntos), SALAS PRIVADAS (sin cuenta) y, si la API no responde, JUGAR LOCAL. El token vive solo en memoria.
+    - 48.2 Cola: BUSCAR CARRERA mide la latencia a cada región, entra en la cola y muestra "SEARCHING FOR RIVALS" con el tiempo, la banda de divisiones y los jugadores
+      encontrados; al encontrar partida hay una confirmación con cuenta atrás (Aceptar / Atrás), luego "WAITING FOR THE OTHERS", y al empezar abre el WebSocket con el billete
+      y la carrera. Atrás cancela en cualquier punto. Mensajes de penalización, sesión caducada, servidor que no responde y versión antigua ("UPDATE THE GAME"; en web, recargar).
+    - 48.3 Ranking online: la pantalla RANKING usa `GET /leaderboard` con la sesión iniciada (y el ranking LOCAL si no); tras una partida de la cola se lee `GET /me` y el
+      panel final muestra el cambio de puntos que fijó el servidor.
+    - 48.4 Servidor de juego: billete real de `backend/docs/TICKET.md` (base64url firmado con la clave del servidor; vectores compartidos en las pruebas; los billetes de
+      texto antiguos solo con `--dev`), sala abierta que toma a los humanos según llegan sus billetes (6 puestos, el resto bots), latido cada 10 s con la bandera de drenaje,
+      registro opcional, y buzón en disco (`user://outbox`) que reenvía resultado y repetición con espera creciente hasta que la API los acepta (409 = hecho).
+    - 48.5 Robustez: reconexión automática dentro de la ventana de gracia con aviso en pantalla, pestaña oculta en web (`visibilitychange`: el servidor pone un bot y al volver
+      reenvía la partida) y vuelta al juego LOCAL si online no está disponible.
+
 ---
 
 ## Sección 9. Lo que el juego NO tiene
 
-- No hay inicio de sesión (ni con Google ni con otra cuenta), ni cuentas de usuario.
-- El juego online es solo por salas privadas con código y sin puntos; no hay emparejamiento, cuentas, ranking online ni servidor desplegado (ver 47 y `SPEC_ONLINE.md`).
+- Solo hay inicio de sesión con Steam (o invitado sin puntos); ni Google ni otras cuentas.
+- El online necesita la API y un servidor desplegados (ver 47, 48 y `SPEC_ONLINE.md`); nada de esto está desplegado todavía.
 - Hay efectos de sonido y música retro (ver `docs/AUDIO.md`). El volumen se cambia con `-` y `+`, y `M` silencia; se guarda en `user://settings.cfg`.
 - No se guarda nada: la mejor puntuación dura solo mientras la sesión está abierta.
 - No hay controles táctiles ni potenciadores; la versión web local solo se exporta (ver 46) (las 30 ideas de power-ups están pendientes).
@@ -263,6 +278,7 @@ Formato: **Característica** y, debajo, **Cómo**.
 - Las builds de Windows se generan pero no se han ejecutado.
 - Steam Input real, Remote Play Together con 6 jugadores y 6 mandos físicos no se han probado (no hay cliente de Steam ni mandos aquí).
 - El juego online no se ha probado con personas por internet real ni con el navegador (solo con simulación, localhost y pruebas automáticas); falta medir el tiempo de fotograma en la web.
+- El cliente de cuentas y cola (48) solo se ha probado con simulaciones; ver la lista "M4/M5 cliente" de `SPEC_ONLINE.md` para lo que falta verificar.
 - Nadie ha jugado aún contra los bots: el equilibrio, sobre todo un humano contra 5 bots, es un punto por ajustar. En simulación, un
   "humano" que juega igual que los bots ganó solo 1 de 20 partidas.
 - El nombre "Fuel Rivals" no se ha comprobado como marca y falta el App ID real de Steam.
