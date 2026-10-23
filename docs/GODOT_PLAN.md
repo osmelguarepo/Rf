@@ -180,7 +180,7 @@ ASSETS.md README.md
   - Orden de llamadas: `inputInit(false)`, luego `setInputActionManifestFilePath(<dir_exe>/steam_input/steam_input_manifest.vdf)`, luego `enableDeviceCallbacks()`. Los handles se leen con `input_configuration_loaded`.
   - **Una sola fuente por sesión:** Steam si hay handles; si no, los mandos de Godot.
   - Las compilaciones sin Steam usan `exclude_filter` con `addons/godotsteam/*`.
-- **Sin audio.** Driver Dummy, ningún `AudioStreamPlayer` y ningún archivo de audio.
+- **Audio.** Retro y libre, solo en `scripts/app/audio.gd` (ver `docs/AUDIO.md`); la simulación no suena.
 
 ## 6. Pruebas y verificación
 

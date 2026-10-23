@@ -8,7 +8,6 @@ const FONT_IMPORT := "res://assets/font/press-start-2p-latin-400-normal.woff2.im
 ## Section, key and value, exactly as the plan lists them.
 const SETTINGS := [
 	["application", "config/name", "Fuel Rivals"],
-	["audio", "driver/driver", "Dummy"],
 	["display", "window/size/viewport_width", 640],
 	["display", "window/size/viewport_height", 360],
 	["display", "window/size/window_width_override", 1920],

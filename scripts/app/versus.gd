@@ -75,6 +75,7 @@ func new_match() -> void:
 	game_match = Match.create(cfg, app.next_seed(), lineup.size(), seats.humans_mask())
 	world = game_match.world
 	matches += 1
+	app.audio.begin_race()
 	ranking_results = {}
 	_settled = false
 	cars.seat_colours = lineup
@@ -92,11 +93,14 @@ func frame(steps: int, delta: float) -> void:
 		step_once(seats.step_bytes(lineup.size()))
 	render()
 	hud.animate(delta)
+	app.audio.drive(game_match)
+	app.audio.advance(delta)
 
 
 ## One step of the match with one byte per seat.
 func step_once(bytes: PackedByteArray) -> void:
 	game_match.step(bytes)
+	app.audio.race_step(game_match)
 	if game_match.phase == Match.MATCH_OVER:
 		settle_ranking()
 
@@ -184,6 +188,7 @@ func settle_ranking() -> void:
 		var result := app.ranking.apply("seat:%d" % seat, player_name, Ranking.delta(order.size(), place))
 		result["name"] = player_name
 		ranking_results[slot] = result
+	app.audio.match_result(game_match, ranking_results)
 
 
 ## What the race tower calls each slot: a person's name from the join screen, BOT for a bot.
@@ -192,3 +197,8 @@ func slot_names() -> Array[String]:
 	for p: Car in world.players:
 		out.append(app.names.name_of(lineup[p.slot]) if p.human != 0 else "BOT")
 	return out
+
+
+func _exit_tree() -> void:
+	if app != null and is_instance_valid(app.audio):
+		app.audio.stop_loops()

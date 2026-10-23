@@ -44,6 +44,7 @@ const FixedStep := preload("res://scripts/app/fixed_step.gd")
 const Tuning := preload("res://scripts/app/tuning.gd")
 const RankingStore := preload("res://scripts/app/ranking_store.gd")
 const Names := preload("res://scripts/app/names.gd")
+const Audio := preload("res://scripts/app/audio.gd")
 const Admin := preload("res://scripts/app/admin.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
@@ -56,6 +57,8 @@ const JOIN_SCENE := "res://scenes/join.tscn"
 const RANKING_SCENE := "res://scenes/ranking.tscn"
 const VERSUS_SCENE := "res://scenes/versus.tscn"
 const SELFTEST_TICKS := 600
+## The screens whose menu commands make a sound (audio.gd).
+const MENU_SCREENS: Array[StringName] = [&"Title", &"Join", &"Ranking"]
 const SELFTEST_FRAMES := 120
 ## Frames of the join screen and of a versus race the self test draws after the game's (B2).
 const SELFTEST_JOIN_FRAMES := 30
@@ -128,6 +131,8 @@ var tuning := Tuning.new()
 var ranking := RankingStore.new()
 ## What the six seats are called, from the join screen (docs/SPEC_RANKING.md §8).
 var names := Names.new()
+## The sound (docs/AUDIO.md); a node, so it is in the tree for its players.
+var audio: Audio = null
 var admin: Admin = null
 ## Best score this session. A new game starts with it as its high score.
 var high_score: int = 0
@@ -222,6 +227,9 @@ static func fitted_window_size(window: Vector2i, usable: Vector2i, view: Vector2
 ## Loads the art and the font (and the six seats' recoloured cars) and builds the input map. Returns `booted`.
 func boot() -> bool:
 	Keyboard.build_input_map()
+	if audio == null:
+		audio = Audio.new()
+		add_child(audio)
 	solo = LocalInput.new()
 	seats = Seats.new()
 	seats.guid_of = guid_of
@@ -341,7 +349,9 @@ func _input(event: InputEvent) -> void:
 		return
 	if input != null:
 		input.handle_event(event)
-	nav.handle_event(event)
+	var command := nav.handle_event(event)
+	if command != 0 and audio != null and _screen != null and _screen.name in MENU_SCREENS:
+		audio.menu(command)
 
 
 func _process(delta: float) -> void:

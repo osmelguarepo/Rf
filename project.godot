@@ -9,9 +9,6 @@ config/name="Fuel Rivals"
 run/main_scene="res://scenes/boot.tscn"
 config/icon="res://icon.svg"
 
-[audio]
-
-driver/driver="Dummy"
 
 [debug]
 

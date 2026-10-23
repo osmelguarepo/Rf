@@ -55,13 +55,16 @@ func test_assets_listed() -> void:
 	assert_eq(unknown_licence, [], "rows with a licence other than %s" % ", ".join(LICENCES))
 
 
-## Plan §5: no audio. No audio file anywhere in the repository, and no audio class in the game's code or scenes.
-func test_no_audio() -> void:
-	var audio_files: Array = []
+## docs/AUDIO.md: the game has sound, all of it free. Audio files live only under assets/audio/, as WAV or Ogg (the
+## listing test above holds each one to a CC0 or own-work row in ASSETS.md), and the audio classes are used by
+## scripts/app/audio.gd alone, so the simulation and the view stay silent.
+func test_audio_is_confined_to_one_folder_and_one_script() -> void:
+	var stray: Array = []
 	for file: String in _walk("res://", false):
 		if AUDIO_EXTENSIONS.has(file.get_extension().to_lower()):
-			audio_files.append(file)
-	assert_eq(audio_files, [], "audio files")
+			if not file.begins_with("assets/audio/") or not ["wav", "ogg"].has(file.get_extension().to_lower()):
+				stray.append(file)
+	assert_eq(stray, [], "audio files outside assets/audio/, or in another format")
 	var classes := RegEx.create_from_string("\\bAudio(Stream|Server|Listener|Effect|Bus)\\w*")
 	var uses: Array = []
 	for root: String in ["res://scripts", "res://scenes"]:
@@ -69,7 +72,7 @@ func test_no_audio() -> void:
 			if file.get_extension() in ["gd", "tscn", "tres"]:
 				if classes.search(FileAccess.get_file_as_string("res://" + file)) != null:
 					uses.append(file)
-	assert_eq(uses, [], "audio classes in scripts/ or scenes/")
+	assert_eq(uses, ["scripts/app/audio.gd"], "audio classes in scripts/ or scenes/")
 
 
 ## Render intention 2: every frame of sprites.json lies inside sprites.png (size read from the PNG header).
