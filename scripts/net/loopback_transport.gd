@@ -23,12 +23,18 @@ static func pair(seed_value: int, latency_ms: int = 0, jitter_ms: int = 0, loss:
 
 ## One end of a Link: a Transport.
 class Endpoint extends Base:
-	var _link: Link
+	## Weak, so that the Link and its two endpoints do not keep each other alive: whoever holds the Link keeps the pair.
+	var _link_ref: WeakRef = null
+	var _link: Link:
+		get:
+			return _link_ref.get_ref() if _link_ref != null else null
 	var _side: int = 0
 	var _state: Base.State = Base.State.CLOSED
 	var _inbox: Array[PackedByteArray] = []
 
 	func connect_to(_address: String) -> int:
+		if _link == null:
+			return ERR_UNAVAILABLE
 		if _state != Base.State.CLOSED or _link.closed:
 			return ERR_ALREADY_IN_USE
 		_state = Base.State.CONNECTING
@@ -40,6 +46,8 @@ class Endpoint extends Base:
 			return ERR_UNCONFIGURED
 		if packet.is_empty() or packet.size() > MAX_PACKET:
 			return ERR_INVALID_PARAMETER
+		if _link == null:
+			return ERR_UNAVAILABLE
 		_link.enqueue(_side, packet, false)
 		return OK
 
@@ -61,7 +69,7 @@ class Endpoint extends Base:
 	func close() -> void:
 		if _state == Base.State.CLOSED:
 			return
-		if _state == Base.State.OPEN:
+		if _state == Base.State.OPEN and _link != null:
 			_link.enqueue(_side, PackedByteArray(), true)
 		_state = Base.State.CLOSED
 
@@ -91,9 +99,9 @@ class Link:
 		loss = loss_rate
 		client = Endpoint.new()
 		server = Endpoint.new()
-		client._link = self
+		client._link_ref = weakref(self)
 		client._side = 0
-		server._link = self
+		server._link_ref = weakref(self)
 		server._side = 1
 
 	func now_ms() -> int:

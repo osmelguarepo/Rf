@@ -15,12 +15,17 @@ const HELLO := 1
 const INPUT := 2
 const PING := 3
 const ACK_SNAPSHOT := 4
+## The owner of a private room starts the match (M2); a client asks for a SNAPSHOT after a CHECKSUM mismatch (M2).
+const START := 5
+const SNAPSHOT_REQ := 6
 const WELCOME := 16
 const TICKS := 17
 const SNAPSHOT := 18
 const CHECKSUM := 19
 const PONG := 20
 const EVENT := 21
+## The state of a private room before the match: its code, who sits where (M2).
+const LOBBY := 22
 
 const EVENT_DISCONNECT := 0
 const EVENT_RACE_END := 1
@@ -70,6 +75,14 @@ static func encode_ping(client_time: int) -> PackedByteArray:
 	var out := _start(PING)
 	_put_u32(out, client_time)
 	return out
+
+
+static func encode_start() -> PackedByteArray:
+	return _start(START)
+
+
+static func encode_snapshot_req() -> PackedByteArray:
+	return _start(SNAPSHOT_REQ)
 
 
 static func encode_ack_snapshot(tick: int) -> PackedByteArray:
@@ -139,6 +152,20 @@ static func encode_event(kind: int, seat: int, tick: int, data: PackedByteArray 
 	return out if out.size() <= MAX_MESSAGE else PackedByteArray()
 
 
+## `names` has the name of the person on each seat of a private room ("" for a free one); `secret` lets this person take
+## their seat back after a lost connection (ticket "rejoin:CODE:SEAT:SECRET").
+static func encode_lobby(code: String, seat: int, owner: bool, secret: String, names: PackedStringArray) -> PackedByteArray:
+	var out := _start(LOBBY)
+	_put_str8(out, code)
+	out.append(seat)
+	out.append(1 if owner else 0)
+	_put_str8(out, secret)
+	out.append(names.size())
+	for n in names:
+		_put_str8(out, n)
+	return out
+
+
 ## The message in `bytes` as a Dictionary: {"type": TYPE, ...fields}, or {"error": ERR_*, ...}.
 static func decode(bytes: PackedByteArray) -> Dictionary:
 	if bytes.is_empty():
@@ -174,6 +201,8 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 			msg["client_time"] = r.u32()
 		ACK_SNAPSHOT:
 			msg["tick"] = r.u32()
+		START, SNAPSHOT_REQ:
+			pass
 		WELCOME:
 			var seat := r.u8()
 			var seats := r.u8()
@@ -212,6 +241,18 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 		PONG:
 			msg["client_time"] = r.u32()
 			msg["server_tick"] = r.u32()
+		LOBBY:
+			msg["code"] = r.str8()
+			msg["seat"] = r.u8()
+			msg["owner"] = r.u8() != 0
+			msg["secret"] = r.str8()
+			var count := r.u8()
+			if r.ok and count > MAX_SEATS:
+				return _err(ERR_BAD_VALUE, {"field": "names"})
+			var names := PackedStringArray()
+			for i in count:
+				names.append(r.str8())
+			msg["names"] = names
 		EVENT:
 			var kind := r.u8()
 			msg["seat"] = r.u8()
