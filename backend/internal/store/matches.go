@@ -31,6 +31,8 @@ type AssignRequest struct {
 	Seats       []SeatRequest
 	GameVersion string
 	SimHash     string
+	// MatchID is an id from ReserveMatchID, or 0 to take the next one.
+	MatchID int64
 }
 
 // AssignedSeat is one human of an assigned match, with what its ticket needs.
@@ -121,7 +123,7 @@ func (s *Store) AssignMatch(ctx context.Context, req AssignRequest) (Assignment,
 		}
 		var busy bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM match_players mp JOIN matches m USING (match_id)
-			WHERE mp.player_id = ANY($1) AND m.status = 'assigned' AND NOT m.released)`, ids).Scan(&busy); err != nil {
+			WHERE mp.player_id = ANY($1) AND m.status = 'assigned' AND NOT m.released AND mp.left_at IS NULL)`, ids).Scan(&busy); err != nil {
 			return err
 		}
 		if busy {
@@ -167,9 +169,14 @@ func (s *Store) AssignMatch(ctx context.Context, req AssignRequest) (Assignment,
 		}
 
 		out = Assignment{Seed: randomSeed(), Ranked: verdict.Ranked, Reason: verdict.Reason, Bots: 6 - len(req.Seats)}
-		err = tx.QueryRow(ctx, `INSERT INTO matches (server_id, seed, humans, bots, ranked, rank_reason, game_version, sim_hash, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING match_id`,
-			req.ServerID, out.Seed, len(req.Seats), out.Bots, out.Ranked, out.Reason, req.GameVersion, req.SimHash, now).Scan(&out.MatchID)
+		// MatchID, when set, is an id reserved earlier with ReserveMatchID (the matchmaker names the match at "found").
+		var reserved any
+		if req.MatchID > 0 {
+			reserved = req.MatchID
+		}
+		err = tx.QueryRow(ctx, `INSERT INTO matches (match_id, server_id, seed, humans, bots, ranked, rank_reason, game_version, sim_hash, created_at)
+			VALUES (COALESCE($10::bigint, nextval(pg_get_serial_sequence('matches', 'match_id'))), $1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING match_id`,
+			req.ServerID, out.Seed, len(req.Seats), out.Bots, out.Ranked, out.Reason, req.GameVersion, req.SimHash, now, reserved).Scan(&out.MatchID)
 		if err != nil {
 			return err
 		}

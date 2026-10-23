@@ -101,7 +101,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 1 {
+	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("%d %v", n, err)
 	}
 	// Partitions for this month and the next two.

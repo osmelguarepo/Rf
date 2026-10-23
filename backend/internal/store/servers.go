@@ -35,7 +35,7 @@ func (s *Store) RegisterServer(ctx context.Context, name, region, url string, ca
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO servers (name, region, url, capacity) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (name) DO UPDATE SET region = EXCLUDED.region, url = EXCLUDED.url, capacity = EXCLUDED.capacity,
-			key_version = servers.key_version + 1, lease_expires_at = NULL, draining = false
+			key_version = servers.key_version + 1, lease_expires_at = NULL, draining = false, drain_requested = false
 		RETURNING server_id, name, region, url, capacity, key_version, draining, active_matches`,
 		name, region, url, capacity).
 		Scan(&sv.ID, &sv.Name, &sv.Region, &sv.URL, &sv.Capacity, &sv.KeyVersion, &sv.Draining, &sv.ActiveMatches)
@@ -124,7 +124,7 @@ func (s *Store) RecordHeartbeat(ctx context.Context, serverID int64, h Heartbeat
 		metrics = []byte("{}")
 	}
 	now := s.Now()
-	_, err := s.pool.Exec(ctx, `UPDATE servers SET capacity = $2, active_matches = $3, draining = $4, sim_hash = $5,
+	_, err := s.pool.Exec(ctx, `UPDATE servers SET capacity = $2, active_matches = $3, draining = ($4 OR drain_requested), sim_hash = $5,
 		game_version = $6, metrics = $7, last_heartbeat = $8, lease_expires_at = $9 WHERE server_id = $1`,
 		serverID, h.Capacity, h.ActiveMatches, h.Draining, h.SimHash, h.GameVersion, metrics, now, now.Add(lease))
 	return err
