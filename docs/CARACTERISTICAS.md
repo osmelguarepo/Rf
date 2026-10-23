@@ -9,23 +9,26 @@ Formato: **Característica** y, debajo, **Cómo**.
 
 ## Sección 1. Modos de juego
 
-1. **El juego tiene dos modos: un jugador y versus.**
-   - 1.1 Cómo: en la pantalla de título se elige **1 PLAYER** o **VERSUS** con Arriba/Abajo (flechas, W/S, cruceta o palanca
-     izquierda) y se confirma con Enter, Espacio, A o Start. También sirve un clic o toque sobre la opción.
+1. **El juego tiene dos modos: LOCAL y ONLINE.**
+   - 1.1 Cómo: en la pantalla de título se elige con Arriba/Abajo (flechas, W/S, cruceta o palanca izquierda) y se confirma
+     con Enter, Espacio, A o Start. También sirve un clic o toque sobre la opción.
+   - 1.2 **LOCAL** funciona hoy: humanos en la misma pantalla, y bots en los puestos vacíos.
+   - 1.3 **ONLINE** (solo humanos) todavía no está construido: aparece como "COMING SOON" y no se puede iniciar.
 
-2. **Un jugador sobrevive por etapas hasta una meta.**
-   - 2.1 Cómo: se recorren 13 500 px de carretera en la etapa 1, luego 15 750, 18 000 y 20 250, y se repite el ciclo. Al
-     llegar a la meta se pasa a la siguiente etapa, con el tanque lleno.
+2. **LOCAL: hasta 6 autos en una sola pantalla, con una partida al mejor de 3 rondas.**
+   - 2.1 Cómo: cada persona se une con su mando (A) o, si juega sola, con el teclado (Enter). Gana la partida el primero en
+     llegar a 2 rondas ganadas.
+   - 2.2 El antiguo juego de un jugador por etapas (metas de 13 500, 15 750, 18 000 y 20 250 px, con el tanque lleno en cada
+     etapa) ya no está en el menú; su código y sus pruebas siguen en el repositorio.
 
-3. **Versus: hasta 6 autos en una sola pantalla, con una partida al mejor de 3 rondas.**
-   - 3.1 Cómo: cada jugador usa su mando. Gana la partida el primero en llegar a 2 rondas ganadas.
+3. **LOCAL: empate y resultados.**
    - 3.2 Con 3 o más jugadores puede haber empate 1-1-1: tras 5 rondas gana quien tenga más rondas, luego más puntos totales y
      luego más distancia. Si siguen iguales, nadie gana.
    - 3.3 Con un solo jugador, la partida termina al ganar 2 rondas o al no ganar 2.
 
-4. **Los bots rellenan los asientos vacíos.**
-   - 4.1 Cómo: en la pantalla de unión se elige cuántos bots hay con Izquierda/Derecha en la cruceta o la palanca. Con un solo
-     jugador hay al menos 1 bot; nunca hay más de 6 autos en total.
+4. **Los bots rellenan automáticamente todos los puestos vacíos.**
+   - 4.1 Cómo: no hay selector. Con un humano hay 5 bots, con dos humanos 4, y así hasta 6 autos en total. Cuando alguien se
+     une, un bot le cede el puesto; si se va, el bot vuelve.
    - 4.2 Los bots aceleran siempre, pasan a marcha alta desde 160 km/h si hay 150 px libres delante, buscan el carril vecino más
      despejado, corrigen los derrapes, persiguen los autos arcoíris y reaccionan con 12 pasos de retraso.
    - 4.3 Los bots nunca ganan una ronda ni la partida.
@@ -51,8 +54,9 @@ Formato: **Característica** y, debajo, **Cómo**.
 9. **La dirección no actúa parado y es más lenta a gran velocidad.**
    - 9.1 Cómo: automático, según la velocidad del coche.
 
-10. **En versus, el teclado no conduce ningún auto: solo los mandos.**
-    - 10.1 Cómo: cada mando conduce su auto con la misma asignación de botones que en un jugador.
+10. **En LOCAL, el teclado juega solo si es la única persona; con 2 o más personas, solo mandos.**
+    - 10.1 Cómo: en la pantalla de unión, Enter sienta al teclado si nadie más se ha unido; un mando que se une después le quita
+      el asiento. Cada mando conduce con la asignación de botones de arriba.
 
 ---
 
@@ -67,7 +71,7 @@ Formato: **Característica** y, debajo, **Cómo**.
     - 12.1 Cómo: tocar un coche amarillo, salmón o azul inicia un derrape que te aleja de él. Cada coche te golpea una vez como máximo.
 
 13. **Un camión te elimina al instante.**
-    - 13.1 Cómo: tocar un camión termina la partida (un jugador) o te elimina de la ronda (versus).
+    - 13.1 Cómo: tocar un camión termina la partida (juego por etapas) o te elimina de la ronda (LOCAL).
 
 14. **Las manchas de aceite hacen derrapar el coche.**
     - 14.1 Cómo: al pasar por una mancha el coche derrapa a izquierda o derecha. Girar hacia el lado del derrape lo detiene en
@@ -80,7 +84,7 @@ Formato: **Característica** y, debajo, **Cómo**.
     - 16.1 Cómo: mientras parpadea no le afectan coches, camiones ni barrera; el aceite y los autos de combustible sí.
 
 17. **El tráfico se vuelve más denso con el tiempo.**
-    - 17.1 Cómo: en un jugador, cada etapa separa los coches y las manchas 0,9 veces lo que la anterior. En versus, lo mismo cada
+    - 17.1 Cómo: en el juego por etapas, cada etapa separa los coches y las manchas 0,9 veces lo que la anterior. En LOCAL, lo mismo cada
       20 s (1200 pasos), con un mínimo de 40 px entre coches; los autos arcoíris no cambian.
 
 ---
@@ -88,23 +92,23 @@ Formato: **Característica** y, debajo, **Cómo**.
 ## Sección 4. Combustible y puntos
 
 18. **El combustible baja con el tiempo.**
-    - 18.1 Cómo: el tanque tiene 100 y pierde 1 por segundo, se mueva o no. Con el tanque vacío se termina la partida (un jugador)
-      o se queda eliminado (versus).
+    - 18.1 Cómo: el tanque tiene 100 y pierde 1 por segundo, se mueva o no. Con el tanque vacío se termina la partida (juego por etapas)
+      o se queda eliminado (LOCAL).
 
 19. **Los autos arcoíris dan combustible y puntos.**
-    - 19.1 Cómo: tocar uno da +10 de combustible (hasta 100) y +1000 puntos. En versus lo recibe el primer coche que lo toca (el de
+    - 19.1 Cómo: tocar uno da +10 de combustible (hasta 100) y +1000 puntos. En LOCAL lo recibe el primer coche que lo toca (el de
       centro más cercano; si empatan, el asiento más bajo).
 
 20. **Se ganan puntos por adelantar.**
-    - 20.1 Cómo: +50 por cada coche o camión adelantado (una vez por jugador). En un jugador, +30 por cada unidad entera de
+    - 20.1 Cómo: +50 por cada coche o camión adelantado (una vez por jugador). En el juego por etapas, +30 por cada unidad entera de
       combustible que sobre al completar una etapa.
 
-21. **En versus también se ganan puntos por distancia.**
+21. **En LOCAL también se ganan puntos por distancia.**
     - 21.1 Cómo: +10 por cada 100 px de mundo recorridos.
 
 ---
 
-## Sección 5. Reglas del versus
+## Sección 5. Reglas de LOCAL
 
 22. **La cámara sigue al líder.**
     - 22.1 Cómo: automático: la cámara va al coche vivo más adelantado, sea jugador o bot, y nunca retrocede.
@@ -133,9 +137,9 @@ Formato: **Característica** y, debajo, **Cómo**.
 
 ## Sección 6. Unirse, mandos y asientos
 
-28. **Cada jugador se une con su mando y recibe su color.**
-    - 28.1 Cómo: en la pantalla de unión, pulsar A en un mando toma el asiento libre más bajo. Cualquier jugador unido empieza con
-      Start (hacen falta al menos 2 autos). B abandona el asiento; Back vuelve al título.
+28. **Cada jugador se une con su mando (o el teclado, si juega solo) y recibe su color.**
+    - 28.1 Cómo: en la pantalla de unión, pulsar A en un mando (o Enter en el teclado) toma el asiento libre más bajo. Cualquier
+      jugador unido empieza con Start (Enter en el teclado). B (Backspace en el teclado) abandona el asiento; Back o Esc vuelve al título.
     - 28.2 Colores: P1 rubí, P2 turquesa, P3 lila, P4 ciruela, P5 marrón, P6 rosa. Es la única forma de distinguir a los jugadores.
       Ningún color de jugador coincide con los del tráfico (salvo el auto arcoíris, que es la excepción declarada).
 
@@ -146,8 +150,7 @@ Formato: **Característica** y, debajo, **Cómo**.
 30. **Cualquier jugador puede pausar.**
     - 30.1 Cómo: Start en cualquier mando pausa y reanuda. En pausa, Back sale al título. Perder el foco de la ventana también pausa.
 
-31. **En un jugador, el teclado y cualquier mando conducen a la vez.**
-    - 31.1 Cómo: pausa con Esc, P o Start; tras un game over, Enter, Espacio o A repite, y Esc, P o Start vuelven al título.
+31. **El jugador de teclado pausa con Esc o P; salir de una pausa al título es con Backspace (teclado) o Back (mando).**
 
 ---
 
@@ -160,9 +163,9 @@ Formato: **Característica** y, debajo, **Cómo**.
 33. **Pantalla completa.**
     - 33.1 Cómo: F11 o Alt+Enter, en cualquier pantalla. Si el monitor es pequeño, la ventana se ajusta al mayor múltiplo entero que quepa.
 
-34. **HUD de un jugador y panel por auto en versus.**
-    - 34.1 Un jugador: puntos, récord, etapa, velocidad, marcha, combustible y avance hacia la meta, con aviso LOW FUEL.
-    - 34.2 Versus: un panel por auto junto a la carretera (P1–P3 a la izquierda, P4–P6 a la derecha), con su color, nombre (P# o BOT),
+34. **HUD del juego por etapas y panel por auto en LOCAL.**
+    - 34.1 Juego por etapas (ya fuera del menú): puntos, récord, etapa, velocidad, marcha, combustible y avance hacia la meta, con aviso LOW FUEL.
+    - 34.2 LOCAL: un panel por auto junto a la carretera (P1–P3 a la izquierda, P4–P6 a la derecha), con su color, nombre (P# o BOT),
       puntos, combustible, rondas ganadas y las marcas OUT, EDGE, LOW FUEL o NO PAD.
 
 35. **Arte con recursos libres.**
@@ -175,7 +178,7 @@ Formato: **Característica** y, debajo, **Cómo**.
 
 36. **Motor: Godot 4.7.2, lenguaje GDScript, renderizador de compatibilidad (gl_compatibility).**
 
-37. **Multijugador local de hasta 6 jugadores en una sola pantalla.** Online no existe todavía.
+37. **Modo LOCAL de hasta 6 coches en una sola pantalla.** El modo ONLINE todavía no existe (no hay red ni servidor).
 
 38. **Soporte de mandos sin límite fijo de 4.** Se lee cada mando por separado (con tolerancia de 0,5 en las palancas) y se identifica
     por su GUID para devolverle su asiento al reconectar.
@@ -191,7 +194,7 @@ Formato: **Característica** y, debajo, **Cómo**.
       asiento. La misma semilla y las mismas entradas dan la misma partida, bit a bit. Lo usan las pruebas y es la base prevista para el online.
     - 40.2 El generador de números aleatorios es propio (mulberry32). El estado completo se puede guardar, restaurar y resumir con un SHA-256.
 
-41. **Fidelidad con el prototipo original.** Las reglas de un jugador reproducen exactamente una traza de 10 800 pasos grabada del prototipo
+41. **Fidelidad con el prototipo original.** Las reglas del juego por etapas reproducen exactamente una traza de 10 800 pasos grabada del prototipo
     en Phaser (el original está en el commit `0a0841f`).
 
 42. **Plataformas de exportación: Linux y Windows (escritorio), con y sin Steam.**
@@ -199,13 +202,13 @@ Formato: **Característica** y, debajo, **Cómo**.
       embebido. Las de Steam incluyen las librerías de GodotSteam y el manifiesto de Steam Input.
 
 43. **Pruebas automáticas.**
-    - 43.1 339 tests con un runner propio (`tools/test.sh`), prueba de humo de un jugador y de versus (`tools/run_tool.sh smoke`),
-      comprobación de la escala entera (`scalecheck`), capturas de pantalla comprobadas por píxeles, QA de versus con 6 asientos
+    - 43.1 339 tests con un runner propio (`tools/test.sh`), prueba de humo del juego por etapas y de LOCAL (`tools/run_tool.sh smoke`),
+      comprobación de la escala entera (`scalecheck`), capturas de pantalla comprobadas por píxeles, QA de LOCAL con 6 asientos
       (`tools/run_tool.sh versus_qa`) y comprobación de exportación (`tools/export_check.sh`).
     - 43.2 Modo `--selftest` dentro de cualquier build exportada, y opción `--seed=N` para fijar la semilla.
 
 44. **Integración continua en GitHub Actions** (`.github/workflows/ci.yml`): descarga y verifica Godot 4.7.2, ejecuta los tests, la
-    prueba de humo, la exportación del paquete, el QA de versus con un jugador y las cuatro builds.
+    prueba de humo, la exportación del paquete, el QA de LOCAL con un jugador y las cuatro builds.
 
 45. **Resolución del daltonismo en los colores de jugador.** Se midieron las distancias de color (CIEDE2000) con simulación de
     protanopia, deuteranopia y tritanopia; algunos pares siguen cercanos y por eso las etiquetas P1–P6 y BOT permanecen en pantalla.
@@ -215,11 +218,12 @@ Formato: **Característica** y, debajo, **Cómo**.
 ## Sección 9. Lo que el juego NO tiene
 
 - No hay inicio de sesión (ni con Google ni con otra cuenta), ni cuentas de usuario.
-- No hay juego online ni servidor; el multijugador es solo local.
+- No hay juego online ni servidor; el multijugador es solo local (LOCAL).
 - No hay sonido ni música.
 - No se guarda nada: la mejor puntuación dura solo mientras la sesión está abierta.
 - No hay controles táctiles, versión web ni potenciadores (las 30 ideas de power-ups están pendientes).
-- No hay teclado en versus: es solo con mandos.
+- ONLINE aparece en el menú pero está bloqueado ("COMING SOON").
+- El teclado solo juega en LOCAL cuando es la única persona.
 
 ## Sección 10. Sin verificar todavía
 

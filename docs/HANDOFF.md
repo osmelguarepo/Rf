@@ -1996,3 +1996,24 @@ covers it (checked by B1's verifier), so the QA tool is not the guard for that r
 
 Not done: an adversarial agent review (needs agents), the CI run of the latest commit (GitHub tools were not available
 in this session), and everything in "Known gaps" that needs Windows, Steam, six gamepads or people.
+
+## Modes renamed: LOCAL and ONLINE (23 Oct, owner's request)
+
+The owner asked for two modes: **LOCAL** (humans, or humans and bots, the bots filling the empty seats) and **ONLINE**
+(humans only). Done by the lead, alone:
+- The title shows `LOCAL` and `ONLINE` (`ViewConfig.TITLE_CHOICES`, `Title.CHOICE_LOCAL`, `CHOICE_ONLINE`). LOCAL opens
+  the join screen; ONLINE is selectable but starts nothing and says "COMING SOON: HUMANS ONLY". Nothing of ONLINE exists
+  (no network, no server): that is a later project (plan §9, DECISIONES §1 and §5; the simulation is ready for it).
+- **Bots fill every empty seat by themselves** (`Seats.wanted_bots` starts at six; no bots while nobody has joined).
+  The join screen lost its Left/Right bot selector; `set_bots()` stays for tests and tools.
+- **The keyboard** may be the one person: Enter on the join screen seats it (`Seats.join_keyboard()`,
+  `KEYBOARD_DEVICE`), Enter again starts; a pad that joins takes its seat away; Backspace (`Nav.SELECT`) gives it up or,
+  paused, quits to the title; Esc and P pause and resume in the race.
+- The single-player stage game is no longer on the menu; `App.start_game()`, its code and its tests stay (the Phaser
+  golden trace, `smoke 1p`, the screenshots 02-06 start it by calling it).
+- Tests: 339 before; the title, join, seats and Steam tests were rewritten for the new rules, and tests for the keyboard
+  seat and for the bots filling the seats were added. README and `docs/CARACTERISTICAS.md` describe the new modes.
+- Not changed: the owner's earlier rule that in ONLINE a disconnected player's car just disappears is not implemented
+  (there is no ONLINE); `tools/versus_qa.gd` and the B1 bot statistics still describe the LOCAL race.
+- DECISIONES_MULTIJUGADOR.md is partly superseded: bots are no longer chosen, the keyboard may play alone, and the
+  single-player mode left the menu.

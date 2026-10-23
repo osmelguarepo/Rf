@@ -6,8 +6,7 @@ extends Node2D
 ## A taken card is lit in that colour: its border, and the badge along its top with its name (P1 to P6, or BOT for a
 ## bot's seat); a person's card says READY and a bot's CPU. A free card has a grey border and a dark badge, and asks to
 ## PRESS A (blinking), its car waiting in the colour the seat gives. Bots take the lowest free seats (seats.gd
-## bot_seats()), so their cards move when a person joins or leaves. The arrows around the number of bots light up only
-## where the count can still go.
+## bot_seats()), so their cards move when a person joins or leaves. The bots fill every empty seat by themselves.
 
 const ViewConfig := preload("res://scripts/view/view_config.gd")
 const Atlas := preload("res://scripts/view/atlas.gd")
@@ -16,9 +15,9 @@ const PlayerColours := preload("res://scripts/view/player_colours.gd")
 const Seats := preload("res://scripts/input/seats.gd")
 const Config := preload("res://scripts/sim/config.gd")
 
-const TITLE := "VERSUS"
+const TITLE := "LOCAL"
 const TITLE_TOP := 14
-const SUBTITLE := "EVERY PLAYER: PRESS A ON YOUR GAMEPAD"
+const SUBTITLE := "GAMEPAD: PRESS A     ALONE: ENTER ON THE KEYBOARD"
 const SUBTITLE_TOP := 54
 ## Six cards in a row.
 const CARD_W := 96
@@ -36,7 +35,7 @@ const BOTS_TOP := 210
 const STATUS_TOP := 236
 ## The controls, two lines on a dark band.
 const HINTS := [
-	"A JOIN    B LEAVE    LEFT / RIGHT  BOTS",
+	"A JOIN    B LEAVE    BOTS FILL THE EMPTY SEATS",
 	"START  RACE    BACK / ESC  TITLE",
 ]
 const HINTS_TOP := 288
@@ -106,7 +105,7 @@ static func status_text(p_can_start: bool, p_cars: int, people: int) -> String:
 	return "TWO CARS AT LEAST"
 
 
-## The bots' line, without its arrows.
+## The bots' line: they fill every empty seat.
 static func bots_text(count: int) -> String:
 	return "BOTS: %d" % count
 
@@ -133,19 +132,9 @@ func _draw() -> void:
 		top += HINTS_STEP
 
 
-## "< BOTS: n >": each arrow lit while the count can go that way, dark grey at its bound.
+## "BOTS: n", under the cards.
 func _draw_bots(centre: int) -> void:
-	var medium := ViewConfig.TEXT_MEDIUM
-	var text := bots_text(bots)
-	var gap := medium
-	var text_w := Draw.text_width(font, text, medium)
-	var left := centre - (text_w >> 1)
-	Draw.shadowed(self, font, left, BOTS_TOP, text, medium, ViewConfig.WHITE)
-	var people := kinds.count(Seats.PERSON)
-	var down := people > 0 and bots > min_bots
-	var up := people > 0 and bots < max_bots
-	Draw.shadowed(self, font, left - gap - medium, BOTS_TOP, "<", medium, ViewConfig.YELLOW if down else ViewConfig.ASPHALT)
-	Draw.shadowed(self, font, left + text_w + gap, BOTS_TOP, ">", medium, ViewConfig.YELLOW if up else ViewConfig.ASPHALT)
+	Draw.shadowed_centred(self, font, centre, BOTS_TOP, bots_text(bots), ViewConfig.TEXT_MEDIUM, ViewConfig.WHITE)
 
 
 ## One seat's card: a box with a border in the seat's colour (grey when free); the badge with its name, on the seat's

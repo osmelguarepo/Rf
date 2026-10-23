@@ -110,7 +110,7 @@ const FUEL_LEFT := 0.1
 ## At a game over: Enter (keyboard); Start, then A on the title (the pad's first); A (the pad's later ones).
 const ENTER_RETRY := [[0, "tap enter"], [SETTLE, "check retry by Enter"]]
 const START_TO_TITLE := [
-	[0, "tap start"], [SETTLE, "check title"], [TITLE_WAIT, "tap a"], [SETTLE, "check game from title"],
+	[0, "tap start"], [SETTLE, "check title"], [TITLE_WAIT, "start from title"], [SETTLE, "check game from title"],
 ]
 const A_RETRY := [[0, "tap a"], [SETTLE, "check retry by A"]]
 ## Actions that wait for a running game.
@@ -252,11 +252,12 @@ func _do(action: String) -> void:
 			if not on_title():
 				_fail("the title screen was not showing at frame %d" % frame)
 			_screen_before = app.current_screen()
-			tap(KEY_ENTER)
+			# The single-player game is no longer on the title (LOCAL opens the join screen): start it as the app would.
+			app.start_game()
 		"check game":
 			reached_game = game() != null
 			if not reached_game:
-				_fail("Enter on the title did not start a game")
+				_fail("the single-player game did not start")
 		"x down":
 			key(KEY_X, true)
 		"esc pause", "esc resume":
@@ -324,12 +325,14 @@ func _do(action: String) -> void:
 			# A is held while the pad drives: it goes up and down again, and stays down.
 			pad_button(PAD, JOY_BUTTON_A, false)
 			pad_button(PAD, JOY_BUTTON_A, true)
+		"start from title":
+			app.start_game()
 		"check title":
 			title_by_start = on_title()
 			if not title_by_start:
 				_fail("Start at a game over did not go to the title (frame %d)" % frame)
 		"check game from title":
-			game_by_a = _expect_new_game(false, "A on the title")
+			game_by_a = _expect_new_game(false, "starting from the title")
 		"check retry by A":
 			if _expect_new_game(true, "A after a game over"):
 				retries_by_a += 1
@@ -558,7 +561,6 @@ func _vs_world() -> World:
 func _vs_title(waited: int) -> bool:
 	if waited == 20:
 		_vs_check("title", on_title(), "the title did not open")
-		tap(KEY_DOWN)
 	elif waited == 24:
 		tap(KEY_ENTER)
 	elif waited > 24 and join_screen() != null:
@@ -572,25 +574,19 @@ func _vs_join(waited: int) -> bool:
 			pad_tap(VS_PADS[i], JOY_BUTTON_A)
 	if waited == 12:
 		var seated := [app.seats.seat_of(VS_PADS[0]), app.seats.seat_of(VS_PADS[1]), app.seats.seat_of(VS_PADS[2])]
-		return _vs_check("joined", seated == [0, 1, 2] and app.seats.bots == 0, "three pads did not take seats 0 to 2: %s" % [seated])
+		return _vs_check("joined", seated == [0, 1, 2] and app.seats.bots == 3, "three pads did not take seats 0 to 2: %s" % [seated])
 	return false
 
 
 func _vs_bots(waited: int) -> bool:
 	var p1 := VS_PADS[0]
-	if waited in [1, 3, 5]:
+	if waited == 1:
+		_vs_mark["before"] = app.seats.bots
 		pad_tap(p1, JOY_BUTTON_DPAD_RIGHT)
-	elif waited == 7:
-		_vs_mark["most"] = app.seats.bots
-		pad_tap(p1, JOY_BUTTON_DPAD_RIGHT)
-	elif waited == 9:
-		_vs_mark["capped"] = app.seats.bots
 		pad_tap(p1, JOY_BUTTON_DPAD_LEFT)
-	elif waited == 11:
-		pad_tap(p1, JOY_BUTTON_DPAD_LEFT)
-	elif waited == 13:
-		var counts := [_vs_mark["most"], _vs_mark["capped"], app.seats.bots]
-		return _vs_check("bots", counts == [3, 3, 1], "Right and Left did not give 3, 3 (the cap), then 1 bot: %s" % [counts])
+	elif waited == 5:
+		var counts := [_vs_mark["before"], app.seats.bots]
+		return _vs_check("bots", counts == [3, 3], "the bots did not fill the 3 empty seats by themselves: %s" % [counts])
 	return false
 
 
@@ -601,7 +597,7 @@ func _vs_leave(waited: int) -> bool:
 		_vs_mark["joined"] = app.seats.seat_of(VS_LEAVER)
 		pad_tap(VS_LEAVER, JOY_BUTTON_B)
 	elif waited == 5:
-		var ok: bool = _vs_mark["joined"] == 3 and app.seats.seat_of(VS_LEAVER) == -1 and app.seats.bots == 1
+		var ok: bool = _vs_mark["joined"] == 3 and app.seats.seat_of(VS_LEAVER) == -1 and app.seats.bots == 3
 		return _vs_check("leave", ok and app.seats.kind_of(3) == Seats.BOT, "a fourth pad did not join and leave with B")
 	return false
 
@@ -611,8 +607,8 @@ func _vs_start(waited: int) -> bool:
 		pad_tap(VS_PADS[1], JOY_BUTTON_START)
 	elif waited == 3:
 		var lineup: Array = app.seats.lineup
-		var ok := versus() != null and lineup == [0, 1, 2, 3] and app.seats.humans_mask() == 0b0111
-		return _vs_check("race", ok, "Start did not begin a race of three pads and a bot")
+		var ok := versus() != null and lineup == [0, 1, 2, 3, 4, 5] and app.seats.humans_mask() == 0b000111
+		return _vs_check("race", ok, "Start did not begin a race of three pads and three bots")
 	return false
 
 
@@ -729,7 +725,7 @@ func _vs_rematch(_waited: int) -> bool:
 		pad_press_a(VS_NEWCOMER)
 	elif m != first:
 		var lineup: Array = versus().lineup
-		var ok := m.world.game_seed == int(_vs_mark["seed"]) + 1 and lineup == [0, 1, 2, 3]
+		var ok := m.world.game_seed == int(_vs_mark["seed"]) + 1 and lineup == [0, 1, 2, 3, 4, 5]
 		return _vs_check("rematch", ok and m.phase == Match.PLAYING, "A at the match's end did not play a rematch on the same seats")
 	return false
 

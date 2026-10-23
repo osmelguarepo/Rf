@@ -47,47 +47,44 @@ func test_pads_join_on_the_lowest_free_seat_and_keep_it() -> void:
 	assert_eq(seats.join(23), 1, "the next pad takes the lowest free seat")
 	assert_eq(seats.join(24), 3)
 	assert_eq([seats.seat_of(20), seats.seat_of(23), seats.seat_of(22), seats.seat_of(24)], [0, 1, 2, 3])
-	assert_eq(seats.kind_of(4), Seats.FREE)
+	assert_eq(seats.kind_of(4), Seats.BOT, "bots fill the empty seats")
 	assert_eq(seats.kind_of(0), Seats.PERSON)
 
 
-## Plan §7 (owner, 14 Oct): two cars at least, so one person gets one bot at least; never more than six cars.
-func test_bots_from_one_with_one_person_to_six_cars() -> void:
-	assert_eq(seats.bots, 0)
+## LOCAL: the bots fill every empty seat by themselves, so six cars always race (and never fewer than two); a person who
+## joins takes a bot's place, and a bot comes back when the person leaves. Nobody seated: no bots.
+func test_bots_fill_every_empty_seat_up_to_six_cars() -> void:
+	assert_eq(seats.bots, 0, "nobody: no bots")
 	seats.join(20)
-	assert_eq(seats.bots, 1, "the first person gets a bot")
+	assert_eq(seats.bots, 5, "the first person gets five bots")
+	assert_eq(seats.cars(), 6)
+	seats.join(21)
+	assert_eq(seats.bots, 4)
+	seats.leave(21)
+	assert_eq(seats.bots, 5, "the bot comes back when the person leaves")
+	for device: int in [21, 22, 23, 24, 25]:
+		seats.join(device)
+	assert_eq(seats.people(), 6)
+	assert_eq(seats.bots, 0, "six people leave no room for a bot")
+	assert_eq(seats.join(26), -1, "a seventh pad finds no seat")
+	for device: int in [21, 22, 23, 24, 25]:
+		seats.leave(device)
+	assert_eq(seats.bots, 5, "back to one person: five bots")
+	seats.leave(20)
+	assert_eq(seats.bots, 0, "nobody: no bots")
+	assert_false(seats.can_start())
+
+
+## set_bots() (used by tests and tools) still bounds the choice: a lone person keeps one bot at least.
+func test_set_bots_still_bounds_the_choice() -> void:
+	seats.join(20)
 	assert_eq(seats.set_bots(0), 1, "one person: one bot at least")
 	assert_eq(seats.set_bots(9), 5, "six cars at most")
 	seats.join(21)
-	assert_eq(seats.bots, 4, "a pad that joins takes a bot's place when every seat is taken")
-	seats.leave(21)
-	assert_eq(seats.bots, 5, "the bot comes back when the person leaves: the choice stays")
-	seats.join(21)
 	assert_eq(seats.set_bots(0), 0, "two people need no bot")
-	for device: int in [22, 23, 24, 25]:
-		seats.join(device)
-	assert_eq(seats.people(), 6)
-	assert_eq(seats.join(26), -1, "a seventh pad finds no seat")
-	assert_eq(seats.set_bots(1), 0, "six people leave no room for a bot")
-	for device: int in [21, 22, 23, 24, 25]:
-		seats.leave(device)
-	assert_eq(seats.bots, 1, "back to one person: one bot again")
-	assert_eq(seats.cars(), 2)
-
-
-## The bot that a lone person gets goes again when a second person joins (nobody chose it), and comes back if one of
-## them leaves.
-func test_the_bot_a_lone_person_gets_is_not_a_choice() -> void:
-	seats.join(20)
-	assert_eq(seats.bots, 1)
-	seats.join(21)
-	assert_eq(seats.bots, 0)
-	seats.leave(20)
-	assert_eq(seats.bots, 1)
-	seats.join(22)
 	assert_eq(seats.set_bots(2), 2)
-	seats.leave(22)
-	assert_eq(seats.bots, 2, "a choice above the minimum stays")
+	seats.leave(21)
+	assert_eq(seats.bots, 2, "the choice stays")
 
 
 ## Bots take the lowest free seats; the line-up is every seat with a car, in seat order, so the world's slots are

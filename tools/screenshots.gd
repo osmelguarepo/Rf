@@ -99,7 +99,8 @@ func _process(_delta: float) -> bool:
 		0:  # The title, with the prompt at full brightness (it dims after half a second).
 			if waited == 20:
 				_shot("01-title")
-				tap(KEY_ENTER)
+				# The single-player game is no longer on the title (LOCAL opens the join screen): start it as the app would.
+				app.start_game()
 				_next()
 		1:  # Driving: hold X (high gear), keep clear of trouble, and wait for a busy road.
 			if w != null and waited == 2:
@@ -148,22 +149,20 @@ func _process(_delta: float) -> bool:
 			if w != null and w.phase == World.GAME_OVER and waited > 30:
 				tap(KEY_ESCAPE)
 				_next()
-		8:  # The title: Down chooses VERSUS, Enter opens the join screen.
-			if waited == 20 and _expect(on_title(), "Esc at the game over did not go to the title"):
-				tap(KEY_DOWN)
+		8:  # The title: LOCAL is shown, Enter opens the join screen.
+			if waited == 20:
+				_expect(on_title(), "Esc at the game over did not go to the title")
 			if waited == 24:
 				tap(KEY_ENTER)
 			if waited > 24 and join_screen() != null:
 				_next()
-		9:  # Three pads join, then two bots.
+		9:  # Three pads join; the bots fill the three empty seats by themselves.
 			var at: Array[int] = [6, 10, 14]
 			for i in at.size():
 				if waited == at[i]:
 					pad_tap(VERSUS_PADS[i], JOY_BUTTON_A)
-			if waited == 18 or waited == 22:
-				pad_tap(VERSUS_PADS[0], JOY_BUTTON_DPAD_RIGHT)
 			if waited > 40 and _blink_lit(join_screen()):
-				if _expect(app.seats.people() == 3 and app.seats.bots == 2, "the join screen does not have 3 pads and 2 bots"):
+				if _expect(app.seats.people() == 3 and app.seats.bots == 3, "the join screen does not have 3 pads and 3 bots"):
 					_shot("07-versus-join")
 					pad_tap(VERSUS_PADS[3], JOY_BUTTON_A)
 					_next()

@@ -108,7 +108,7 @@ var steam: SteamInput
 ## True keeps Steam Input off, as --no-steam does (set before the node enters the tree, as seed_override is). The tools
 ## set it (tools/tool_base.gd): they drive synthetic pads, which Steam would drop once it took over on a PC with Steam.
 var no_steam: bool = false
-## The title's last choice (title.gd CHOICE_SINGLE or CHOICE_VERSUS), shown again when it opens.
+## The title's last choice (title.gd CHOICE_LOCAL or CHOICE_ONLINE), shown again when it opens.
 var title_choice: int = 0
 ## The window that F11 and Alt+Enter switch: the game's own when null. Tests give another, since a headless window
 ## never changes mode on a screen.

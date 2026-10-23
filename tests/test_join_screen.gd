@@ -4,6 +4,7 @@ extends "res://tests/test_case.gd"
 ## the rules, Start begins only when a match is valid (and only from a seated pad), Back and Esc go to the title, and
 ## the view shows what the seats are.
 
+const Car := preload("res://scripts/sim/car.gd")
 const S := preload("res://tests/screen_helpers.gd")
 const App := preload("res://scripts/app/app.gd")
 const Seats := preload("res://scripts/input/seats.gd")
@@ -59,7 +60,7 @@ func test_a_from_several_pads_seats_them_in_join_order() -> void:
 	S.frame(app, 0)
 	assert_eq(seats.seat_of(43), 1, "the next pad takes the free seat, with its colour")
 	var view: JoinView = app.current_screen().get_node("JoinView")
-	assert_eq(view.kinds.slice(0, 4), [Seats.PERSON, Seats.PERSON, Seats.PERSON, Seats.FREE] as Array[int])
+	assert_eq(view.kinds.slice(0, 4), [Seats.PERSON, Seats.PERSON, Seats.PERSON, Seats.BOT] as Array[int], "bots fill the rest")
 
 
 ## B on a pad that holds no seat, and the keyboard's keys other than Esc, do nothing here.
@@ -70,41 +71,85 @@ func test_b_leaves_only_a_seated_pad() -> void:
 	S.key_tap(app, KEY_RIGHT)
 	S.frame(app, 0)
 	assert_eq(seats.people(), 1)
-	assert_eq(seats.bots, 1)
+	assert_eq(seats.bots, 5, "the bots fill the five empty seats")
 	assert_eq(S.screen_name(app), "Join")
 
 
-## Left and Right on any seated pad change the bots: one at least with one person, six cars at most; bots take the
-## lowest free seats and the view shows them as bots.
-func test_left_and_right_change_the_bots_within_the_rules() -> void:
+## The bots fill every empty seat by themselves (LOCAL): Left and Right do nothing, and the cards show the bots in the
+## lowest free seats, moving as people join and leave.
+func test_bots_fill_every_empty_seat() -> void:
+	assert_eq(seats.bots, 0, "nobody yet: no bots")
 	S.tap(app, 40, JOY_BUTTON_A)
 	S.frame(app, 0)
-	assert_eq(seats.bots, 1, "one person gets a bot")
+	assert_eq(seats.bots, 5, "one person: five bots, six cars")
 	S.tap(app, 40, JOY_BUTTON_DPAD_LEFT)
+	S.tap(app, 40, JOY_BUTTON_DPAD_RIGHT)
+	S.deliver(app, _axis(40, JOY_AXIS_LEFT_X, -0.9))
 	S.frame(app, 0)
-	assert_eq(seats.bots, 1, "never below one with one person")
-	for i in 8:
-		S.tap(app, 40, JOY_BUTTON_DPAD_RIGHT)
-	S.frame(app, 0)
-	assert_eq(seats.bots, 5, "never more than six cars")
-	S.tap(app, 41, JOY_BUTTON_DPAD_LEFT)
-	S.frame(app, 0)
-	assert_eq(seats.bots, 5, "a pad that holds no seat does not count")
+	assert_eq(seats.bots, 5, "Left and Right change nothing")
 	S.tap(app, 41, JOY_BUTTON_A)
 	S.frame(app, 0)
 	assert_eq(seats.bots, 4, "a person takes a bot's place")
-	S.deliver(app, _axis(41, JOY_AXIS_LEFT_X, -0.9))
-	S.deliver(app, _axis(41, JOY_AXIS_LEFT_X, 0.0))
-	S.deliver(app, _axis(41, JOY_AXIS_LEFT_X, -0.9))
-	S.frame(app, 0)
-	assert_eq(seats.bots, 2, "the stick, twice")
 	var view: JoinView = app.current_screen().get_node("JoinView")
-	assert_eq(view.kinds, [Seats.PERSON, Seats.PERSON, Seats.BOT, Seats.BOT, Seats.FREE, Seats.FREE] as Array[int])
-	assert_eq(view.bots, 2)
+	assert_eq(view.kinds, [Seats.PERSON, Seats.PERSON, Seats.BOT, Seats.BOT, Seats.BOT, Seats.BOT] as Array[int])
+	assert_eq(view.bots, 4)
 	S.tap(app, 40, JOY_BUTTON_B)
 	S.frame(app, 0)
-	assert_eq(view.kinds, [Seats.BOT, Seats.PERSON, Seats.BOT, Seats.FREE, Seats.FREE, Seats.FREE] as Array[int],
+	assert_eq(view.kinds, [Seats.BOT, Seats.PERSON, Seats.BOT, Seats.BOT, Seats.BOT, Seats.BOT] as Array[int],
 		"a bot takes the free seat, the person keeps seat 1")
+
+
+## One person can play LOCAL with the keyboard: Enter seats it when nobody holds a seat, and Enter again starts the race
+## against five bots; a pad that joins takes the keyboard's seat away; Backspace gives it up; the keyboard cannot join once
+## a pad holds a seat.
+func test_the_keyboard_can_be_the_one_person() -> void:
+	S.key_tap(app, KEY_ENTER)
+	S.frame(app, 0)
+	assert_eq(seats.seat_of(Seats.KEYBOARD_DEVICE), 0, "Enter seats the keyboard")
+	assert_eq(seats.bots, 5)
+	S.key_tap(app, KEY_BACKSPACE)
+	S.frame(app, 0)
+	assert_eq(seats.people(), 0, "Backspace gives the seat up")
+	S.key_tap(app, KEY_ENTER)
+	S.frame(app, 0)
+	S.tap(app, 40, JOY_BUTTON_A)
+	S.frame(app, 0)
+	assert_eq(seats.seat_of(Seats.KEYBOARD_DEVICE), -1, "a pad that joins takes the keyboard's seat away")
+	assert_eq(seats.seat_of(40), 0)
+	S.key_tap(app, KEY_ENTER)
+	S.frame(app, 0)
+	assert_eq(seats.seat_of(Seats.KEYBOARD_DEVICE), -1, "the keyboard cannot join beside a pad")
+	assert_eq(S.screen_name(app), "Join", "and Enter does not start")
+
+
+func test_the_keyboard_plays_a_local_race_against_five_bots() -> void:
+	S.key_tap(app, KEY_ENTER)
+	S.frame(app, 0)
+	S.key_tap(app, KEY_ENTER)
+	S.frame(app, 0)
+	assert_eq(S.screen_name(app), "Versus")
+	var race: Node = app.current_screen()
+	assert_eq(race.game_match.world.players.size(), 6)
+	assert_eq(race.game_match.world.players[0].human, 1)
+	S.key(app, KEY_X, true)
+	S.key(app, KEY_LEFT, true)
+	S.frame(app, 30)
+	S.key(app, KEY_X, false)
+	S.key(app, KEY_LEFT, false)
+	var car: Car = race.game_match.world.players[0]
+	assert_gt(car.speed, 0.0, "the keyboard drives seat 0")
+	assert_eq(car.gear, 1, "X holds high gear")
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 1)
+	assert_eq(race.game_match.world.phase, 1, "Esc pauses the keyboard player's race")
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 1)
+	assert_eq(race.game_match.world.phase, 0, "and Esc resumes it")
+	S.key_tap(app, KEY_ESCAPE)
+	S.frame(app, 1)
+	S.key_tap(app, KEY_BACKSPACE)
+	S.frame(app, 0)
+	assert_eq(S.screen_name(app), "Title", "Backspace quits a paused race")
 
 
 ## Start begins the race only from a seated pad and only when World.versus_valid() holds for the seats.

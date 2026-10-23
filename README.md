@@ -11,8 +11,9 @@ GrafxKid's CC0 sheet, the Press Start 2P font, no sound.
 - **Phase A, the single-player game, is done.** The rules of the earlier Phaser prototype are ported to a pure,
   deterministic GDScript simulation and checked against traces recorded from the TypeScript version. Phase A also
   covers the scenes, the view, keyboard and gamepad input, the tests, a smoke test, a pack export check and CI.
-- **Phase B, local multiplayer, is under way.** The versus mode is playable from the title's VERSUS choice: up to 6
-  cars on one screen, one gamepad each, bots for the seats people leave empty, best of 3 rounds. Done: the versus
+- **Phase B, local multiplayer, is under way.** The LOCAL mode is playable from the title: up to 6
+  cars on one screen, one gamepad each (or the keyboard when playing alone), bots in every empty seat, best of 3 rounds.
+  ONLINE (humans only, no bots) is planned and shows as "coming soon". Done: the versus
   rules, the match and the bots (B1), and the versus screens (B2): the join screen, a seat per gamepad, the six player
   colours, the race with a panel per car, the round and match results, rematch, gamepads that disconnect and come
   back. Steam Input through GodotSteam (B4) is in, not yet tried with a real Steam client (see Steam below). QA with
@@ -48,12 +49,12 @@ nothing is saved.
 
 ## Controls
 
-The title has two choices, **1 PLAYER** and **VERSUS**: Up and Down (arrow keys, W and S, a gamepad's D-pad or left
-stick) choose, and Enter, Space, A or Start picks. A click or tap on a choice picks it too.
+The title has two modes, **LOCAL** and **ONLINE**: Up and Down (arrow keys, W and S, a gamepad's D-pad or left stick)
+choose, and Enter, Space, A or Start picks. A click or tap on a mode picks it too. **ONLINE** (humans only) is not built
+yet: it shows "COMING SOON" and does nothing. **LOCAL** opens the join screen.
 
-### 1 PLAYER
-
-The keyboard and every connected gamepad drive the car together. Keys are bound by position (the names are QWERTY).
+The old single-player game (stages and a goal, no bots) is no longer on the menu; its code and tests stay, and
+`App.start_game()` starts it. Its controls are the ones a LOCAL race uses:
 
 | Action | Keyboard | Gamepad |
 |---|---|---|
@@ -61,17 +62,15 @@ The keyboard and every connected gamepad drive the car together. Keys are bound 
 | High gear, with throttle (hold) | X | A |
 | Brake | Down or S | D-pad down or left stick down |
 | Steer | Left and Right, or A and D | D-pad, or the left stick past half way |
-| Start a game; go on after a stage clear | Enter, keypad Enter or Space | A or Start |
 | Pause and resume | Esc or P | Start |
-| After a game over: play again | Enter, keypad Enter or Space | A |
-| After a game over: back to the title | Esc or P | Start |
 
 Gamepad buttons are by position: A is the bottom face button, B the right one.
 
-### VERSUS (gamepads only)
+### LOCAL (people on this machine, bots in every empty seat)
 
-Each player has a gamepad; the keyboard drives no car. Esc goes back (it pauses a race only when no gamepad is
-left, and quits a paused match), and F11 or Alt+Enter switches fullscreen. Each player's car is the colour
+Up to 6 cars: every person takes a seat with a gamepad (A), or with the keyboard (Enter) when playing alone, and **bots
+fill every empty seat by themselves**, so six cars always race (one person: five bots). The keyboard plays only while it
+is the one person; a gamepad that joins takes its seat away. F11 or Alt+Enter switches fullscreen. Each player's car is the colour
 of their seat, which is the only way to tell players apart: P1 ruby, P2 teal, P3 lilac, P4 plum, P5 brown and P6
 pink, each colour for good. No traffic car has any of them (the rainbow-coloured fuel car aside).
 
@@ -79,20 +78,19 @@ pink, each colour for good. No traffic car has any of them (the rainbow-coloured
 
 | When | What | Gamepad | Keyboard |
 |---|---|---|---|
-| Join screen | Join: take the lowest free seat and its colour | A | |
-| Join screen | Leave the seat | B | |
-| Join screen | Fewer or more bots (one at least with one player, six cars at most) | D-pad or stick left and right | |
-| Join screen | Start the race (two cars at least) | Start | |
+| Join screen | Join: take the lowest free seat and its colour | A | Enter (only if nobody else has joined) |
+| Join screen | Leave the seat | B | Backspace |
+| Join screen | Start the race | Start | Enter (once the keyboard has joined) |
 | Join screen | Back to the title | Back (Select, View) | Esc |
-| Race | Drive | As in 1 PLAYER: B or up throttle, A high gear, down brake, D-pad or stick steers | |
-| Race | Pause and resume (any player) | Start | Esc pauses |
-| Paused | Quit to the title | Back | Esc |
-| Round over | Next round (after one second) | A or Start | |
-| Match over | Rematch: same seats, new traffic (after one second) | A or Start | |
+| Race | Drive | B or up throttle, A high gear, down brake, D-pad or stick steers | The keys above (only the keyboard player) |
+| Race | Pause and resume (any player) | Start | Esc or P (the keyboard player) |
+| Paused | Quit to the title | Back | Backspace |
+| Round over | Next round (after one second) | A or Start | Enter (the keyboard player) |
+| Match over | Rematch: same seats, new traffic (after one second) | A or Start | Enter (the keyboard player) |
 | Match over | Back to the join screen, with the same players | B or Back | Esc |
 | Any time | A gamepad that holds no seat takes the seat of a disconnected gamepad | A | |
 
-Bots take the lowest free seats and show as BOT. When a gamepad disconnects mid-race, its bot drives
+Bots take the free seats and show as BOT. When a gamepad disconnects mid-race, its bot drives
 that car without stopping the round (its panel says NO PAD); the same gamepad gets it back when it reconnects, and
 otherwise any gamepad that holds no seat takes it with A.
 

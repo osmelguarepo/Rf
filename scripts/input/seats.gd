@@ -21,8 +21,12 @@ extends "res://scripts/input/local_input.gd"
 ##   goes away frees its seat on the join screen, and orphans it in a race: its byte is 0xFF from the next step. A pad
 ##   that connects in a race takes back the lowest orphan seat whose pad had its GUID. Otherwise claim(device), when a
 ##   pad that holds no seat presses A in a race, gives it the lowest orphan seat. A seat never changes its colour.
-## - The keyboard drives nothing here (versus is pads only); press() latches the program's presses (the pause when the
-##   window loses focus, or Esc), which go to the lowest person's seat (program_slot()).
+## - The keyboard may hold a seat only while it is the one person: join_keyboard() (Enter on the join screen) seats it
+##   when no pad holds a seat, as KEYBOARD_DEVICE, and a pad that joins later takes its seat away. A keyboard seat is
+##   driven with the single-player keys and never orphaned. With a pad on every seat the keyboard drives nothing.
+##   press() latches the program's presses (the pause when the window loses focus), which go to the lowest person's seat
+##   (program_slot()).
+## - Bots fill every empty seat by themselves (LOCAL mode): wanted_bots starts at six, and `bots` is what fits.
 ##
 ## GUIDs come from guid_of: engine_guid() is Input.get_joy_guid() for a connected pad and "" for any other device (the
 ## engine logs an error for a device it does not know, and synthetic devices are not connected); a test sets its own.
@@ -34,6 +38,8 @@ const World := preload("res://scripts/sim/world.gd")
 
 const SEATS := Config.VERSUS_SEATS_MAX
 const NO_DEVICE := -1
+## The device id of the keyboard when it holds a seat (a pad's ids are small).
+const KEYBOARD_DEVICE := 100000
 ## What a seat is (kind_of()).
 const FREE := 0
 const PERSON := 1
@@ -84,7 +90,7 @@ func reset() -> void:
 		seat_guid.append("")
 		seat_pending.append(0)
 	bots = 0
-	wanted_bots = 0
+	wanted_bots = SEATS
 	locked = false
 	lineup = []
 	pending = 0
@@ -194,10 +200,26 @@ func can_start() -> bool:
 func join(device: int) -> int:
 	if locked or device < 0 or seat_of(device) >= 0:
 		return -1
+	var keyboard := seat_of(KEYBOARD_DEVICE)
+	if keyboard >= 0:
+		_free(keyboard)
 	var seat := taken.find(false)
 	if seat < 0:
 		return -1
 	_attach(seat, device, guid_of.call(device))
+	_clamp_bots()
+	return seat
+
+
+## Puts the keyboard on the lowest free seat when it is the one person: no pad holds a seat and the keyboard holds none.
+## Returns the seat, or -1.
+func join_keyboard() -> int:
+	if locked or seat_of(KEYBOARD_DEVICE) >= 0 or people() > 0:
+		return -1
+	var seat := taken.find(false)
+	if seat < 0:
+		return -1
+	_attach(seat, KEYBOARD_DEVICE, "keyboard")
 	_clamp_bots()
 	return seat
 
@@ -288,6 +310,13 @@ func connection_changed(device: int, connected: bool) -> void:
 ## Latches the presses a pad's event makes for its seat. Keys and pads that hold no seat latch nothing. Returns true
 ## if a press was latched.
 func handle_event(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		var keyboard := seat_of(KEYBOARD_DEVICE)
+		var key_bits := Keyboard.presses_of(event) if keyboard >= 0 else 0
+		if key_bits == 0:
+			return false
+		seat_pending[keyboard] = PlayerInput.latch(seat_pending[keyboard], key_bits)
+		return true
 	if not (event is InputEventJoypadButton or event is InputEventJoypadMotion):
 		return false
 	var bits := pads.presses_of(event)
@@ -324,6 +353,8 @@ func seat_byte(seat: int, extra: int = 0) -> int:
 		return PlayerInput.BOT
 	if seat_device[seat] == NO_DEVICE:
 		return PlayerInput.BOT if presses == 0 else Held.to_byte(0, presses)
+	if seat_device[seat] == KEYBOARD_DEVICE:
+		return Held.to_byte(Keyboard.held(), presses)
 	return Held.to_byte(Pads.held_of(seat_device[seat]), presses)
 
 
@@ -360,7 +391,9 @@ func clear_presses() -> void:
 func held() -> int:
 	var mask := 0
 	for seat in SEATS:
-		if seat_device[seat] != NO_DEVICE:
+		if seat_device[seat] == KEYBOARD_DEVICE:
+			mask |= Keyboard.held()
+		elif seat_device[seat] != NO_DEVICE:
 			mask |= Pads.held_of(seat_device[seat])
 	return mask
 
@@ -373,7 +406,8 @@ func _attach(seat: int, device: int, guid: String) -> void:
 	seat_device[seat] = device
 	seat_guid[seat] = guid
 	seat_pending[seat] = 0
-	pads.note(device)
+	if device != KEYBOARD_DEVICE:
+		pads.note(device)
 
 
 func _free(seat: int) -> void:
@@ -384,7 +418,7 @@ func _free(seat: int) -> void:
 
 
 func _clamp_bots() -> void:
-	bots = clampi(wanted_bots, min_bots(), max_bots())
+	bots = 0 if people() == 0 else clampi(wanted_bots, min_bots(), max_bots())
 
 
 ## The lowest orphan seat whose pad had this GUID ("" matches none), or with any_guid the lowest orphan seat; -1 if

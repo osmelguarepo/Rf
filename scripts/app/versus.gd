@@ -96,10 +96,11 @@ func handle(device: int, command: int) -> bool:
 		if command == Nav.ACCEPT:
 			seats.claim(device)
 		return false
+	var plays_keyboard := seats.seat_of(seats.KEYBOARD_DEVICE) >= 0
 	if game_match.phase == Match.MATCH_OVER:
 		if game_match.phase_ticks < Config.MATCH_CONFIRM_TICKS:
 			return false
-		if not keyboard and (command == Nav.ACCEPT or command == Nav.START):
+		if (not keyboard or plays_keyboard) and (command == Nav.ACCEPT or command == Nav.START):
 			new_match()
 			return true
 		if command == Nav.BACK or (not keyboard and command == Nav.SELECT):
@@ -112,7 +113,7 @@ func handle(device: int, command: int) -> bool:
 			return true
 		return false
 	if world.phase == World.PAUSED:
-		if (keyboard and command == Nav.BACK) or (not keyboard and command == Nav.SELECT):
+		if (keyboard and not plays_keyboard and command == Nav.BACK) or (command == Nav.SELECT):
 			app.show_title()
 			return true
 		return false

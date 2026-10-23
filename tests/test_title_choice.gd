@@ -1,7 +1,7 @@
 extends "res://tests/test_case.gd"
-## The title's two choices, the fullscreen keys and the single-player path (B2): Up and Down choose between 1 PLAYER
-## and VERSUS with keys, the D-pad or the stick; a confirm press picks the one shown (a single-player game with the
-## keyboard-and-every-pad input, or the join screen with the seats); a click picks a button; F11 and Alt+Enter
+## The title's two modes and the fullscreen keys: Up and Down choose between LOCAL and ONLINE with keys, the D-pad or
+## the stick; a confirm press picks LOCAL (the join screen with the seats) and does nothing on ONLINE, which is not built
+## yet; the single-player game stays reachable from the code (App.start_game()), not from the title; a click picks a button; F11 and Alt+Enter
 ## switch fullscreen on every screen and never reach the screens. Each test boots a real App (tests/screen_helpers.gd).
 
 const S := preload("res://tests/screen_helpers.gd")
@@ -35,17 +35,18 @@ func after_each() -> void:
 	S.release(PADS)
 
 
-func test_the_title_opens_on_1_player() -> void:
+func test_the_title_opens_on_local() -> void:
 	var title := app.current_screen()
 	assert_eq(S.screen_name(app), "Title")
-	assert_eq(title.choice, Title.CHOICE_SINGLE)
-	assert_eq(title.get_node("TitleView").choice, Title.CHOICE_SINGLE)
-	assert_eq(ViewConfig.TITLE_CHOICES, ["1 PLAYER", "VERSUS"])
+	assert_eq(title.choice, Title.CHOICE_LOCAL)
+	assert_eq(title.get_node("TitleView").choice, Title.CHOICE_LOCAL)
+	assert_eq(ViewConfig.TITLE_CHOICES, ["LOCAL", "ONLINE"])
 
 
-## The default choice is today's game: confirm starts a single-player game on the solo input, as before B2.
-func test_confirm_on_1_player_starts_the_single_player_game() -> void:
-	S.key_tap(app, KEY_ENTER)
+## The single-player game (stages) is no longer on the title, but the app can still start it: the keyboard-and-every-pad
+## input, as before.
+func test_the_app_can_still_start_the_single_player_game() -> void:
+	app.start_game()
 	S.frame(app, 0)
 	assert_eq(S.screen_name(app), "Game")
 	var world: World = app.current_screen().world
@@ -61,46 +62,49 @@ func test_up_and_down_choose_and_confirm_picks() -> void:
 	var title := app.current_screen()
 	S.key_tap(app, KEY_DOWN)
 	S.frame(app, 0)
-	assert_eq(title.choice, Title.CHOICE_VERSUS, "Down")
-	assert_eq(title.get_node("TitleView").choice, Title.CHOICE_VERSUS)
+	assert_eq(title.choice, Title.CHOICE_ONLINE, "Down")
+	assert_eq(title.get_node("TitleView").choice, Title.CHOICE_ONLINE)
 	S.tap(app, 30, JOY_BUTTON_DPAD_UP)
 	S.frame(app, 0)
-	assert_eq(title.choice, Title.CHOICE_SINGLE, "D-pad up")
+	assert_eq(title.choice, Title.CHOICE_LOCAL, "D-pad up")
 	S.deliver(app, _axis(31, JOY_AXIS_LEFT_Y, 0.9))
 	S.frame(app, 0)
-	assert_eq(title.choice, Title.CHOICE_VERSUS, "stick down")
+	assert_eq(title.choice, Title.CHOICE_ONLINE, "stick down")
 	assert_eq(S.screen_name(app), "Title", "moving does not pick")
+	S.key_tap(app, KEY_ENTER)
+	S.frame(app, 0)
+	assert_eq(S.screen_name(app), "Title", "ONLINE is not built yet: confirming it does nothing")
+	S.tap(app, 30, JOY_BUTTON_DPAD_UP)
+	S.frame(app, 0)
 	S.tap(app, 30, JOY_BUTTON_A)
 	S.frame(app, 0)
 	assert_eq(S.screen_name(app), "Join")
 	assert_eq(app.input, app.seats)
-	assert_eq(app.seats.people(), 0, "the pad that picked VERSUS still presses A to join")
+	assert_eq(app.seats.people(), 0, "the pad that picked LOCAL still presses A to join")
 
 
-## The app remembers the last choice: back from the versus mode the title shows VERSUS; from a game, 1 PLAYER.
+## The app remembers the last choice: back from the join screen the title shows LOCAL again; with ONLINE shown (and
+## nothing started), the title reopens on ONLINE.
 func test_the_title_remembers_the_last_choice() -> void:
-	S.key_tap(app, KEY_DOWN)
 	S.key_tap(app, KEY_ENTER)
 	S.frame(app, 0)
 	assert_eq(S.screen_name(app), "Join")
 	S.key_tap(app, KEY_ESCAPE)
 	S.frame(app, 0)
 	assert_eq(S.screen_name(app), "Title")
-	assert_eq(app.current_screen().choice, Title.CHOICE_VERSUS)
-	S.key_tap(app, KEY_UP)
-	S.key_tap(app, KEY_ENTER)
+	assert_eq(app.current_screen().choice, Title.CHOICE_LOCAL)
+	S.key_tap(app, KEY_DOWN)
 	S.frame(app, 0)
-	assert_eq(S.screen_name(app), "Game")
 	app.show_title()
-	assert_eq(app.current_screen().choice, Title.CHOICE_SINGLE)
+	assert_eq(app.current_screen().choice, Title.CHOICE_ONLINE)
 
 
 func test_a_click_on_a_button_picks_it() -> void:
 	app.current_screen()._unhandled_input(_click(ViewConfig.VERSUS_BUTTON.get_center()))
-	assert_eq(S.screen_name(app), "Join")
-	app.show_title()
+	assert_eq(S.screen_name(app), "Title", "ONLINE: a click selects it and starts nothing")
+	assert_eq(app.current_screen().choice, Title.CHOICE_ONLINE)
 	app.current_screen()._unhandled_input(_click(ViewConfig.START_BUTTON.get_center()))
-	assert_eq(S.screen_name(app), "Game")
+	assert_eq(S.screen_name(app), "Join")
 
 
 ## The title's layout: two buttons on the road, apart, clear of the car, the note band and the footer.
@@ -172,7 +176,7 @@ func test_menu_commands_last_one_frame() -> void:
 	assert_eq(app.nav.commands.size(), 0)
 
 
-## After a versus session the title's 1 PLAYER is the single-player game as before, with the keyboard.
+## After a local session the single-player game (App.start_game()) is as before, with the keyboard.
 func test_single_player_after_versus_is_unchanged() -> void:
 	app.show_join()
 	S.tap(app, 30, JOY_BUTTON_A)
@@ -183,7 +187,7 @@ func test_single_player_after_versus_is_unchanged() -> void:
 	app.show_title()
 	assert_eq(app.input, app.solo)
 	assert_eq(app.seats.people(), 0, "the title lets every pad go")
-	S.key_tap(app, KEY_ENTER)
+	app.start_game()
 	S.frame(app, 0)
 	assert_eq(S.screen_name(app), "Game")
 	var game := app.current_screen()

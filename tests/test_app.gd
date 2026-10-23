@@ -71,7 +71,7 @@ func test_boot_loads_the_art_and_opens_the_title() -> void:
 	assert_true(InputMap.has_action("kb_confirm"), "the input map is built at boot")
 
 
-func test_a_confirm_press_on_the_title_starts_a_game() -> void:
+func test_a_confirm_press_on_the_title_opens_the_join_screen() -> void:
 	_boot()
 	app.current_screen().frame(0, DT)
 	assert_eq(_screen_name(), "Title", "nothing pressed")
@@ -80,18 +80,17 @@ func test_a_confirm_press_on_the_title_starts_a_game() -> void:
 	assert_eq(_screen_name(), "Title", "pause does not start")
 	app.input.press(PlayerInput.CONFIRM)
 	app.current_screen().frame(0, DT)
-	assert_eq(_screen_name(), "Game")
-	assert_eq(app.current_screen().world.game_seed, 77)
+	assert_eq(_screen_name(), "Join", "LOCAL: the join screen")
 
 
-func test_a_click_on_start_starts_a_game() -> void:
+func test_a_click_on_local_opens_the_join_screen() -> void:
 	_boot()
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
 	click.position = Vector2(ViewConfig.START_BUTTON.get_center())
 	app.current_screen()._unhandled_input(click)
-	assert_eq(_screen_name(), "Game")
+	assert_eq(_screen_name(), "Join")
 
 
 func test_input_events_reach_the_app() -> void:
@@ -108,9 +107,9 @@ func test_input_events_reach_the_app() -> void:
 ## on the title starts a game, A held is high gear and throttle, the stick steers, and Start pauses.
 func test_pad_events_drive_the_game() -> void:
 	_boot()
+	app.start_game()
+	assert_eq(_screen_name(), "Game")
 	_pad_event(_pad_button(JOY_BUTTON_A, true))
-	app.current_screen().frame(0, DT)
-	assert_eq(_screen_name(), "Game", "A on the title starts a game")
 	var game := app.current_screen()
 	var world: World = game.world
 	game.frame(60, DT * 60.0)

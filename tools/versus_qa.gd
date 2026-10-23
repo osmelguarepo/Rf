@@ -5,10 +5,10 @@ extends "res://tools/tool_base.gd"
 ##   godot --headless --fixed-fps 60 --path . -s res://tools/versus_qa.gd -- --scenario=lone|six [OPTION...]
 ##   tools/run_tool.sh versus_qa            (both scenarios, as below)
 ##
-## - lone (plan scenario a): one person against five bots. One pad joins, Right raises the bots to five, Start. The pad
+## - lone (plan scenario a): one person against five bots. One pad joins (the bots fill the five empty seats), Start. The pad
 ##   drives its car (pad_autopilot()); in each match's first round, 30 s in, the pad disconnects
 ##   (Input.joy_connection_changed.emit(device, false)) and comes back 3 s later. It confirms between rounds and takes
-##   the rematch.
+##   the rematch. LOCAL fills the five empty seats with bots by itself.
 ## - six (plan scenario b): six people's seats driven by bot.gd. Six pads join and start; as soon as the round runs,
 ##   every pad disconnects, so every seat is an orphan human seat whose byte is 0xFF. Between rounds the first pad comes
 ##   back to confirm (orphan seats never confirm) and goes again once the next round runs.
@@ -131,8 +131,6 @@ func _title() -> void:
 	if _seed_frame == 1:
 		# The app booted on this frame (its _ready()); its seats exist from here on. Synthetic pads have no GUID.
 		app.seats.guid_of = func(device: int) -> String: return QA_GUIDS_PREFIX + str(device)
-	elif _seed_frame == SETTLE:
-		tap(KEY_DOWN)
 	elif _seed_frame == SETTLE + 4:
 		tap(KEY_ENTER)
 	elif _seed_frame > SETTLE + 4 and join_screen() != null:
@@ -149,8 +147,6 @@ func _join() -> void:
 		if t == 1 + 3 * i:
 			pad_tap(_pads[i], JOY_BUTTON_A)
 	var after := 3 * _pads.size() + 2
-	if scenario == "lone" and t > after and t <= after + 8 and t % 2 == 0:
-		pad_tap(_pads[0], JOY_BUTTON_DPAD_RIGHT)
 	var start_at := after + (10 if scenario == "lone" else 0)
 	if t == start_at:
 		var expected := 5 if scenario == "lone" else 0

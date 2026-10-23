@@ -6,10 +6,10 @@ extends Node2D
 ##
 ## Each frame it takes the menu commands (scripts/input/nav.gd), in order:
 ## - A on a pad that holds no seat: the pad joins, on the lowest free seat (seats.gd join()).
-## - On a pad that holds a seat: B leaves the seat; Left and Right (D-pad or stick) take a bot away or add one (from
-##   one bot with a single person, so there are two cars at least, up to six cars); Start starts the race, when
-##   World.versus_valid() holds for the seats (App.start_versus()); Back (Select) goes back to the title.
-## - Esc on the keyboard goes back to the title. Nothing else of the keyboard counts here: versus is pads only.
+## - On a pad that holds a seat: B leaves the seat; Start starts the race, when World.versus_valid() holds for the
+##   seats (App.start_versus()); Back (Select) goes back to the title. The bots fill every empty seat by themselves.
+## - The keyboard: Enter or Space seats it when nobody holds a seat (it is then the one person), and starts the race
+##   once it holds one; Backspace gives its seat up; Esc goes back to the title. A pad that joins takes the keyboard's seat away.
 ## Presses that joined pads make here are dropped, so none reaches the race.
 
 const App := preload("res://scripts/app/app.gd")
@@ -63,6 +63,15 @@ func handle(device: int, command: int) -> void:
 	if device == Nav.KEYBOARD:
 		if command == Nav.BACK:
 			_leave_to_title()
+		elif command == Nav.ACCEPT:
+			if seats.seat_of(Seats.KEYBOARD_DEVICE) >= 0:
+				if seats.can_start():
+					_leaving = true
+					app.start_versus()
+			else:
+				seats.join_keyboard()
+		elif command == Nav.SELECT:
+			seats.leave(Seats.KEYBOARD_DEVICE)
 		return
 	if seats.seat_of(device) < 0:
 		if command == Nav.ACCEPT:
@@ -70,10 +79,6 @@ func handle(device: int, command: int) -> void:
 		return
 	if command == Nav.BACK:
 		seats.leave(device)
-	elif command == Nav.LEFT:
-		seats.set_bots(seats.bots - 1)
-	elif command == Nav.RIGHT:
-		seats.set_bots(seats.bots + 1)
 	elif command == Nav.START:
 		if seats.can_start():
 			_leaving = true

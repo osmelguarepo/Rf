@@ -1,7 +1,7 @@
 extends Node2D
 ## The title screen's drawing (create() in src/scenes/TitleScene.ts, Phaser version), laid out for 16:9: the title
-## over the road, keyboard and gamepad controls in boxes on the grass either side, the two choices (1 PLAYER and
-## VERSUS, B2) with the one shown lit, the player's car in its start lane, a blinking prompt, and the best score this
+## over the road, keyboard and gamepad controls in boxes on the grass either side, the two modes (LOCAL and
+## ONLINE) with the one shown lit, the player's car in its start lane, a blinking prompt, and the best score this
 ## session with the fullscreen keys. The road behind is a road.gd node.
 
 const ViewConfig := preload("res://scripts/view/view_config.gd")

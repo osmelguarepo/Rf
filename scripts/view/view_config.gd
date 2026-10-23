@@ -165,14 +165,15 @@ const CONTROLS_PAD := [
 	"START   pause",
 	"A START start",
 ]
-## The two choices (B2), top to bottom: the single-player game and the versus mode's join screen. Up and Down move
-## between them; the one shown is drawn lit. A click or tap on a button picks it too.
-const TITLE_CHOICES := ["1 PLAYER", "VERSUS"]
-## The 1 PLAYER button (the name it had when it was the only one, START).
+## The two modes, top to bottom: LOCAL (the join screen: people on this machine, bots in the empty seats) and ONLINE (humans
+## only, not built yet: it shows COMING SOON and cannot be started). Up and Down move between them; the one shown is
+## drawn lit. A click or tap on a button picks it too.
+const TITLE_CHOICES := ["LOCAL", "ONLINE"]
+## The LOCAL button (the name it had when it was the only one, START).
 const START_BUTTON := Rect2i(240, 100, 160, 28)
 const VERSUS_BUTTON := Rect2i(240, 136, 160, 28)
-## Under the VERSUS button, in small type.
-const VERSUS_NOTE := "2 TO 6 CARS, GAMEPADS ONLY"
+## Under the ONLINE button, in small type.
+const VERSUS_NOTE := "COMING SOON: HUMANS ONLY"
 const VERSUS_NOTE_Y := 172
 ## The player's car, still, in its start lane.
 const TITLE_CAR_TOP := 208

@@ -565,6 +565,7 @@ func test_steam_controllers_come_back_to_their_own_seats() -> void:
 	_press(H2, "menu_confirm")
 	assert_eq(app.seats.seat_of(FIRST), 0)
 	assert_eq(app.seats.seat_of(FIRST + 1), 1)
+	app.seats.set_bots(0)
 	_press(H2, "menu_start")
 	assert_eq(S.screen_name(app), "Versus", "two people, no bot")
 	assert_eq(app.seats.lineup, [0, 1])
@@ -584,13 +585,12 @@ func test_steam_controllers_come_back_to_their_own_seats() -> void:
 	assert_eq(app.seats.step_bytes(2), PackedByteArray([Held.to_byte(Held.BRAKE), Held.to_byte(Held.RIGHT)]))
 
 
-## Single player with a Steam controller, as with a pad: menu_confirm on the title starts a game (1 PLAYER is the first
-## choice), the racing set is read there and high gear drives (high gear and throttle, the pad's A), pause pauses, the
+## Single player (App.start_game(), no longer on the title) with a Steam controller, as with a pad: the racing set is read there and high gear drives (high gear and throttle, the pad's A), pause pauses, the
 ## menus set is read while paused, and its menu_start (Start too) resumes.
 func test_a_steam_controller_plays_single_player() -> void:
 	_boot_app()
 	_configure(H1)
-	_press(H1, "menu_confirm")
+	app.start_game()
 	assert_eq(S.screen_name(app), "Game")
 	app.poll_steam()
 	assert_eq(fake.active_set[H1], fake.set_handles["racing"])
@@ -613,24 +613,28 @@ func test_a_steam_controller_plays_single_player() -> void:
 	assert_eq(fake.active_set[H1], fake.set_handles["racing"])
 
 
-## The menus and the race's commands with a Steam controller, as with a pad: on the title menu_down picks VERSUS and
-## menu_confirm opens the join screen; there menu_confirm joins, menu_right and menu_left change the bots, menu_back
+## The menus and the race's commands with a Steam controller, as with a pad: on the title menu_down picks ONLINE (not
+## built: menu_confirm does nothing), menu_up picks LOCAL and menu_confirm opens the join screen; there menu_confirm
+## joins (the bots fill the empty seats), menu_right and menu_left change nothing, menu_back
 ## leaves the seat, menu_quit goes to the title; in a race pause pauses, and while paused (the menus set) menu_start
 ## resumes and menu_quit (Back) quits to the title.
 func test_menus_and_race_commands_through_steam() -> void:
 	_boot_app()
 	_configure(H1)
 	_press(H1, "menu_down")
-	assert_eq(app.current_screen().choice, 1, "VERSUS chosen")
+	assert_eq(app.current_screen().choice, 1, "ONLINE chosen")
+	_press(H1, "menu_confirm")
+	assert_eq(S.screen_name(app), "Title", "ONLINE is not built yet")
+	_press(H1, "menu_up")
 	_press(H1, "menu_confirm")
 	assert_eq(S.screen_name(app), "Join")
 	_press(H1, "menu_confirm")
 	assert_eq(app.seats.seat_of(FIRST), 0)
-	assert_eq(app.seats.bots, 1, "a lone person gets a bot")
+	assert_eq(app.seats.bots, 5, "a lone person gets five bots")
 	_press(H1, "menu_right")
-	assert_eq(app.seats.bots, 2)
+	assert_eq(app.seats.bots, 5)
 	_press(H1, "menu_left")
-	assert_eq(app.seats.bots, 1)
+	assert_eq(app.seats.bots, 5)
 	_press(H1, "menu_back")
 	assert_eq(app.seats.seat_of(FIRST), -1, "back leaves the seat")
 	_press(H1, "menu_confirm")
