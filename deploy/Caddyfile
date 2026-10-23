@@ -1,0 +1,97 @@
+# Caddy for Fuel Rivals: automatic TLS, the web export as static files, /api to the Go API (same origin, no CORS) and
+# /ws/N to each game server as wss (SPEC_ONLINE 3, 12 and 16.2). Environment: DOMAIN, ACME_EMAIL (docker-compose.yml).
+#
+# Validate with:  docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -e DOMAIN=example.com -e ACME_EMAIL=a@b.c \
+#                   caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+{
+	email {$ACME_EMAIL}
+	servers {
+		timeouts {
+			read_header 10s
+		}
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), gamepad=(self)"
+		-Server
+	}
+
+	# --- API: same origin. The prefix is stripped, the API serves /auth/..., /me, ... (API_PREFIX=/api in the API). ---
+	handle_path /api/* {
+		request_body {
+			max_size 512KB
+		}
+		reverse_proxy api:8080 {
+			# The API reads the last X-Forwarded-For entry (TRUST_PROXY=true). Caddy is the edge (no trusted_proxies
+			# configured), so it discards what the client sent and writes the real address.
+			health_uri /healthz
+			health_interval 10s
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 20s
+			}
+		}
+	}
+
+	# --- Game servers over wss. One path per process; each registers wss://DOMAIN/ws/N as its URL. ---
+	# The browser opens wss://DOMAIN/ws/1 (HTTP/1.1 upgrade). By default a config reload (a new Caddyfile) closes every
+	# WebSocket at once; stream_close_delay keeps them open for up to 30 minutes (longer than a match), so a reload
+	# does not cut players off. flush_interval -1 sends frames at once.
+	handle /ws/1 {
+		reverse_proxy gameserver1:9080 {
+			stream_close_delay 30m
+			flush_interval -1
+			transport http {
+				dial_timeout 3s
+			}
+		}
+	}
+	handle /ws/2 {
+		reverse_proxy gameserver2:9080 {
+			stream_close_delay 30m
+			flush_interval -1
+			transport http {
+				dial_timeout 3s
+			}
+		}
+	}
+
+	# --- The web build (Godot export without threads, so no COOP/COEP headers are needed) from /srv/web. ---
+	# Files are pre-compressed at deploy time (index.wasm.br, index.pck.br, ...): precompressed serves them with
+	# Content-Encoding: br to browsers that accept it, so Brotli costs no CPU here.
+	handle {
+		root * /srv/web
+		@immutable path *.wasm *.pck
+		header @immutable Cache-Control "public, max-age=3600"
+		@entry path / /index.html
+		header @entry Cache-Control "no-cache"
+		file_server {
+			precompressed br zstd gzip
+		}
+	}
+
+	log {
+		output stdout
+		# No client addresses in the logs (SPEC_ONLINE 16.3): keep the request line, drop the address and the cookie.
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>X-Forwarded-For delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}

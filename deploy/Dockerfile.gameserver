@@ -1,0 +1,62 @@
+# syntax=docker/dockerfile:1.7
+# PLACEHOLDER: the Fuel Rivals game server (Godot headless, SPEC_ONLINE 3, 15.3 and 16.1.10).
+#
+# The server itself (scripts/server/server_main.gd, room.gd, host.gd) and its export preset are milestone M2 and another
+# agent's work, so this file cannot be built yet. It documents how the image is meant to be built so that when the
+# export exists nothing else has to be designed. Nothing in docker-compose.yml breaks if this image does not exist
+# yet: the `gameserver*` services are under the `game` profile (`docker compose --profile game up -d`).
+#
+# STEPS (to do when the server export exists)
+#
+#   1. In the Godot project, create an export preset "Linux Server" (feature `dedicated_server`, no GodotSteam, its own
+#      main scene) for BOTH architectures. The templates for linux arm64 and x86_64 come from the official
+#      export_templates; tools/fetch_templates.py already knows how to fetch a fixed set and check it.
+#   2. Export two directories (names are what the COPY lines below expect):
+#         build/server/amd64/fuel_rivals_server.x86_64   (+ .pck if the pack is not embedded)
+#         build/server/arm64/fuel_rivals_server.arm64    (+ .pck if the pack is not embedded)
+#      Oracle Always Free is ARM64 (Ampere A1), so the arm64 build is the one that runs in production; the amd64 one is
+#      for CI and for developers.
+#   3. Build and push from the repository root, once per architecture family with buildx:
+#         docker buildx build -f deploy/Dockerfile.gameserver --platform linux/arm64,linux/amd64 \
+#             -t ghcr.io/OWNER/fuelrivals-gameserver:dev --push .
+#   4. Register the server with the API (docs/DEPLOY_ORACLE.md, "Registrar el servidor de juego"), put the id and key in
+#      the .env of the machine, and start it with `docker compose --profile game up -d`.
+#
+# WHAT THE SERVER MUST DO (the contract this image and docker-compose.yml rely on)
+#
+#   - Read its settings from the environment, not from the command line, so the key never shows in `ps`:
+#         FR_API_URL      base URL of the API, e.g. http://api:8080 (inside compose)
+#         FR_SERVER_ID    the id returned by POST /servers/register
+#         FR_SERVER_KEY   the 64-hex-character key (also the HMAC key of tickets, see backend/docs/TICKET.md)
+#         FR_PORT         the port it listens on for plain WebSocket (Caddy terminates TLS), default 9080
+#         FR_MAX_ROOMS    the capacity it reports in each heartbeat
+#         FR_MAILBOX_DIR  a directory where results that could not be delivered are kept and retried (SPEC 16.2)
+#   - Send POST /servers/heartbeat every 5 s while running (lease is 30 s), with "draining": true once it received SIGTERM.
+#   - On SIGTERM: stop accepting new matches (draining), keep serving the rooms in progress, and exit 0 when the last
+#     room has delivered its result, or after FR_DRAIN_MAX_SECONDS (default 1200). docker-compose.yml gives it
+#     `stop_grace_period: 20m`, longer than a match of three races, so Docker does not SIGKILL it mid-match.
+#   - Verify tickets as backend/docs/TICKET.md says, close a socket with no valid HELLO after 2 s, and post results to
+#     POST /matches/{id}/result with only placements and abandons.
+#   - One process per vCPU: compose runs `gameserver1`, `gameserver2`, ... each with its own id, key and Caddy path.
+
+FROM debian:bookworm-slim AS runtime
+ARG TARGETARCH
+# Godot's headless Linux binaries need these shared libraries even without a display.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates libfontconfig1 libx11-6 libxcursor1 libxi6 libxrandr2 libxinerama1 \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --create-home --uid 10001 game
+WORKDIR /home/game
+# The COPY takes the directory of the architecture being built. The binary is renamed to fuel_rivals_server so that
+# Godot finds fuel_rivals_server.pck next to it when the pack is not embedded.
+COPY build/server/${TARGETARCH}/ /home/game/server/
+RUN cd /home/game/server \
+ && case "${TARGETARCH}" in amd64) mv fuel_rivals_server.x86_64 fuel_rivals_server ;; arm64) mv fuel_rivals_server.arm64 fuel_rivals_server ;; esac \
+ && chmod +x fuel_rivals_server \
+ && mkdir -p /var/lib/fuelrivals/mailbox && chown game /var/lib/fuelrivals/mailbox
+USER game
+ENV FR_PORT=9080 FR_MAILBOX_DIR=/var/lib/fuelrivals/mailbox
+EXPOSE 9080
+# Arguments after `--` are the project's own (the server scene reads them with OS.get_cmdline_user_args()).
+ENTRYPOINT ["/home/game/server/fuel_rivals_server", "--headless", "--", "--dedicated"]
+STOPSIGNAL SIGTERM
