@@ -13,7 +13,8 @@ Formato: **Característica** y, debajo, **Cómo**.
    - 1.1 Cómo: en la pantalla de título se elige con Arriba/Abajo (flechas, W/S, cruceta o palanca izquierda) y se confirma
      con Enter, Espacio, A o Start. También sirve un clic o toque sobre la opción.
    - 1.2 **LOCAL** funciona hoy: humanos en la misma pantalla, y bots en los puestos vacíos.
-   - 1.3 **ONLINE** (solo humanos) todavía no está construido: aparece como "COMING SOON" y no se puede iniciar.
+   - 1.3 **ONLINE** abre las **salas privadas** (M2 de `SPEC_ONLINE.md`): crear una sala o unirse con un código de 6 caracteres, sin emparejamiento
+     ni puntos de ranking todavía (ver 47). Necesita un servidor de juego en marcha (ver 47.4).
    - 1.4 **RANKING** abre la clasificación de la sesión (ver 3.4).
 
 2. **LOCAL: hasta 6 autos en una sola pantalla, con una partida de 3 carreras.**
@@ -191,7 +192,7 @@ Formato: **Característica** y, debajo, **Cómo**.
 
 36. **Motor: Godot 4.7.2, lenguaje GDScript, renderizador de compatibilidad (gl_compatibility).**
 
-37. **Modo LOCAL de hasta 6 coches en una sola pantalla.** El modo ONLINE todavía no existe (no hay red ni servidor).
+37. **Modo LOCAL de hasta 6 coches en una sola pantalla.** El modo ONLINE (salas privadas, ver 47) se juega contra un servidor propio.
 
 38. **Soporte de mandos sin límite fijo de 4.** Se lee cada mando por separado (con tolerancia de 0,5 en las palancas) y se identifica
     por su GUID para devolverle su asiento al reconectar.
@@ -215,7 +216,7 @@ Formato: **Característica** y, debajo, **Cómo**.
       embebido. Las de Steam incluyen las librerías de GodotSteam y el manifiesto de Steam Input.
 
 43. **Pruebas automáticas.**
-    - 43.1 339 tests con un runner propio (`tools/test.sh`), prueba de humo del juego por etapas y de LOCAL (`tools/run_tool.sh smoke`),
+    - 43.1 534 tests con un runner propio (`tools/test.sh`), prueba de humo del juego por etapas y de LOCAL (`tools/run_tool.sh smoke`),
       comprobación de la escala entera (`scalecheck`), capturas de pantalla comprobadas por píxeles, QA de LOCAL con 6 asientos
       (`tools/run_tool.sh versus_qa`) y comprobación de exportación (`tools/export_check.sh`).
     - 43.2 Modo `--selftest` dentro de cualquier build exportada, y opción `--seed=N` para fijar la semilla.
@@ -232,22 +233,36 @@ Formato: **Característica** y, debajo, **Cómo**.
       no vale) antes de empezar la música y de aceptar entradas. En escritorio no cambia nada.
     - 46.3 Sin GodotSteam (web) `start_steam` queda en "desactivado" con un solo aviso y se leen los mandos de Godot (con prueba).
 
+47. **Juego online por salas privadas (M2 de `SPEC_ONLINE.md`).**
+    - 47.1 Cómo: en el título, ONLINE abre una pantalla con NOMBRE (se edita como en LOCAL), CREAR SALA, UNIRSE y CÓDIGO. Crear una sala da un código
+      de 6 caracteres (sin 0, O, 1, I ni L) que se dice a los amigos; el dueño empieza con Aceptar y los puestos vacíos los llenan bots marcados. No hay pausa
+      ni revancha en una partida online; Esc (o Back) sale y cuenta como abandono. Sin puntos de ranking.
+    - 47.2 Cómo funciona: el servidor es autoritativo (`scripts/server/`, Godot sin ventana, muchas salas por proceso) y fija el flujo de controles; cada cliente
+      ejecuta la misma simulación con ese flujo (estado *confirmado*, idéntico al del servidor, comprobado con una suma cada segundo) y predice lo que aún no ha llegado
+      (estado *predicho*, que se reconstruye solo cuando una entrada confirmada difiere de lo usado). Las entradas tardías se aplican en el tick actual; las lejanas se descartan.
+    - 47.3 Desconexión: el coche sigue con la última entrada un instante y luego lo conduce un bot; cuenta como abandono (último). Si la persona vuelve con el mismo
+      billete o secreto dentro de la ventana de gracia (45 s, configurable) recupera el asiento con una instantánea; pasada la ventana el abandono es definitivo.
+    - 47.4 Servidor: `godot --headless -s res://scripts/server/server_main.gd -- --port=9080 --key=SECRETO` (con `--dev` acepta billetes sin firma). Billete firmado con HMAC
+      (partida, asiento, SteamID como texto, semilla, caducidad); los resultados y la repetición (semilla, reglas y flujo de controles comprimido) quedan listos para la API.
+    - 47.5 Pruebas y herramientas: `tests/test_net_*.gd`; `tools/net_sim.gd` (N clientes con latencia, jitter, pérdida y cortes; mide la corrección en píxeles, la profundidad
+      de resimulación y el tiempo de fotograma); `tools/net_local.sh` (servidor y dos clientes reales en el mismo equipo, o dos ventanas con `--windows`).
+
 ---
 
 ## Sección 9. Lo que el juego NO tiene
 
 - No hay inicio de sesión (ni con Google ni con otra cuenta), ni cuentas de usuario.
-- No hay juego online ni servidor; el multijugador es solo local (LOCAL).
+- El juego online es solo por salas privadas con código y sin puntos; no hay emparejamiento, cuentas, ranking online ni servidor desplegado (ver 47 y `SPEC_ONLINE.md`).
 - Hay efectos de sonido y música retro (ver `docs/AUDIO.md`). El volumen se cambia con `-` y `+`, y `M` silencia; se guarda en `user://settings.cfg`.
 - No se guarda nada: la mejor puntuación dura solo mientras la sesión está abierta.
 - No hay controles táctiles ni potenciadores; la versión web local solo se exporta (ver 46) (las 30 ideas de power-ups están pendientes).
-- ONLINE aparece en el menú pero está bloqueado ("COMING SOON").
 - El teclado solo juega en LOCAL cuando es la única persona.
 
 ## Sección 10. Sin verificar todavía
 
 - Las builds de Windows se generan pero no se han ejecutado.
 - Steam Input real, Remote Play Together con 6 jugadores y 6 mandos físicos no se han probado (no hay cliente de Steam ni mandos aquí).
+- El juego online no se ha probado con personas por internet real ni con el navegador (solo con simulación, localhost y pruebas automáticas); falta medir el tiempo de fotograma en la web.
 - Nadie ha jugado aún contra los bots: el equilibrio, sobre todo un humano contra 5 bots, es un punto por ajustar. En simulación, un
   "humano" que juega igual que los bots ganó solo 1 de 20 partidas.
 - El nombre "Fuel Rivals" no se ha comprobado como marca y falta el App ID real de Steam.
