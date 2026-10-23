@@ -2,7 +2,7 @@ extends Node2D
 ## The title screen (src/scenes/TitleScene.ts in the Phaser version): the still road and title_view.gd's drawing.
 ##
 ## Three choices: LOCAL, the join screen (people on this machine with a gamepad, or the keyboard when playing alone, and
-## bots in every empty seat); ONLINE, the screen of private rooms (online.gd; no matchmaking yet); and RANKING. Up and Down (the arrow keys or W and S, a pad's D-pad or left stick: nav.gd) move between
+## bots in every empty seat); ONLINE, the login and the queue (login_screen.gd, queue_screen.gd; the private rooms of online.gd without an API); and RANKING. Up and Down (the arrow keys or W and S, a pad's D-pad or left stick: nav.gd) move between
 ## them; a confirm press (Enter, Space, pad A or Start) picks the one shown, as does a click or tap on its button. The
 ## app remembers the last choice for the next time the title opens. The prompt blinks every half second of real time.
 
@@ -76,14 +76,14 @@ func select(p_choice: int) -> void:
 	view.set_choice(choice)
 
 
-## Picks the choice shown: the join screen of LOCAL, the private rooms of ONLINE, or the leaderboard.
+## Picks the choice shown: the join screen of LOCAL, the login or queue of ONLINE (the private rooms when there is no API), or the leaderboard.
 func start() -> void:
 	if _starting:
 		return
 	app.title_choice = choice
 	_starting = true
 	if choice == CHOICE_ONLINE:
-		app.show_online()
+		app.show_online_entry()
 	elif choice == CHOICE_RANKING:
 		app.show_ranking()
 	else:

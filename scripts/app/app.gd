@@ -29,6 +29,12 @@ extends Node
 ## - Web (docs/SPEC_ONLINE.md §12, M0): web_mode (OS.has_feature("web"), settable by tests) adds F as a fullscreen key, since the
 ##   browser keeps F11 and Alt+Enter, and makes the title wait for a key or a click (audio_unlocked) before the menu music starts: browsers
 ##   block sound until a gesture. Esc stays BACK. The browser may grab some keys (-, +, M, F11) for itself.
+## - Online services (docs/SPEC_ONLINE.md §16.3-§16.5, M4/M5): in the real game _ready() calls setup_online(), which makes the API client
+##   (scripts/net/api_client.gd: --api=URL, the project setting fuel/net/api_url, or the page's origin on the web), the login flow
+##   and the account. The title's ONLINE then opens the login screen (login_screen.gd), and once logged in the queue screen
+##   (queue_screen.gd) with the matchmaker, private rooms and the online ranking. Without it (tests, and a build with no API) ONLINE
+##   opens the private rooms directly. The app polls the API client and the login every frame. On the web the page's visibility is
+##   watched (the tab hidden: the server is told, so a bot drives the seat).
 ## - --selftest (after the "--" of the command line): boots, drives SELFTEST_TICKS steps through the real screens and
 ##   checks the result (selftest_problems(): among others, a pause press pauses the game and a second one resumes
 ##   it), then a versus race of SELFTEST_TICKS steps through the join and race screens (selftest_versus_problems(),
@@ -57,6 +63,14 @@ const Match := preload("res://scripts/sim/match.gd")
 const OnlineSession := preload("res://scripts/net/online_session.gd")
 const Transport := preload("res://scripts/net/transport.gd")
 const WsTransport := preload("res://scripts/net/ws_transport.gd")
+const ApiClient := preload("res://scripts/net/api_client.gd")
+const HttpRequestTransport := preload("res://scripts/net/http_request_transport.gd")
+const Account := preload("res://scripts/net/account.gd")
+const LoginFlow := preload("res://scripts/net/login_flow.gd")
+const SteamAuth := preload("res://scripts/net/steam_auth.gd")
+const WebBridge := preload("res://scripts/net/web_bridge.gd")
+const Matchmaking := preload("res://scripts/net/matchmaking.gd")
+const OnlineRankingStore := preload("res://scripts/app/online_ranking_store.gd")
 
 const TITLE_SCENE := "res://scenes/title.tscn"
 const GAME_SCENE := "res://scenes/game.tscn"
@@ -64,9 +78,11 @@ const JOIN_SCENE := "res://scenes/join.tscn"
 const RANKING_SCENE := "res://scenes/ranking.tscn"
 const ONLINE_SCENE := "res://scenes/online.tscn"
 const VERSUS_SCENE := "res://scenes/versus.tscn"
+const LOGIN_SCENE := "res://scenes/login.tscn"
+const QUEUE_SCENE := "res://scenes/queue.tscn"
 const SELFTEST_TICKS := 600
 ## The screens whose menu commands make a sound (audio.gd).
-const MENU_SCREENS: Array[StringName] = [&"Title", &"Join", &"Ranking", &"Online"]
+const MENU_SCREENS: Array[StringName] = [&"Title", &"Join", &"Ranking", &"Online", &"Login", &"Queue"]
 ## Where the volume is saved (the game only: tests leave settings alone).
 const SETTINGS_PATH := "user://settings.cfg"
 const SELFTEST_FRAMES := 120
@@ -166,6 +182,20 @@ var online_message: String = ""
 var online_code: String = ""
 var online_transport_factory: Callable = Callable()
 var online_clock: Callable = Callable()
+## The API (M4/M5): null until setup_online() or use_online(); then the client, who is logged in, the login flow and the page.
+var api: ApiClient = null
+var account := Account.new()
+var login: LoginFlow = null
+var web := WebBridge.new()
+## Region name -> base URL of its latency probe ("" is the API): the queue measures each (matchmaking.gd).
+var regions: Dictionary = {Matchmaking.DEFAULT_REGION: ""}
+## Unix seconds, for the ready-check countdown; tests give another.
+var unix_clock: Callable = Callable()
+## The online race came from the queue (not a private room): the id of its match, and where the race screen goes back to.
+var online_matchmade: bool = false
+var online_match_id: String = ""
+## The leaderboard store for this visit to the ranking screen: the API's when logged in, else the session's.
+var online_ranking: OnlineRankingStore = null
 var _screen: Node = null
 var _last_seed: int = -1
 var _started := false
@@ -178,6 +208,7 @@ var _selftest_problems := PackedStringArray()
 func _ready() -> void:
 	start()
 	start_steam()
+	setup_online()
 	audio.settings_path = SETTINGS_PATH
 	audio.load_settings()
 
@@ -311,6 +342,94 @@ func show_join() -> Node:
 	return _switch_to(JOIN_SCENE)
 
 
+## Online services for the real game: the API client over HTTPRequest nodes, Steam's ticket and the page. _ready() calls it.
+func setup_online() -> void:
+	if api != null:
+		return
+	var steam_auth := SteamAuth.new()
+	steam_auth.lookup = func() -> Object: return steam.singleton if steam != null else null
+	var base := ApiClient.resolve_base_url(
+		OS.get_cmdline_user_args(), str(ProjectSettings.get_setting(ApiClient.SETTING, "")), web.origin()
+	)
+	use_online(ApiClient.new(HttpRequestTransport.new(self), base), steam_auth, web)
+	regions = parse_regions(OS.get_cmdline_user_args(), regions)
+	login.resume_from_url()
+	web.watch_visibility(on_visibility_changed)
+
+
+## Online services from parts (a test gives fakes: a fake HTTP transport, a fake Steam, a fake page).
+func use_online(p_api: ApiClient, p_steam_auth: SteamAuth, p_web: WebBridge) -> void:
+	if api != null and api != p_api:
+		api.drop_pending()
+	api = p_api
+	web = p_web
+	account = Account.new()
+	login = LoginFlow.new(api, account, p_steam_auth, p_web)
+	login.clock = online_now
+
+
+## The latency regions from --regions=name=url,name=url (the default region, the API itself, when there is none).
+static func parse_regions(args: PackedStringArray, fallback: Dictionary) -> Dictionary:
+	for argument in args:
+		if argument.begins_with("--regions="):
+			var out := {}
+			for part in argument.trim_prefix("--regions=").split(",", false):
+				var at := part.find("=")
+				if at > 0:
+					out[part.substr(0, at)] = part.substr(at + 1)
+			if not out.is_empty():
+				return out
+	return fallback
+
+
+## The page's tab went hidden or came back: the online race tells its server.
+func on_visibility_changed(hidden: bool) -> void:
+	if online_session != null:
+		online_session.send_away(hidden)
+
+
+## ONLINE on the title: the login screen, then the queue; the private rooms directly when there is no API.
+func show_online_entry() -> Node:
+	if api == null:
+		return show_online()
+	if login.logged_in():
+		return show_queue()
+	return show_login()
+
+
+func show_login(message: String = "") -> Node:
+	end_online()
+	if seats != null:
+		seats.reset()
+	online_message = message
+	input = solo
+	return _switch_to(LOGIN_SCENE)
+
+
+## The queue screen (find a race, private rooms, ranking). `message` says why the last race ended, if it did.
+func show_queue(message: String = "") -> Node:
+	end_online()
+	if seats != null:
+		seats.reset()
+	online_message = message
+	input = solo
+	return _switch_to(QUEUE_SCENE)
+
+
+## Back from an online race: to the queue screen when the race came from the queue, to the private rooms otherwise.
+func leave_online_race(message: String = "") -> Node:
+	if online_matchmade and api != null and login.logged_in():
+		return show_queue(message)
+	return show_online(message)
+
+
+## Unix seconds now.
+func unix_now() -> int:
+	if unix_clock.is_valid():
+		return unix_clock.call()
+	return int(Time.get_unix_time_from_system())
+
+
 ## The ONLINE screen (private rooms; docs/SPEC_ONLINE.md §16.4). `message` says why the last connection ended, if it did.
 func show_online(message: String = "") -> Node:
 	end_online()
@@ -323,8 +442,10 @@ func show_online(message: String = "") -> Node:
 
 ## The race of an online match whose session is ready (it has been welcomed): versus.gd drives it with the session instead of
 ## stepping a match of its own. The keyboard and every pad are one player, as in the single-player game.
-func start_online_race(session: OnlineSession) -> Node:
+func start_online_race(session: OnlineSession, matchmade: bool = false, match_id: String = "") -> Node:
 	online_session = session
+	online_matchmade = matchmade
+	online_match_id = match_id
 	input = solo
 	return _switch_to(VERSUS_SCENE)
 
@@ -332,8 +453,12 @@ func start_online_race(session: OnlineSession) -> Node:
 ## Closes the online connection, if there is one (every other screen calls it by way of show_title() and show_online()).
 func end_online() -> void:
 	if online_session != null:
+		if online_matchmade and not online_match_id.is_empty() and api != null and online_session.state != OnlineSession.State.ENDED:
+			api.request("POST", "match/%s/leave" % online_match_id, {}, func(_r: Object) -> void: pass)
 		online_session.close()
 		online_session = null
+	online_matchmade = false
+	online_match_id = ""
 
 
 ## True when `session` is the one the online race holds.
@@ -357,6 +482,9 @@ func online_now() -> int:
 
 ## The leaderboard (docs/SPEC_RANKING.md §9): this session's ranking.
 func show_ranking() -> Node:
+	online_ranking = null
+	if api != null and login != null and login.logged_in():
+		online_ranking = OnlineRankingStore.new(api)
 	if seats != null:
 		seats.reset()
 	input = solo
@@ -460,6 +588,9 @@ func _input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	poll_steam()
+	if api != null:
+		api.poll()
+		login.poll()
 	if _selftest_frame >= 0:
 		_selftest_draw_frame()
 		return
@@ -471,6 +602,11 @@ func _process(delta: float) -> void:
 	# Menu commands live for one frame: a screen takes them in frame(), and a screen without menus (the game) never
 	# does, so they must not pile up there.
 	nav.clear()
+
+
+func _exit_tree() -> void:
+	if api != null:
+		api.drop_pending()
 
 
 func _notification(what: int) -> void:

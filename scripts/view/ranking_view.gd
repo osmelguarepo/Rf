@@ -19,12 +19,19 @@ const TABLE_W := 280
 var atlas: Atlas
 var font: Font
 var records: Array[Dictionary] = []
+## Replaces "NO MATCH PLAYED YET" while the list is empty (an online list that is loading or could not load).
+var status: String = ""
 
 
 func setup(p_atlas: Atlas, p_records: Array[Dictionary]) -> void:
 	atlas = p_atlas
 	font = p_atlas.font
 	records = p_records
+	queue_redraw()
+
+
+func set_status(text: String) -> void:
+	status = text
 	queue_redraw()
 
 
@@ -53,7 +60,7 @@ func _draw() -> void:
 	var y := top + ViewConfig.OVERLAY_TITLE_GAP
 	var small := ViewConfig.TEXT_SMALL
 	if records.is_empty():
-		Draw.text_centred(self, font, centre, y, "NO MATCH PLAYED YET", small, ViewConfig.GREY)
+		Draw.text_centred(self, font, centre, y, status if not status.is_empty() else "NO MATCH PLAYED YET", small, ViewConfig.GREY)
 	var left := r.position.x + ((r.size.x - TABLE_W) >> 1)
 	for i in records.size():
 		var rec := records[i]

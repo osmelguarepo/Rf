@@ -102,6 +102,8 @@ var keyboard_plays := false
 var ranking: Dictionary = {}
 ## A race: what each slot is called on the tower (the app's names for people, BOT for bots); empty: the seat panel names.
 var slot_names: Array[String] = []
+## An online race's notice over the picture (a lost connection being re-made, the tab coming back): one or two lines, "" for none.
+var notice: String = ""
 # The tower's rows: per slot, where its row is drawn now (y), its last rank, and the seconds left of its overtake flash.
 var _row_y: Dictionary = {}
 var _rank: Dictionary = {}
@@ -324,6 +326,27 @@ func _draw() -> void:
 	var overlay := overlay_for(game_match, lineup, keyboard_plays, ranking)
 	if not overlay.is_empty():
 		draw_overlay(overlay)
+	if not notice.is_empty():
+		draw_notice()
+
+
+## The notice's box in the middle of the picture.
+func draw_notice() -> void:
+	var lines := notice.split("\n")
+	var r := Hud.overlay_rect(lines.size() + 1, 320)
+	Draw.box(self, r)
+	var centre := r.position.x + (r.size.x >> 1)
+	var y := r.position.y + ViewConfig.OVERLAY_PADDING
+	for line in lines:
+		Draw.text_centred(self, font, centre, y, line, ViewConfig.TEXT_SMALL, ViewConfig.WHITE)
+		y += ViewConfig.OVERLAY_LINE_STEP
+
+
+## Sets the notice (and redraws only when it changed).
+func set_notice(text: String) -> void:
+	if text != notice:
+		notice = text
+		queue_redraw()
 
 
 # --- Seat panels -------------------------------------------------------------------------------------------------------

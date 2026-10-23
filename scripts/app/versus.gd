@@ -42,6 +42,11 @@ const PlayerColours := preload("res://scripts/view/player_colours.gd")
 const Road := preload("res://scripts/view/road.gd")
 const Cars := preload("res://scripts/view/cars.gd")
 const VersusHud := preload("res://scripts/view/versus_hud.gd")
+const Result := preload("res://scripts/net/api_result.gd")
+
+## After a queue match the profile is asked for again every PROFILE_EVERY_S seconds, PROFILE_TRIES times at most.
+const PROFILE_EVERY_S := 1.5
+const PROFILE_TRIES := 8
 
 var app: App
 var cfg: Config = Config.game()
@@ -61,6 +66,12 @@ var ranking_results: Dictionary = {}
 ## The online session this race shows, or null for a local race.
 var session: OnlineSession = null
 var _settled := false
+## An online race of the queue: the profile before it, and the follow-up that reads the points the server settled (GET /me).
+var _points_before: int = 0
+var _matches_before: int = 0
+var _profile_tries: int = 0
+var _profile_wait: float = 0.0
+var _profile_done: bool = false
 
 
 ## Builds the screen and starts the first match. The app calls it before adding the screen to the tree, after
@@ -251,6 +262,11 @@ func start_online() -> void:
 	_settled = false
 	cars.seat_colours = lineup
 	session.on_predicted_tick = func(m: Match) -> void: app.audio.race_step(m)
+	_points_before = app.account.points
+	_matches_before = app.account.matches
+	_profile_tries = 0
+	_profile_wait = 0.0
+	_profile_done = not (app.online_matchmade and app.account.logged_in and app.account.ranked)
 	app.input.clear_presses()
 	app.nav.clear()
 	app.clock.reset()
@@ -263,13 +279,16 @@ func _frame_online(delta: float) -> void:
 			return
 	session.update(app.online_now(), app.input.step_byte())
 	if session.state == OnlineSession.State.FAILED or session.state == OnlineSession.State.REJECTED:
-		app.show_online("CONNECTION LOST")
+		app.leave_online_race("CONNECTION LOST")
 		return
+	hud.set_notice(_notice())
 	game_match = session.view_match()
 	world = game_match.world
 	if session.state == OnlineSession.State.ENDED and not _settled:
 		_settled = true
 		app.audio.match_result(session.confirmed_match(), {})
+	if session.state == OnlineSession.State.ENDED and not _profile_done:
+		_follow_profile(delta)
 	render()
 	hud.animate(delta)
 	app.audio.drive(game_match)
@@ -278,15 +297,49 @@ func _frame_online(delta: float) -> void:
 
 ## One menu command of an online race: leaving, or going on once the match is over. Returns true when the screen changed.
 func handle_online(device: int, command: int) -> bool:
+	if session.state == OnlineSession.State.RECONNECTING and (command == Nav.BACK or command == Nav.SELECT):
+		app.leave_online_race()
+		return true
 	var over := game_match.phase == Match.MATCH_OVER and game_match.phase_ticks >= Config.MATCH_CONFIRM_TICKS
 	var leave := command == Nav.BACK or (device != Nav.KEYBOARD and command == Nav.SELECT)
 	if over and (leave or command == Nav.ACCEPT or command == Nav.START):
-		app.show_online()
+		app.leave_online_race()
 		return true
 	if not over and game_match.phase != Match.MATCH_OVER and leave:
-		app.show_online()
+		app.leave_online_race()
 		return true
 	return false
+
+
+## The text over the race while the connection is being made again.
+func _notice() -> String:
+	if session.state == OnlineSession.State.RECONNECTING:
+		return "CONNECTION LOST\nRECONNECTING...  %d\nBACK / ESC  LEAVE" % session.reconnect_left_s()
+	return ""
+
+
+## After a queue match: asks for the profile again (the server settles the result a moment after the last race) until the points or
+## the number of ranked matches change, and shows the change in the results panel like a local match's.
+func _follow_profile(delta: float) -> void:
+	_profile_wait -= delta
+	if _profile_wait > 0.0:
+		return
+	_profile_wait = PROFILE_EVERY_S
+	_profile_tries += 1
+	if _profile_tries > PROFILE_TRIES:
+		_profile_done = true
+		return
+	app.login.refresh_profile(func(r: Result) -> void:
+		if not r.ok or _profile_done:
+			return
+		if app.account.points != _points_before or app.account.matches != _matches_before:
+			_profile_done = true
+			var names := _online_names()
+			var slot: int = session.seat
+			ranking_results[slot] = {
+				"before": _points_before, "after": app.account.points, "delta": app.account.points - _points_before,
+				"name": names[slot] if slot < names.size() else app.account.player_name,
+			})
 
 
 func _online_names() -> Array[String]:
