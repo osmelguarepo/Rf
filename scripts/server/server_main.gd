@@ -46,6 +46,7 @@ var _server_id: String = ""
 var _dev: bool = false
 var _stop_at_ms: int = -1
 var _report_at_ms: int = 0
+var _register_call: Callable = Callable()
 
 
 func _initialize() -> void:
@@ -122,12 +123,16 @@ func _initialize() -> void:
 		_stop_at_ms = Time.get_ticks_msec() + max_seconds * 1000
 	print("server: listening on port %d, region '%s'%s" % [port, region, ", DEV tickets accepted" if dev else ""])
 	if registering:
-		link.register(register_token, _server_id, region, public_url, capacity, _on_registered)
+		# The root window is not in the tree yet: HTTPRequest nodes cannot be added during _initialize, so the first frame registers.
+		_register_call = func() -> void: link.register(register_token, _server_id, region, public_url, capacity, _on_registered)
 
 
 func _process(_delta: float) -> bool:
 	if host == null:
 		return false
+	if _register_call.is_valid():
+		_register_call.call()
+		_register_call = Callable()
 	var now := Time.get_ticks_msec()
 	listener.poll(now)
 	var connection := listener.take()

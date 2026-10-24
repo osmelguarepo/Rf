@@ -239,7 +239,7 @@ func test_cancelling_after_the_connection_started_leaves_the_match() -> void:
 
 
 func test_a_penalty_is_a_message_with_the_wait() -> void:
-	http.set_route("POST", "/queue", 429, {"error": "queue_penalty", "message": "x", "retry_after_s": 300})
+	http.set_route("POST", "/queue", 403, {"error": "queue_banned", "message": "x", "retry_after_s": 300})
 	mm.find_race()
 	_frames(8)
 	assert_eq(mm.state, M.FAILED)

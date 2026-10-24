@@ -305,7 +305,7 @@ func test_the_ready_check_counts_down_and_accepting_waits_for_the_others() -> vo
 
 func test_a_penalty_is_shown_and_dismissed() -> void:
 	var screen := _queue()
-	http.set_route("POST", "/queue", 429, {"error": "queue_penalty", "retry_after_s": 600})
+	http.set_route("POST", "/queue", 403, {"error": "queue_banned", "retry_after_s": 600})
 	screen.handle(Nav.ACCEPT)
 	_pump(500)
 	assert_eq(screen.step, Queue.Step.FAILED)

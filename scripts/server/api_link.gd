@@ -96,6 +96,7 @@ func _on_heartbeat(r: Result) -> void:
 	last_error = ""
 	var body := r.dict()
 	lease_seconds = int(body.get("lease_seconds", lease_seconds))
-	if bool(body.get("draining", false)):
+	# The API calls the flag `drain` (backend/README.md); `draining` is accepted too.
+	if bool(body.get("drain", false)) or bool(body.get("draining", false)):
 		drain_requested = true
 		host.draining = true

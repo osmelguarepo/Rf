@@ -49,13 +49,20 @@ func main() {
 	}
 
 	var verifier steam.Verifier = steam.Unavailable{}
-	if cfg.SteamPartnerKey != "" {
+	fakeSteam := os.Getenv("DEV_FAKE_STEAM") == "1" && (strings.HasPrefix(cfg.PublicURL, "http://localhost") || strings.HasPrefix(cfg.PublicURL, "http://127.0.0.1"))
+	if fakeSteam {
+		// Local development and tests of the whole stack only: a ticket "ok-<steamid>" logs in as that SteamID.
+		verifier = steam.FakeVerifier{}
+		log.Warn("DEV_FAKE_STEAM=1: Steam tickets \"ok-<steamid>\" are accepted; never in production")
+	} else if cfg.SteamPartnerKey != "" {
 		verifier = &steam.TicketVerifier{Key: cfg.SteamPartnerKey, AppID: cfg.SteamAppID, Identity: cfg.SteamTicketIdentity}
 	} else {
 		log.Warn("STEAM_PARTNER_API_KEY is not set: POST /auth/steam will answer 503")
 	}
 	var persona steam.Persona = steam.Unavailable{}
-	if cfg.SteamWebAPIKey != "" {
+	if fakeSteam {
+		persona = &steam.FakePersona{}
+	} else if cfg.SteamWebAPIKey != "" {
 		persona = &steam.PersonaFetcher{Key: cfg.SteamWebAPIKey}
 	} else {
 		log.Warn("STEAM_WEB_API_KEY is not set: display names fall back to P + the last digits of the SteamID")

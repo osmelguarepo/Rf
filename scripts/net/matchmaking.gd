@@ -181,6 +181,9 @@ func _probes_done(gen: int) -> void:
 
 
 func _on_status(r: Result) -> void:
+	if r.status == 429:
+		# The status limit of the account: the next poll tries again.
+		return
 	if not r.ok:
 		if r.network:
 			_network_fails += 1
@@ -248,13 +251,15 @@ func _fetch_join(now_ms: int) -> void:
 # --- Failures --------------------------------------------------------------------------------------------------------------
 
 
-## An API error in the middle of the queue: a refused session, a penalty (HTTP 429 or an error that names one) or a plain failure.
+## An API error in the middle of the queue: a refused session, a queue penalty (403 `queue_banned` with `retry_after_s`), a rate limit (429 `rate_limited`) or a plain failure.
 func _request_failed(r: Result, fallback: String) -> void:
 	if r.status == 401:
 		_fail("session_expired", "SESSION ENDED - LOG IN AGAIN")
-	elif r.status == 429 or r.error.contains("penal") or r.error == "queue_banned":
+	elif r.error.contains("penal") or r.error == "queue_banned":
 		penalty_s = r.retry_after_s
 		_fail(r.error, penalty_text(r.retry_after_s))
+	elif r.status == 429:
+		_fail("rate_limited", "TOO MANY REQUESTS - WAIT A MOMENT")
 	elif r.network:
 		_fail("network", "ONLINE UNAVAILABLE")
 	else:
