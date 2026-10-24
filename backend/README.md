@@ -95,6 +95,7 @@ Migrations run at start-up (advisory lock, so several instances are safe). `SIGT
 | `MAX_PING_MS` | the best server above this latency is accepted only after `QUEUE_MAX_WAIT` | `250` |
 | `MATCHMAKER_TICK`, `MATCHMAKER` | loop interval; `MATCHMAKER=off` disables the loop | `1s`, on |
 | `PENALTY_FREE_STRIKES`, `PENALTY_BASE`, `PENALTY_MAX` | queue ban for repeat leavers: free strikes per day, first ban, longest ban | `2`, `5m`, `2h` |
+| `DEV_FAKE_STEAM` | `1` accepts Steam tickets `ok-<steamid>`; honoured only when `PUBLIC_URL` is http://localhost or 127.0.0.1 (end-to-end tests, `tools/e2e_online.sh`) | off |
 | `METRICS_TOKEN` | bearer token of `GET /metrics` (16+ characters); without it `/metrics` answers 404 | |
 | `REPLAY_MAX_BYTES` | | `262144` |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error`; logs are JSON on stdout | `info` |

@@ -118,4 +118,7 @@ Las duraciones aceptan `45s`, `2m` o un número de segundos.
 - Las llamadas a la base de datos de la pasada (asignar, castigos) se hacen con el cerrojo de la cola tomado: aceptable a cientos de jugadores, a revisar si crece.
 - Una partida asignada cuyos jugadores nunca se conectan sigue abierta hasta que ellos llamen a `/match/{id}/leave`, un administrador la anule o el servidor pierda el arrendamiento (`VOID_AFTER`).
 - Las colas por hash de simulación (§16.2) solo filtran si el cliente manda `sim_hash`.
-- Probado con servidores de juego simulados; falta una prueba con el servidor Godot real y el cliente.
+- Probado de punta a punta en localhost con el servidor Godot real y clientes Godot reales (`tools/e2e_online.sh`, ver `SPEC_ONLINE.md` "E2E: verificado en localhost"). Falta: navegador, Steam real, TLS y ARM64.
+- **Errores de cola**: la penalización es `403 queue_banned` con `retry_after_s` (y `Retry-After`); `429 rate_limited` es solo el límite de tasa. El cliente ya no confunde ambos.
+- **Pruebas locales**: `DEV_FAKE_STEAM=1` (solo con `PUBLIC_URL` en localhost) hace que `POST /auth/steam` acepte `{"ticket":"ok-<steamid17>"}`; permite partidas puntuables sin Steam. Con `TRUST_PROXY=true` la /24 sale de `X-Forwarded-For`, así se simulan subredes distintas.
+- La API sirve en la raíz (sin `/api`; lo añade Caddy): en local el cliente usa `--api=http://127.0.0.1:PUERTO`. El servidor de juego se registra con `--region=default` (el nombre que usa el cliente) y `--public-url=ws://127.0.0.1:PUERTO`.

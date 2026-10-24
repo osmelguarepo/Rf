@@ -80,6 +80,7 @@ fi
 
 echo "e2e_online: building the API"
 (cd "$ROOT/backend" && PATH="$(dirname "$GO"):$PATH" "$GO" build -o "$(cygpath -w "$LOGS/api.exe")" ./cmd/api) || { echo "build failed" >&2; exit 1; }
+(cd "$ROOT/backend" && PATH="$(dirname "$GO"):$PATH" "$GO" build -o "$(cygpath -w "$LOGS/loadbot.exe")" ./cmd/loadbot) || { echo "loadbot build failed" >&2; exit 1; }
 "$GODOT" --headless --path "$ROOT" --import >/dev/null 2>&1
 
 # --- One stack per scenario -----------------------------------------------------------------------------------------------------
@@ -93,7 +94,7 @@ start_stack() { # start_stack NAME
 		MASTER_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" \
 		BAN_SALT="e2e-ban-salt-0123456789" ADMIN_TOKEN="$ADMIN_TOKEN" SERVER_REGISTER_TOKEN="$REGISTER_TOKEN" METRICS_TOKEN="$METRICS_TOKEN" \
 		TRUST_PROXY=true DEV_FAKE_STEAM=1 RATE_GUEST_PER_HOUR=1000 RATE_LOGIN_PER_MIN=1000 RATE_ACCOUNT_PER_MIN=6000 \
-		QUEUE_MAX_WAIT=4 QUEUE_SOLO_WAIT=4 QUEUE_BAND_STEP=10 READY_SECONDS=15 LEASE_TTL=30s LOG_LEVEL=info \
+		QUEUE_MAX_WAIT="${QWAIT:-4}" QUEUE_SOLO_WAIT="${QWAIT:-4}" QUEUE_BAND_STEP=10 READY_SECONDS=15 LEASE_TTL=30s LOG_LEVEL=info \
 		"$LOGS/api.exe" >"$LOGS/$NAME.api.log" 2>&1 &
 	pids+=($!)
 	local i
@@ -102,7 +103,7 @@ start_stack() { # start_stack NAME
 	local tuning=(--race-px=1500 --races=3)
 	[ "${E2E_FULL:-0}" = "1" ] && tuning=()
 	"$GODOT" --headless --path "$ROOT" -s res://scripts/server/server_main.gd -- --port="$GAME_PORT" --region=default \
-		--api="$API_URL" --server-id=e2e-1 --register-token="$REGISTER_TOKEN" --public-url="ws://127.0.0.1:$GAME_PORT" --capacity=8 \
+		--api="$API_URL" --server-id=e2e-1 --register-token="$REGISTER_TOKEN" --public-url="ws://127.0.0.1:$GAME_PORT" --capacity="${CAPACITY:-8}" \
 		--max-seconds=1500 "${tuning[@]}" >"$LOGS/$NAME.server.log" 2>&1 &
 	pids+=($!)
 	for i in $(seq 1 100); do grep -q "registered as id" "$LOGS/$NAME.server.log" 2>/dev/null && break; sleep 0.2; done
@@ -241,11 +242,21 @@ scenario_abandon() {
 	stop_stack
 }
 
+scenario_load() {
+	echo "== load: ${LOAD_N:-100} guests with the Go loadbot against the API and the real Godot server (queue, ready, ticket; they do not drive)"
+	CAPACITY=1000 QWAIT=30 start_stack load
+	"$LOGS/loadbot.exe" -url "$API_URL" -n "${LOAD_N:-100}" -ramp "${LOAD_RAMP:-120s}" -region default -timeout "${LOAD_TIMEOUT:-5m}" -quiet >"$LOGS/load.report.json" 2>"$LOGS/load.err"
+	cat "$LOGS/load.report.json"; tail -5 "$LOGS/load.err"
+	echo "  matches: $(q "SELECT count(*)||' total, '||coalesce(sum(bots),0)||' bot seats, '||count(*) FILTER (WHERE bots>0)||' with bots' FROM matches")"
+	echo "  server heartbeats ok / API 5xx: $(grep -c heartbeat "$LOGS/load.api.log") / $(grep -c '"status":5' "$LOGS/load.api.log")"
+	stop_stack
+}
+
 scenarios=("$@")
 [ "${#scenarios[@]}" -eq 0 ] && scenarios=(pair solo abandon guests)
 for s in "${scenarios[@]}"; do
 	case "$s" in
-		pair|solo|abandon|guests) "scenario_$s" ;;
+		pair|solo|abandon|guests|load) "scenario_$s" ;;
 		*) echo "usage: tools/e2e_online.sh [pair] [solo] [abandon] [guests]" >&2; exit 64 ;;
 	esac
 done
