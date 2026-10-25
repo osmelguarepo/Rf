@@ -20,6 +20,13 @@ const TITLE := "LOCAL"
 const TITLE_TOP := 14
 const SUBTITLE := "GAMEPAD: PRESS A     ALONE: ENTER ON THE KEYBOARD"
 const SUBTITLE_TOP := 54
+## The same on a touch device: the buttons are the keyboard's keys, so OK joins the lone player and starts the race.
+const SUBTITLE_TOUCH := "TAP OK TO JOIN     PADS: PRESS A"
+const HINTS_TOUCH := [
+	"OK  JOIN / RACE    DEL  LEAVE",
+	"ESC  TITLE    BOTS FILL THE EMPTY SEATS",
+	"NAME: ^ v LETTER    > ADD    < DELETE",
+]
 ## Six cards in a row.
 const CARD_W := 96
 const CARD_H := 124
@@ -61,6 +68,8 @@ var cars: int = 0
 var time: float = 0.0
 ## The seats' names (the app's); null: P1 to P6.
 var names: Names = null
+## True on a touch device: the texts name the buttons.
+var touch: bool = false
 
 
 func setup(p_atlas: Atlas, p_cfg: Config) -> void:
@@ -121,18 +130,21 @@ func _draw() -> void:
 	var centre := ViewConfig.VIEW_W >> 1
 	Draw.rect(self, Rect2i(0, 0, ViewConfig.VIEW_W, ViewConfig.VIEW_H), Color(0, 0, 0, ViewConfig.OVERLAY_DIM))
 	Draw.shadowed_centred(self, font, centre, TITLE_TOP, TITLE, ViewConfig.TEXT_HUGE, ViewConfig.YELLOW)
-	Draw.text_centred(self, font, centre, SUBTITLE_TOP, SUBTITLE, ViewConfig.TEXT_SMALL, ViewConfig.WHITE)
+	Draw.text_centred(self, font, centre, SUBTITLE_TOP, SUBTITLE_TOUCH if touch else SUBTITLE, ViewConfig.TEXT_SMALL, ViewConfig.WHITE)
 	var lit := floori(time / BLINK_SECONDS) % 2 == 0
 	for seat in kinds.size():
 		draw_card(seat, kinds[seat], lit)
 	_draw_bots(centre)
 	var people := kinds.count(Seats.PERSON)
 	var status := status_text(can_start, cars, people)
+	if touch:
+		status = "TAP OK TO JOIN" if people == 0 else (("TAP OK TO RACE: %d CARS" % cars) if can_start else status)
 	Draw.text_centred(self, font, centre, STATUS_TOP, status, ViewConfig.TEXT_SMALL, ViewConfig.YELLOW)
-	var band := Rect2i(0, HINTS_TOP - 8, ViewConfig.VIEW_W, HINTS.size() * HINTS_STEP + 8)
+	var hints: Array = HINTS_TOUCH if touch else HINTS
+	var band := Rect2i(0, HINTS_TOP - 8, ViewConfig.VIEW_W, hints.size() * HINTS_STEP + 8)
 	Draw.rect(self, band, Color(0, 0, 0, ViewConfig.BAND_ALPHA))
 	var top := HINTS_TOP
-	for line: String in HINTS:
+	for line: String in hints:
 		Draw.text_centred(self, font, centre, top, line, ViewConfig.TEXT_SMALL, ViewConfig.WHITE)
 		top += HINTS_STEP
 

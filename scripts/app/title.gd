@@ -27,7 +27,7 @@ var time: float = 0.0
 var choice: int = CHOICE_LOCAL
 var _starting := false
 ## True on the web until a key or a click: the title waits for it (browsers block sound before a gesture), shows PRESS ANY KEY and
-## takes no input. A gamepad button is no gesture for Safari, so only a key or the mouse count.
+## takes no input. A gamepad button is no gesture for Safari, so only a key or the mouse count (a tap makes a mouse click).
 var waiting: bool = false
 var road: Road
 var view: TitleView
@@ -45,11 +45,13 @@ func setup(p_app: App) -> void:
 	waiting = app.web_mode and not app.audio_unlocked
 	view.set_waiting(waiting)
 	view.set_web(app.web_mode)
+	view.set_touch(app.touch.active)
 	view.set_choice(choice)
 
 
 func frame(_steps: int, delta: float) -> void:
 	time += delta
+	view.set_touch(app.touch.active)
 	if waiting:
 		app.nav.clear()
 		app.input.clear_presses()

@@ -55,6 +55,8 @@ const RankingStore := preload("res://scripts/app/ranking_store.gd")
 const Names := preload("res://scripts/app/names.gd")
 const Audio := preload("res://scripts/app/audio.gd")
 const VolumeView := preload("res://scripts/view/volume_view.gd")
+const Touch := preload("res://scripts/input/touch.gd")
+const TouchView := preload("res://scripts/view/touch_view.gd")
 const Admin := preload("res://scripts/app/admin.gd")
 const PlayerInput := preload("res://scripts/sim/player_input.gd")
 const World := preload("res://scripts/sim/world.gd")
@@ -82,7 +84,8 @@ const LOGIN_SCENE := "res://scenes/login.tscn"
 const QUEUE_SCENE := "res://scenes/queue.tscn"
 const SELFTEST_TICKS := 600
 ## The screens whose menu commands make a sound (audio.gd).
-const MENU_SCREENS: Array[StringName] = [&"Title", &"Join", &"Ranking", &"Online", &"Login", &"Queue"]
+const RACE_SCREENS: Array[StringName] = [&"Game", &"Versus"]
+const MENU_SCREENS: Array[StringName] =[&"Title", &"Join", &"Ranking", &"Online", &"Login", &"Queue"]
 ## Where the volume is saved (the game only: tests leave settings alone).
 const SETTINGS_PATH := "user://settings.cfg"
 const SELFTEST_FRAMES := 120
@@ -164,6 +167,12 @@ var names := Names.new()
 ## The sound (docs/AUDIO.md); a node, so it is in the tree for its players.
 var audio: Audio = null
 var volume_view: VolumeView = null
+## The touch controls (scripts/input/touch.gd) and their drawing: buttons that press the keyboard's keys on a touch device.
+var touch := Touch.new()
+var touch_view: TouchView = null
+## True while the window is stretched by a fraction for the touch controls (a phone is rarely a whole multiple of 640x360).
+var _fractional := false
+
 var admin: Admin = null
 ## Best score this session. A new game starts with it as its high score.
 var high_score: int = 0
@@ -293,6 +302,11 @@ func boot() -> bool:
 	if volume_view == null:
 		volume_view = VolumeView.new()
 		add_child(volume_view)
+	if touch_view == null:
+		touch_view = TouchView.new()
+		add_child(touch_view)
+	touch.emit_key = _touch_key
+	touch.set_active(Touch.detect(web.coarse_pointer()))
 	solo = LocalInput.new()
 	seats = Seats.new()
 	seats.guid_of = guid_of
@@ -302,6 +316,7 @@ func boot() -> bool:
 	booted = atlas.load_all()
 	PlayerColours.add_frames(atlas)
 	volume_view.setup(atlas)
+	touch_view.setup(touch, atlas)
 	return booted
 
 
@@ -529,6 +544,8 @@ func toggle_fullscreen() -> void:
 		window = get_window()
 	if window != null:
 		window.mode = toggled_window_mode(window.mode)
+		if web_mode and touch.active:
+			web.lock_landscape()
 
 
 ## Fullscreen (either kind) goes to a window; any other mode to fullscreen.
@@ -569,6 +586,11 @@ func _switch_to(path: String) -> Node:
 
 
 func _input(event: InputEvent) -> void:
+	if touch.handle_event(event):
+		# A finger on a button: the screens do not see it (the title's own buttons are not under the touch controls).
+		if is_inside_tree():
+			get_viewport().set_input_as_handled()
+		return
 	if admin_enabled and is_admin_key(event):
 		toggle_admin()
 		return
@@ -596,12 +618,48 @@ func _process(delta: float) -> void:
 		return
 	if _screen == null:
 		return
+	touch.set_mode(touch_mode())
+	_fit_touch_scale()
 	# The dashboard is a full-screen page: the game waits behind it.
 	var paused_by_admin := admin != null and admin.visible
 	_screen.frame(0 if paused_by_admin else clock.advance(delta * tuning.value(Tuning.TIME_SCALE)), delta)
 	# Menu commands live for one frame: a screen takes them in frame(), and a screen without menus (the game) never
 	# does, so they must not pile up there.
 	nav.clear()
+
+
+## What the touch controls show for the screen up: the race's buttons in a game or a versus race, the menu's on the menu screens,
+## none while the web title waits for its first tap.
+func touch_mode() -> int:
+	if _screen == null or (web_mode and not audio_unlocked):
+		return Touch.MODE_NONE
+	if _screen.name in RACE_SCREENS:
+		return Touch.MODE_RACE
+	if _screen.name in MENU_SCREENS:
+		return Touch.MODE_MENU
+	return Touch.MODE_NONE
+
+
+## A touch device stretches the picture by any factor (the whole-number steps of project.godot leave wide black bands on a
+## phone); a keyboard device goes back to whole numbers.
+func _fit_touch_scale() -> void:
+	if touch.active == _fractional or not is_inside_tree():
+		return
+	_fractional = touch.active
+	get_window().content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL if _fractional else Window.CONTENT_SCALE_STRETCH_INTEGER
+
+
+## A button of the touch controls going down or up: the keyboard's key, as a key event (touch.gd remembers it, so it is no keyboard). Into Input's state, then
+## (outside a running tree, as in the tests) to _input() by hand; the engine delivers it to _input() as it flushes.
+func _touch_key(code: int, pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code as Key
+	event.physical_keycode = code as Key
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	if not is_inside_tree():
+		Input.flush_buffered_events()
+		_input(event)
 
 
 func _exit_tree() -> void:

@@ -40,6 +40,18 @@ func navigate(url: String) -> void:
 		_eval("window.location.assign(%s)" % JSON.stringify(url))
 
 
+## True when the page's main pointer is a finger (a phone or a tablet; not a laptop with a touch screen and a mouse).
+func coarse_pointer() -> bool:
+	return available() and bool(_eval("window.matchMedia('(pointer: coarse)').matches"))
+
+
+## Asks the browser to keep the page in landscape. It works only in fullscreen (and on Android), so it waits for the fullscreen
+## request to settle; any refusal is ignored.
+func lock_landscape() -> void:
+	if available():
+		_eval("setTimeout(function(){try{screen.orientation.lock('landscape').catch(function(){})}catch(e){}},400)")
+
+
 func hidden() -> bool:
 	return available() and str(_eval("document.visibilityState")) == "hidden"
 

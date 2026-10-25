@@ -269,6 +269,7 @@ Formato: **Característica** y, debajo, **Cómo**.
 - Solo hay inicio de sesión con Steam (o invitado sin puntos); ni Google ni otras cuentas.
 - El online necesita la API y un servidor desplegados (ver 47, 48 y `SPEC_ONLINE.md`); nada de esto está desplegado todavía.
 - Hay efectos de sonido y música retro (ver `docs/AUDIO.md`). El volumen se cambia con `-` y `+`, y `M` silencia; se guarda en `user://settings.cfg`.
+- Controles táctiles (ver `docs/TOUCH.md`): en un móvil o tableta (puntero principal táctil) aparecen botones en pantalla que pulsan las teclas del teclado; en un portátil con teclado se ocultan y un toque los muestra. En carrera: ◀ ▶, GAS, BRK, NOS, pausa, OK y ESC; en los menús: cruceta, OK, ESC, DEL, pantalla completa y volumen. Con la ventana en vertical pide girar el dispositivo.
 - No se guarda nada: la mejor puntuación dura solo mientras la sesión está abierta.
 - No hay controles táctiles ni potenciadores; la versión web local solo se exporta (ver 46) (las 30 ideas de power-ups están pendientes).
 - El teclado solo juega en LOCAL cuando es la única persona.

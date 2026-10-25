@@ -199,6 +199,10 @@ const FULLSCREEN_HINT := "F11 / ALT+ENTER  FULLSCREEN"
 const FULLSCREEN_HINT_WEB := "F  FULLSCREEN"
 ## The web title waits for a key or a click before any sound (browsers block audio until then).
 const PROMPT_WEB := "PRESS ANY KEY"
+## The same, and the footer, on a touch device.
+const PROMPT_WEB_TOUCH := "TAP TO START"
+const PROMPT_TOUCH := "TAP A BUTTON OR USE THE PAD"
+const FULLSCREEN_HINT_TOUCH := ""
 ## The prompt blinks between full and this alpha every half second.
 const PROMPT_DIM_ALPHA := 0.35
 const PROMPT_BLINK_SECONDS := 0.5

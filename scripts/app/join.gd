@@ -39,6 +39,7 @@ func setup(p_app: App) -> void:
 	road.beside_panels = false
 	road.setup(app.atlas, cfg)
 	view.setup(app.atlas, cfg)
+	view.touch = app.touch.active
 	view.show_seats(seats, time, app.names)
 
 
@@ -51,6 +52,7 @@ func frame(_steps: int, delta: float) -> void:
 	if _leaving:
 		return
 	seats.clear_presses()
+	view.touch = app.touch.active
 	view.show_seats(seats, time, app.names)
 
 
