@@ -1,5 +1,5 @@
-# Builds the API image for arm64 and amd64, pushes it to GitHub Container Registry and deploys it to the Oracle machine
-# over SSH (docs/DEPLOY_ORACLE.md). It runs on a version tag (v*) or by hand; the deploy job waits for the `production`
+# Builds the API and game server images for arm64 and amd64, pushes them to GitHub Container Registry and deploys them
+# to the machine over SSH (docs/DEPLOY_ORACLE.md). It runs on a version tag (v*) or by hand; the deploy job waits for the `production`
 # environment, where you can require a reviewer.
 #
 # Secrets to create in the repository (Settings > Secrets and variables > Actions) or, better, in the `production`
@@ -69,9 +69,50 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # The game server: Godot headless running scripts/server/server_main.gd (deploy/Dockerfile.gameserver).
+  gameserver-image:
+    name: Game server image to ghcr.io
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name in lower case
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/fuelrivals-gameserver" >>"$GITHUB_OUTPUT"
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.name.outputs.image }}
+          tags: |
+            type=ref,event=tag
+            type=sha,format=short
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.gameserver
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=gameserver
+          cache-to: type=gha,mode=max,scope=gameserver
+
   deploy:
     name: Deploy over SSH
-    needs: image
+    needs: [image, gameserver-image]
     if: ${{ github.event_name == 'push' || inputs.deploy }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -108,7 +149,11 @@ jobs:
           cd /opt/fuelrivals
           tag="$1"
           if grep -q '^API_TAG=' .env; then sed -i "s|^API_TAG=.*|API_TAG=${tag}|" .env; else echo "API_TAG=${tag}" >> .env; fi
+          if grep -q '^GAME_TAG=' .env; then sed -i "s|^GAME_TAG=.*|GAME_TAG=${tag}|" .env; else echo "GAME_TAG=${tag}" >> .env; fi
           docker compose pull api caddy
+          docker compose --profile game pull gameserver1
+          # The game server restarts only once it is registered (GAME1_KEY set); before that the image is just pulled.
+          if grep -q '^GAME1_KEY=.' .env; then docker compose --profile game up -d --no-deps gameserver1; fi
           docker compose up -d --no-deps api
           # Reload Caddy in place (open WebSockets stay for stream_close_delay).
           docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || docker compose up -d caddy

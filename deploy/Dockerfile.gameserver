@@ -1,62 +1,53 @@
 # syntax=docker/dockerfile:1.7
-# PLACEHOLDER: the Fuel Rivals game server (Godot headless, SPEC_ONLINE 3, 15.3 and 16.1.10).
+# The Fuel Rivals game server (Godot headless, SPEC_ONLINE 3, 15.3 and 16.1.10).
 #
-# The server itself (scripts/server/server_main.gd, room.gd, host.gd) and its export preset are milestone M2 and another
-# agent's work, so this file cannot be built yet. It documents how the image is meant to be built so that when the
-# export exists nothing else has to be designed. Nothing in docker-compose.yml breaks if this image does not exist
-# yet: the `gameserver*` services are under the `game` profile (`docker compose --profile game up -d`).
+# The server is a script (scripts/server/server_main.gd, `-s`), not an exported game, so the image runs it with the
+# official Godot editor binary for the image's architecture and the project's scripts. It needs no import step and no
+# export templates: it loads only scripts (scripts/server, scripts/net, scripts/sim), never assets or scenes.
 #
-# STEPS (to do when the server export exists)
+# Build (the deploy workflow does it for arm64 and amd64 on every v* tag):
+#   docker buildx build -f deploy/Dockerfile.gameserver --platform linux/arm64,linux/amd64 \
+#       -t ghcr.io/OWNER/fuelrivals-gameserver:dev --push .
 #
-#   1. In the Godot project, create an export preset "Linux Server" (feature `dedicated_server`, no GodotSteam, its own
-#      main scene) for BOTH architectures. The templates for linux arm64 and x86_64 come from the official
-#      export_templates; tools/fetch_templates.py already knows how to fetch a fixed set and check it.
-#   2. Export two directories (names are what the COPY lines below expect):
-#         build/server/amd64/fuel_rivals_server.x86_64   (+ .pck if the pack is not embedded)
-#         build/server/arm64/fuel_rivals_server.arm64    (+ .pck if the pack is not embedded)
-#      Oracle Always Free is ARM64 (Ampere A1), so the arm64 build is the one that runs in production; the amd64 one is
-#      for CI and for developers.
-#   3. Build and push from the repository root, once per architecture family with buildx:
-#         docker buildx build -f deploy/Dockerfile.gameserver --platform linux/arm64,linux/amd64 \
-#             -t ghcr.io/OWNER/fuelrivals-gameserver:dev --push .
-#   4. Register the server with the API (docs/DEPLOY_ORACLE.md, "Registrar el servidor de juego"), put the id and key in
-#      the .env of the machine, and start it with `docker compose --profile game up -d`.
-#
-# WHAT THE SERVER MUST DO (the contract this image and docker-compose.yml rely on)
-#
-#   - Read its settings from the environment, not from the command line, so the key never shows in `ps`:
-#         FR_API_URL      base URL of the API, e.g. http://api:8080 (inside compose)
-#         FR_SERVER_ID    the id returned by POST /servers/register
-#         FR_SERVER_KEY   the 64-hex-character key (also the HMAC key of tickets, see backend/docs/TICKET.md)
-#         FR_PORT         the port it listens on for plain WebSocket (Caddy terminates TLS), default 9080
-#         FR_MAX_ROOMS    the capacity it reports in each heartbeat
-#         FR_MAILBOX_DIR  a directory where results that could not be delivered are kept and retried (SPEC 16.2)
-#   - Send POST /servers/heartbeat every 5 s while running (lease is 30 s), with "draining": true once it received SIGTERM.
-#   - On SIGTERM: stop accepting new matches (draining), keep serving the rooms in progress, and exit 0 when the last
-#     room has delivered its result, or after FR_DRAIN_MAX_SECONDS (default 1200). docker-compose.yml gives it
-#     `stop_grace_period: 20m`, longer than a match of three races, so Docker does not SIGKILL it mid-match.
-#   - Verify tickets as backend/docs/TICKET.md says, close a socket with no valid HELLO after 2 s, and post results to
-#     POST /matches/{id}/result with only placements and abandons.
-#   - One process per vCPU: compose runs `gameserver1`, `gameserver2`, ... each with its own id, key and Caddy path.
+# Settings: FUEL_API_URL, FUEL_SERVER_ID and FUEL_SERVER_KEY from the environment (so the key never shows in `ps`);
+# the rest as arguments after the entrypoint's `--` (docker-compose.yml's `command`): --port, --capacity, --region.
+# user:// (the results outbox and the replays) is under XDG_DATA_HOME, a volume, because the container is read-only.
+
+ARG GODOT_VERSION=4.7.2-stable
+
+FROM debian:bookworm-slim AS godot
+ARG TARGETARCH
+ARG GODOT_VERSION
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /dl
+# Checked against the release's SHA512-SUMS.txt, as in ci.yml.
+RUN case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=arm64 ;; *) echo "unsupported ${TARGETARCH}" >&2; exit 1 ;; esac \
+ && zip="Godot_v${GODOT_VERSION}_linux.${arch}.zip" \
+ && base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}" \
+ && curl -fsSL --retry 3 -o "$zip" "$base/$zip" \
+ && curl -fsSL --retry 3 -o SHA512-SUMS.txt "$base/SHA512-SUMS.txt" \
+ && awk -v zip="$zip" '$2 == zip' SHA512-SUMS.txt >"$zip.sha512" \
+ && [ "$(wc -l <"$zip.sha512")" -eq 1 ] \
+ && sha512sum --check --strict "$zip.sha512" \
+ && unzip -q "$zip" \
+ && mv "Godot_v${GODOT_VERSION}_linux.${arch}" /godot \
+ && chmod +x /godot
 
 FROM debian:bookworm-slim AS runtime
-ARG TARGETARCH
-# Godot's headless Linux binaries need these shared libraries even without a display.
+# Godot's Linux binaries need these shared libraries even headless.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libfontconfig1 libx11-6 libxcursor1 libxi6 libxrandr2 libxinerama1 \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --create-home --uid 10001 game
-WORKDIR /home/game
-# The COPY takes the directory of the architecture being built. The binary is renamed to fuel_rivals_server so that
-# Godot finds fuel_rivals_server.pck next to it when the pack is not embedded.
-COPY build/server/${TARGETARCH}/ /home/game/server/
-RUN cd /home/game/server \
- && case "${TARGETARCH}" in amd64) mv fuel_rivals_server.x86_64 fuel_rivals_server ;; arm64) mv fuel_rivals_server.arm64 fuel_rivals_server ;; esac \
- && chmod +x fuel_rivals_server \
- && mkdir -p /var/lib/fuelrivals/mailbox && chown game /var/lib/fuelrivals/mailbox
+ && useradd --system --create-home --uid 10001 game \
+ && mkdir -p /var/lib/fuelrivals && chown game /var/lib/fuelrivals
+COPY --from=godot /godot /usr/local/bin/godot
+COPY project.godot /game/project.godot
+COPY scripts/ /game/scripts/
 USER game
-ENV FR_PORT=9080 FR_MAILBOX_DIR=/var/lib/fuelrivals/mailbox
+ENV XDG_DATA_HOME=/var/lib/fuelrivals XDG_CONFIG_HOME=/tmp/config XDG_CACHE_HOME=/tmp/cache
 EXPOSE 9080
-# Arguments after `--` are the project's own (the server scene reads them with OS.get_cmdline_user_args()).
-ENTRYPOINT ["/home/game/server/fuel_rivals_server", "--headless", "--", "--dedicated"]
+ENTRYPOINT ["godot", "--headless", "--path", "/game", "-s", "res://scripts/server/server_main.gd", "--"]
+CMD ["--port=9080"]
 STOPSIGNAL SIGTERM

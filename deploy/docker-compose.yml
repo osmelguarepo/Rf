@@ -108,17 +108,17 @@ services:
     security_opt: ["no-new-privileges:true"]
     mem_limit: 256m
 
+  # The server reads FUEL_* from the environment and the rest as arguments (scripts/server/server_main.gd). Its results
+  # outbox and replays (user://) live in the volume, so results not yet delivered survive a restart.
   gameserver1:
     <<: *game-server
     environment: &game-env
-      FR_API_URL: http://api:8080
-      FR_SERVER_ID: ${GAME1_ID:-}
-      FR_SERVER_KEY: ${GAME1_KEY:-}
-      FR_PORT: "9080"
-      FR_MAX_ROOMS: ${GAME_MAX_ROOMS:-40}
-      FR_MAILBOX_DIR: /var/lib/fuelrivals/mailbox
+      FUEL_API_URL: http://api:8080
+      FUEL_SERVER_ID: ${GAME1_ID:-}
+      FUEL_SERVER_KEY: ${GAME1_KEY:-}
+    command: &game-args ["--port=9080", "--capacity=${GAME_MAX_ROOMS:-40}", "--region=${GAME_REGION:-eu}"]
     volumes:
-      - mailbox1:/var/lib/fuelrivals/mailbox
+      - mailbox1:/var/lib/fuelrivals
 
   # A second process for a second vCPU: its own id, key, mailbox and Caddy path (/ws/2). Add more the same way.
   # Off in the beta (2 OCPU): its own profile, so `--profile game` starts gameserver1 only. On a machine with spare
@@ -128,10 +128,11 @@ services:
     profiles: ["game2"]
     environment:
       <<: *game-env
-      FR_SERVER_ID: ${GAME2_ID:-}
-      FR_SERVER_KEY: ${GAME2_KEY:-}
+      FUEL_SERVER_ID: ${GAME2_ID:-}
+      FUEL_SERVER_KEY: ${GAME2_KEY:-}
+    command: *game-args
     volumes:
-      - mailbox2:/var/lib/fuelrivals/mailbox
+      - mailbox2:/var/lib/fuelrivals
 
 networks:
   internal:
