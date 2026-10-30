@@ -111,21 +111,17 @@ func test_a_click_on_a_button_picks_it() -> void:
 	assert_eq(S.screen_name(app), "Join")
 
 
-## The title's layout: three buttons on the road, apart, clear of the car, the note band and the footer.
+## The title's layout: three buttons on the road, apart, clear of the car and the footer.
 func test_the_two_buttons_fit_between_the_title_and_the_car() -> void:
 	var buttons := TitleView.choice_buttons()
 	var car := TitleView.car_box(Config.standard())
-	var band := TitleView.note_band(app.atlas.font)
 	assert_eq(buttons.size(), ViewConfig.TITLE_CHOICES.size())
 	assert_false(buttons[0].intersects(buttons[1]) or buttons[1].intersects(buttons[2]))
 	for button: Rect2i in buttons:
 		assert_false(button.intersects(car), "%s clear of the car" % button)
-		assert_false(button.intersects(band), "%s clear of the note" % button)
 		assert_gt(button.position.y, ViewConfig.TITLE_TOP + ViewConfig.TEXT_HUGE)
 		assert_gt(button.position.x, int(Config.standard().road_left) - 1, "on the road")
 		assert_lt(button.end.x, int(Config.standard().road_right) + 1, "on the road")
-	assert_false(band.intersects(car))
-	assert_lt(band.end.y, car.position.y + 1)
 
 
 ## F11 and Alt+Enter switch the window between windowed and fullscreen, on every screen, and never reach the screens

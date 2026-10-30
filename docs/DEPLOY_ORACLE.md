@@ -10,11 +10,12 @@ Todo lo marcado **[TAREA TUYA]** necesita algo que solo tienes tú: una cuenta, 
  Internet ─► Caddy (80/443, TLS automático)
               ├─ /            web del juego (exportación Godot sin hilos, de /srv/web, Brotli precomprimido)
               ├─ /api/*   ──► API en Go (api:8080) ──► PostgreSQL
-              └─ /ws/1, /ws/2 ► servidores de juego Godot (gameserver1:9080, gameserver2:9080), wss
+              └─ /ws/1        ► servidor de juego Godot (gameserver1:9080), wss
+                              (/ws/2 → gameserver2 queda listo pero apagado en la beta, ver abajo)
 ```
 
-- Una máquina Ampere A1 (ARM64) con hasta **4 OCPU y 24 GB** gratis. Capacidad estimada **450 a 900 jugadores simultáneos** (límite: CPU, luego tráfico), por confirmar en M2.
-- Un proceso de servidor de juego por vCPU (§16.1.10): el compose trae dos (`gameserver1`, `gameserver2`); se añaden más copiando el bloque.
+- Una máquina Ampere A1 (ARM64) con **2 OCPU y 12 GB** gratis. Oracle redujo la capa Always Free de 4 OCPU y 24 GB a 2 OCPU y 12 GB (1.500 horas de OCPU y 9.000 horas de GB al mes; documentación de Oracle consultada en octubre de 2026). En A1 una OCPU es un núcleo. La capacidad no está medida: la estimación anterior de 450 a 900 jugadores era para 4 OCPU, así que cuenta con aproximadamente la mitad hasta medirla.
+- Un proceso de servidor de juego por vCPU (§16.1.10). Con 2 núcleos la beta arranca **solo `gameserver1`** (perfil `game`); el otro núcleo queda para la API, PostgreSQL y Caddy. `gameserver2` está en el perfil `game2`, apagado; en una máquina con más núcleos se registra y se arranca con `--profile game --profile game2`.
 - Solo Caddy publica puertos. PostgreSQL y la API quedan en la red privada de Docker.
 
 ## 1. Cuenta de Oracle Cloud **[TAREA TUYA]**
@@ -30,7 +31,7 @@ Menú: *Compute > Instances > Create instance*.
 | Campo | Valor |
 |---|---|
 | Imagen | Canonical Ubuntu 24.04 (aarch64) |
-| Forma | `VM.Standard.A1.Flex`, 4 OCPU, 24 GB (el máximo gratis; si falla por capacidad, prueba 2 OCPU y 12 GB y amplía luego) |
+| Forma | `VM.Standard.A1.Flex`, 2 OCPU, 12 GB (el máximo gratis; si falla por capacidad, reintenta más tarde o en otro dominio de disponibilidad) |
 | Red | VCN nueva con subred **pública** y **dirección IPv4 pública** |
 | SSH | sube tu clave pública (`ssh-keygen -t ed25519` si no tienes) |
 | Volumen de arranque | 100 GB (el gratis llega a 200 GB entre todos los volúmenes) |
@@ -66,6 +67,12 @@ sudo netfilter-persistent save
 ## 4. Dominio **[TAREA TUYA]**
 
 Compra o usa un dominio y crea un registro **A** `play.tudominio.com` → la IP reservada (y un **AAAA** si activas IPv6). Espera a que resuelva (`dig +short play.tudominio.com`) antes de arrancar Caddy: si no, Let's Encrypt falla y limita los reintentos.
+
+**Para las pruebas, sin comprar dominio: DuckDNS.** Entra en <https://www.duckdns.org/> con tu cuenta de GitHub o Google, crea un subdominio (por ejemplo `fuelrivals-beta`) y pon en *current ip* la IP reservada. Tu `DOMAIN` es entonces `fuelrivals-beta.duckdns.org`. `duckdns.org` está en la Public Suffix List, así que Let's Encrypt cuenta los certificados de tu subdominio aparte de los de los demás usuarios.
+
+**No uses sslip.io ni nip.io** para el certificado: no están en la Public Suffix List (comprobado en octubre de 2026), así que todos sus usuarios comparten el límite de 50 certificados por semana de Let's Encrypt y el tuyo puede fallar sin aviso.
+
+Un subdominio gratuito vale para probar; para la beta pública, un dominio propio (§16.5 pide dominio propio).
 
 ## 5. Preparar la máquina
 
@@ -160,7 +167,9 @@ curl -s -X POST https://play.tudominio.com/api/servers/register \
   -d '{"name":"eu-1","region":"eu","url":"wss://play.tudominio.com/ws/1","capacity":40}'
 ```
 
-Responde `{"server_id":"1","key":"<64 hex>"}`: **la clave se muestra una sola vez**. Ponlos en `.env` como `GAME1_ID` y `GAME1_KEY` (y `GAME2_*` para `/ws/2`, con `"name":"eu-2"` y `"url":".../ws/2"`). Registrar el mismo nombre otra vez rota la clave. Luego `docker compose --profile game up -d`.
+Responde `{"server_id":"1","key":"<64 hex>"}`: **la clave se muestra una sola vez**. Ponlos en `.env` como `GAME1_ID` y `GAME1_KEY`. Registrar el mismo nombre otra vez rota la clave. Luego `docker compose --profile game up -d`, que arranca solo `gameserver1`.
+
+En la beta (2 OCPU) **no registres `eu-2`**: un servidor registrado que no responde se queda sin latido y la API libera sus jugadores, pero no tiene sentido ofrecerlo. Con más núcleos: registra `"name":"eu-2"` con `"url":".../ws/2"`, pon `GAME2_ID` y `GAME2_KEY` en `.env` y arranca con `docker compose --profile game --profile game2 up -d`.
 
 Hasta que exista el emparejador (M4), una partida se crea a mano (administrador):
 

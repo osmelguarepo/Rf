@@ -13,7 +13,7 @@ GrafxKid's CC0 sheet, the Press Start 2P font, no sound.
   covers the scenes, the view, keyboard and gamepad input, the tests, a smoke test, a pack export check and CI.
 - **Phase B, local multiplayer, is under way.** The LOCAL mode is playable from the title: up to 6
   cars on one screen, one gamepad each (or the keyboard when playing alone), bots in every empty seat, best of 3 rounds.
-  ONLINE (humans only, no bots) is planned and shows as "coming soon". Done: the versus
+  ONLINE (login, queue and private rooms; docs/SPEC_ONLINE.md) is wired in the client. Done: the versus
   rules, the match and the bots (B1), and the versus screens (B2): the join screen, a seat per gamepad, the six player
   colours, the race with a panel per car, the round and match results, rematch, gamepads that disconnect and come
   back. Steam Input through GodotSteam (B4) is in, not yet tried with a real Steam client (see Steam below). QA with
@@ -51,8 +51,8 @@ nothing is saved.
 ## Controls
 
 The title has two modes, **LOCAL** and **ONLINE**: Up and Down (arrow keys, W and S, a gamepad's D-pad or left stick)
-choose, and Enter, Space, A or Start picks. A click or tap on a mode picks it too. **ONLINE** (humans only) is not built
-yet: it shows "COMING SOON" and does nothing. **LOCAL** opens the join screen.
+choose, and Enter, Space, A or Start picks. A click or tap on a mode picks it too. **ONLINE** opens the login and the
+queue, or the private rooms when there is no API (docs/SPEC_ONLINE.md). **LOCAL** opens the join screen.
 
 The old single-player game (stages and a goal, no bots) is no longer on the menu; its code and tests stay, and
 `App.start_game()` starts it. Its controls are the ones a LOCAL race uses:

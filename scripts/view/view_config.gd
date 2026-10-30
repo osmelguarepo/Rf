@@ -173,18 +173,15 @@ const CONTROLS_PAD := [
 	"START   pause",
 	"A START start",
 ]
-## The choices, top to bottom: LOCAL (the join screen: people on this machine, bots in the empty seats) and ONLINE (humans
-## only, not built yet: it shows COMING SOON and cannot be started) and RANKING (the leaderboard). Up and Down move between them; the one shown is
+## The choices, top to bottom: LOCAL (the join screen: people on this machine, bots in the empty seats) and ONLINE (the
+## login and the queue, or the private rooms without an API) and RANKING (the leaderboard). Up and Down move between them; the one shown is
 ## drawn lit. A click or tap on a button picks it too.
 const TITLE_CHOICES := ["LOCAL", "ONLINE", "RANKING"]
 ## The LOCAL button (the name it had when it was the only one, START).
 const START_BUTTON := Rect2i(240, 68, 160, 28)
 const VERSUS_BUTTON := Rect2i(240, 102, 160, 28)
 ## The RANKING button: the leaderboard of the session (docs/SPEC_RANKING.md).
-const RANKING_BUTTON := Rect2i(240, 162, 160, 28)
-## Under the ONLINE button, in small type.
-const VERSUS_NOTE := "COMING SOON: HUMANS ONLY"
-const VERSUS_NOTE_Y := 140
+const RANKING_BUTTON := Rect2i(240, 136, 160, 28)
 ## The player's car, still, in its start lane.
 const TITLE_CAR_TOP := 208
 ## Footer lines, each on a dark band so the lane dashes behind do not cut through the text: y of the band's top.

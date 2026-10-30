@@ -28,7 +28,8 @@ x-game-server: &game-server
   tmpfs: [/tmp]
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]
-  # One process per vCPU (SPEC_ONLINE 16.1.10): about 1 CPU each on a 4 OCPU Ampere machine.
+  # One process per vCPU (SPEC_ONLINE 16.1.10), 1 CPU each. The Always Free Ampere allowance is 2 OCPU and 12 GB (Oracle's
+  # docs, October 2026), so the beta runs gameserver1 alone and leaves the other core to the API, PostgreSQL and Caddy.
   cpus: 1.0
   mem_limit: 3g
 
@@ -120,8 +121,11 @@ services:
       - mailbox1:/var/lib/fuelrivals/mailbox
 
   # A second process for a second vCPU: its own id, key, mailbox and Caddy path (/ws/2). Add more the same way.
+  # Off in the beta (2 OCPU): its own profile, so `--profile game` starts gameserver1 only. On a machine with spare
+  # cores, register it and start it with `--profile game --profile game2`.
   gameserver2:
     <<: *game-server
+    profiles: ["game2"]
     environment:
       <<: *game-env
       FR_SERVER_ID: ${GAME2_ID:-}

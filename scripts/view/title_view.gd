@@ -69,14 +69,6 @@ static func choice_buttons() -> Array[Rect2i]:
 	return [ViewConfig.START_BUTTON, ViewConfig.VERSUS_BUTTON, ViewConfig.RANKING_BUTTON]
 
 
-## The dark band under the versus note, so the lane dashes do not cut through it.
-static func note_band(p_font: Font) -> Rect2i:
-	var small := ViewConfig.TEXT_SMALL
-	var width := Draw.text_width(p_font, ViewConfig.VERSUS_NOTE, small) + small
-	var left := (ViewConfig.VIEW_W - width) >> 1
-	return Rect2i(left, ViewConfig.VERSUS_NOTE_Y - (small >> 1), width, small * 2)
-
-
 ## Hitbox of the still player car: its start lane, its top at TITLE_CAR_TOP.
 static func car_box(c: Config) -> Rect2i:
 	var x := Traffic.lane_x(c, c.start_lane, c.player_w)
@@ -99,8 +91,6 @@ func _draw() -> void:
 	for i in buttons.size():
 		_draw_button(buttons[i], ViewConfig.TITLE_CHOICES[i], i == choice)
 	var small := ViewConfig.TEXT_SMALL
-	Draw.rect(self, note_band(font), Color(0, 0, 0, ViewConfig.BAND_ALPHA))
-	Draw.text_centred(self, font, centre, ViewConfig.VERSUS_NOTE_Y, ViewConfig.VERSUS_NOTE, small, ViewConfig.WHITE)
 
 	var text_dy := (ViewConfig.BAND_H - small) >> 1
 	for band_y: int in [ViewConfig.PROMPT_BAND_Y, ViewConfig.BEST_BAND_Y]:
