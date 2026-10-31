@@ -68,6 +68,10 @@ var active: bool = false
 var mode: int = MODE_NONE
 ## Called with (keycode: int, pressed: bool) for each key a button presses or lets go.
 var emit_key: Callable = Callable()
+## Called when a finger lifts off the fullscreen button (it presses no key, see _emit()).
+var on_fullscreen: Callable = Callable()
+## False hides the fullscreen button: the page cannot go fullscreen (Safari on an iPhone has no Fullscreen API).
+var fullscreen_available: bool = true
 ## Touch index -> the id of the button it holds ("" for none).
 var _touch_button: Dictionary = {}
 ## Button id -> how many touches hold it.
@@ -92,7 +96,15 @@ static func buttons_of(p_mode: int) -> Array[Dictionary]:
 
 
 func buttons() -> Array[Dictionary]:
-	return buttons_of(mode) if active else ([] as Array[Dictionary])
+	if not active:
+		return [] as Array[Dictionary]
+	if fullscreen_available:
+		return buttons_of(mode)
+	var shown: Array[Dictionary] = []
+	for button: Dictionary in buttons_of(mode):
+		if button["id"] != FULLSCREEN:
+			shown.append(button)
+	return shown
 
 
 ## True while a button is held down.
@@ -207,6 +219,12 @@ func _let_go(id: StringName) -> void:
 
 
 func _emit(id: StringName, pressed: bool) -> void:
+	# Fullscreen goes when the finger lifts, not as a key when it lands: browsers allow requestFullscreen only after a gesture
+	# that counts as user activation, and the end of a touch is one while its start is not.
+	if id == FULLSCREEN:
+		if not pressed and on_fullscreen.is_valid():
+			on_fullscreen.call()
+		return
 	if not emit_key.is_valid():
 		return
 	for button: Dictionary in RACE_BUTTONS + MENU_BUTTONS:

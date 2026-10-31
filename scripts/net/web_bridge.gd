@@ -45,6 +45,11 @@ func coarse_pointer() -> bool:
 	return available() and bool(_eval("window.matchMedia('(pointer: coarse)').matches"))
 
 
+## False when the page cannot go fullscreen (Safari on an iPhone has no Fullscreen API for a page). True off the web.
+func fullscreen_supported() -> bool:
+	return not available() or bool(_eval("!!(document.fullscreenEnabled || document.webkitFullscreenEnabled)"))
+
+
 ## Asks the browser to keep the page in landscape. It works only in fullscreen (and on Android), so it waits for the fullscreen
 ## request to settle; any refusal is ignored.
 func lock_landscape() -> void:

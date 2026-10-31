@@ -269,3 +269,25 @@ func test_the_app_turns_a_button_into_a_key_event_of_the_touch_device() -> void:
 	app._touch_key(KEY_LEFT, false)
 	Input.flush_buffered_events()
 	assert_false(Input.is_action_pressed("kb_left"))
+
+
+## Browsers grant fullscreen only after a gesture that counts as user activation: the end of a touch, not its start. So the
+## fullscreen button presses no key and asks for fullscreen when the finger lifts.
+func test_fullscreen_goes_when_the_finger_lifts() -> void:
+	var asked := [0]
+	touch.on_fullscreen = func() -> void: asked[0] += 1
+	touch.set_mode(Touch.MODE_MENU)
+	assert_true(_down(0, _centre(Touch.FULLSCREEN, Touch.MODE_MENU)))
+	assert_eq(asked[0], 0, "not when it lands")
+	assert_true(_up(0, _centre(Touch.FULLSCREEN, Touch.MODE_MENU)))
+	assert_eq(asked[0], 1, "when it lifts")
+	assert_eq(events, [], "no key")
+
+
+## A page that cannot go fullscreen (Safari on an iPhone) shows no fullscreen button.
+func test_no_fullscreen_button_where_the_page_cannot_go_fullscreen() -> void:
+	touch.set_mode(Touch.MODE_MENU)
+	touch.fullscreen_available = false
+	for button: Dictionary in touch.buttons():
+		assert_ne(button["id"], Touch.FULLSCREEN)
+	assert_eq(touch.buttons().size(), Touch.MENU_BUTTONS.size() - 1)

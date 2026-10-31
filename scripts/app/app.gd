@@ -306,6 +306,8 @@ func boot() -> bool:
 		touch_view = TouchView.new()
 		add_child(touch_view)
 	touch.emit_key = _touch_key
+	touch.on_fullscreen = toggle_fullscreen
+	touch.fullscreen_available = web.fullscreen_supported()
 	touch.set_active(Touch.detect(web.coarse_pointer()))
 	solo = LocalInput.new()
 	seats = Seats.new()
