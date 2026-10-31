@@ -8,6 +8,8 @@ config_version=5
 config/name="Fuel Rivals"
 run/main_scene="res://scenes/boot.tscn"
 config/icon="res://icon.svg"
+boot_splash/show_image=false
+boot_splash/bg_color=Color(0.078, 0.078, 0.078, 1)
 
 
 [debug]

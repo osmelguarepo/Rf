@@ -8,6 +8,8 @@ const FONT_IMPORT := "res://assets/font/press-start-2p-latin-400-normal.woff2.im
 ## Section, key and value, exactly as the plan lists them.
 const SETTINGS := [
 	["application", "config/name", "Fuel Rivals"],
+	# No Godot logo at start-up: a plain dark screen in ViewConfig.BLACK.
+	["application", "boot_splash/show_image", false],
 	["display", "window/size/viewport_width", 640],
 	["display", "window/size/viewport_height", 360],
 	["display", "window/size/window_width_override", 1920],
